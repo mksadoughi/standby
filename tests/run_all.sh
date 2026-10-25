@@ -19,8 +19,8 @@ source tests/suite_lock.sh
 suite_lock_take || exit $?        # 3: it left the queue, as it was told to (STANDBY_SUITE_WAIT_MAX, _IF_HEAD)
 OUT="$(mktemp -d -t sbsuite)"
 export STANDBY_NO_DEVICES=1
-# CI keeps text logs only, including partial output if a run is interrupted.
-# Session folders, audio and other scratch data stay in OUT and are removed.
+# CI keeps suite stdout/stderr only, including partial output if interrupted.
+# Never copy scratch session folders, audio or other files into the log archive.
 keep_logs() {
   [[ -n "${STANDBY_TEST_LOG_DIR:-}" ]] || return 0
   mkdir -p "$STANDBY_TEST_LOG_DIR" || return

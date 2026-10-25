@@ -95,10 +95,15 @@ class FakeInput(object):
         self.run = True
 
         def go():
+            period = self.n / 16000.0
+            due = time.monotonic() + period
             while self.run:
-                time.sleep(self.n / 16000.0)        # real time on purpose: the mic's own block rate
+                # Keep the audio clock, including overdue blocks after a late wakeup.
+                # Repeated sleep(period) made this clock drift from the call's.
+                time.sleep(max(0.0, due - time.monotonic()))
                 if self.run:
                     self.cb(np.zeros((self.n, 1), "float32"), self.n, None, None)
+                    due += period
         threading.Thread(target=go, daemon=True).start()
 
     def stop(self): self.run = False
@@ -156,15 +161,20 @@ class Call(object):
         return [{"name": "Zoom", "bundle": "us.zoom.xos", "pid": 1, "playing": True, "call": True, "confidence": 0.95}]
 
     def start(self, target, feed):
-        self.ok, self._run, t0 = True, True, time.monotonic()
+        self.ok, self._run = True, object()
+        running = self._run                       # a reopened capture never revives its old thread
 
         def go():
-            k = 0
-            while self._run:
-                time.sleep(0.1)                     # real time on purpose: the capture's own block rate
-                if self._run and not self.quiet:          # quiet: a stall, no word from macOS
-                    feed(np.full(1600, MARK, "float32"), t0 + k * 0.1)
-                    k += 1
+            due = time.monotonic() + 0.1
+            while self._run is running:
+                time.sleep(max(0.0, due - time.monotonic()))
+                if self._run is not running:
+                    break
+                if self.quiet:                    # a deliberate stall, not late delivery: never catch up
+                    due = time.monotonic() + 0.1
+                    continue
+                feed(np.full(1600, MARK, "float32"), due - 0.1)
+                due += 0.1
         threading.Thread(target=go, daemon=True).start()
 
     def stop(self): self._run, self.ok = False, False
