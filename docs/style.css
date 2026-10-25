@@ -119,3 +119,9 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer .links a{text-decora
   footer .links{width:100%;margin-left:0;flex-wrap:wrap;gap:10px 18px}
 }
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn:hover{transform:none;box-shadow:none}}
+
+.github-link{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;border-radius:50%;text-decoration:none;color:inherit}
+.github-link img{width:26px;height:26px;max-width:none}
+.github-link:hover{opacity:.7}
+.github-link:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.top>.wrap>.github-link{margin-left:auto}

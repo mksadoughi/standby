@@ -5,6 +5,12 @@ projects and the models it downloads, each under its own license.
 
 ## Code
 
+### Website GitHub mark (MIT)
+
+[docs/img/github.svg](docs/img/github.svg) is `mark-github-24.svg` from
+[Primer Octicons](https://github.com/primer/octicons). Copyright (c) 2026 GitHub Inc.
+The upstream MIT license is included in [docs/img/github.LICENSE](docs/img/github.LICENSE).
+
 ### The diarizer's streaming state, ported from FluidAudio (Apache-2.0)
 
 [mac/native/macos/diarizer.py](mac/native/macos/diarizer.py), the section "the streaming state"
