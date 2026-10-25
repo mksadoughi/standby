@@ -1,0 +1,101 @@
+<!doctype html>
+<!-- Demo: "Call your Claude Code", 25 s, in the demo look (screens.js, cc.js).
+     You type /standby call: the band reads "◉ On a call with Claude", and Standby's call window comes up beside Claude
+     Code. You ask what's left; the voice answers by itself. You ask it to run the tests: your words arrive in Claude
+     Code's chat as a turn of yours, marked "from your call", and the voice says it's on it. You put the call away: it shrinks into the orb in the corner, which thinks while Claude Code works. The tests
+     pass; the voice tells you, in its own words. You say that's all; it says goodbye and ends the call, and the call's
+     summary is on the band with Add to Claude Code or Forget.
+     True to the app: the voice is the session's quick spoken side and hands real work to the session; the orb comes up
+     only when you send the call to it, and shows only its state; the band's words and keys are the plugin's.
+     The frame is render(t); tools/demo/render.py steps it into a video. Opened as a file, it plays live. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Standby: call your Claude Code</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff}
+svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+</style>
+</head>
+<body>
+<svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
+<script>const DUR = 25;</script>
+<script src="kit.js"></script>
+<script src="screens.js"></script>
+<script src="cc.js"></script>
+<script>
+const T = { x: 60, y: 150, w: 820, h: 710 };                          // Claude Code, in Terminal
+const WIN = { x: 940, y: 150, w: 600, h: 710 };                       // Standby's call view
+const ORB = [1490, 800];                                              // the orb, in the corner
+const CMD = "/standby call", ENTER = 2.0, OPEN = 2.3, AWAY = 11.8, DONE = 15.6, ENDS = 22.4;
+// who's talking when: you (the orb hears you), the voice (it speaks)
+const YOU = [[3.1, 4.7, "What's left on the guest TTL?"], [7.6, 9.5, "Yes, run them, and tell me if anything breaks."], [19.4, 20.4, "Great, that's all."]];
+const VOICE = [[5.1, 7.2, "Just the tests. Want me to run them?"], [9.9, 10.9, "I'm on it."], [16.3, 18.9, "All 112 pass, and nothing depends on the guest TTL."], [20.7, 21.9, "Talk soon."]];
+const HANDOFF = ["Run the routing cache tests and tell me if the guest TTL", "breaks anything."];
+const POINTS = ["The routing cache tests pass, all 112.", "Nothing depends on the guest TTL."];
+
+const clock = t => { const s = Math.floor(Math.max(0, t - OPEN) * 7); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0") };   // the call's time, a little fast
+const during = (L, t) => L.find(([a, b]) => t > a && t < b);
+function state(t) {
+  if (during(YOU, t)) return "hearing";
+  if (during(VOICE, t)) return "speaking";
+  if (t > 10.9 && t < DONE + .5) return "thinking";
+  return "listening";
+}
+function last(t) {                                                     // the band's second line: the latest finished words
+  const done = [...YOU.map(([a, b, s]) => [b, s, false]), ...VOICE.map(([a, b, s]) => [b, s, true])].filter(([b]) => t > b).sort((x, y) => x[0] - y[0]).pop();
+  return done ? done[1] : "";
+}
+
+function claude(t) {
+  const rows = [], band = [];
+  let prompt = "";
+  if (t < ENTER) prompt = typed(CMD, t, .6, 12);
+  else {
+    rows.push(me(CMD), under(dim("On a call. Talk; real work comes here.")), "");
+    if (t > 9.8) {
+      rows.push(dim("from your call"), me(HANDOFF[0]), "  " + HANDOFF[1]);
+      if (t > 10.6) rows.push(tool("Bash", "npm test -- routing"), under(t < DONE ? dim("Running… " + "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[Math.floor(t * 10) % 10]) : "112 passed"));
+      if (t > DONE + .3) rows.push(said(typed("All 112 pass. Nothing depends on the guest TTL.", t, DONE + .3, 60)));
+    }
+  }
+  if (t > ENTER + .15 && t < ENDS) {
+    band.push(bandLine("◉", TC.acc, "On a call with Claude", mins(t, ENTER, 6), [["1", "mute"], ["2", "end"], ["3", "window"]], t));
+    band.push(dim(esc(last(t))));
+  } else if (t >= ENDS) {
+    band.push(`<tspan fill="${TC.ink}">⏺</tspan> <tspan font-weight="700">Summary · Guest TTL fix</tspan>  ${dim("3m")}  ${dim("(")}<tspan fill="${TC.acc}">1</tspan>${dim(" forget · ")}<tspan fill="${TC.acc}">2</tspan>${dim(" add)")}`);
+    if (t < ENDS + 1.2) band.push(dim("  ⎿  Summarizing…"));
+    else POINTS.forEach((p, i) => { if (t > ENDS + 1.2 + i * .3) band.push(under(p, !i)) });
+  }
+  const c = inout(span(t, AWAY + .4, AWAY + 1.3));                     // the window put away, Claude Code takes the middle
+  return terminal(Object.assign({}, T, { x: lerp(T.x, (1600 - T.w) / 2, c) }), t, { rows, band, prompt, size: 19, row: 32 });
+}
+
+function standby(t) {
+  const k = out(span(t, OPEN, OPEN + .5)), away = inout(span(t, AWAY, AWAY + .7));
+  let g = "";
+  if (k > 0 && away < 1) {
+    const items = [...YOU.map(([a, b, s]) => ({ at: b, kind: "you", text: s })), ...VOICE.map(([a, b, s]) => ({ at: a + .3, kind: "voice", text: s }))];
+    items.sort((a, b) => a.at - b.at);
+    const now = t => { const y = [...YOU].reverse().find(([a]) => t > a), v = [...VOICE].reverse().find(([a]) => t > a);
+      return { q: y ? typed(y[2], t, y[0], 30) : "", a: v && (!y || v[0] > y[0]) ? v[2] : "" } };
+    const s = lerp(1, .08, away), cx = lerp(WIN.x + WIN.w / 2, ORB[0], away), cy = lerp(WIN.y + WIN.h / 2, ORB[1], away);
+    g += `<g opacity="${fo(k * (1 - span(away, .6, 1)))}" transform="translate(${f(cx)} ${f(cy + (1 - k) * 20)}) scale(${fs(s)}) translate(${f(-(WIN.x + WIN.w / 2))} ${f(-(WIN.y + WIN.h / 2))})">` +
+      callWin(WIN, t, { title: "Guest TTL fix", clock: clock(t), state, items, now }) + "</g>";
+  }
+  const o = out(span(t, AWAY + .5, AWAY + .9)) * (1 - span(t, ENDS - .2, ENDS + .2));
+  if (o > 0) g += orbApp(ORB[0], ORB[1], 36 * pop(span(t, AWAY + .5, AWAY + 1.0)), state(t), t, o);
+  return g;
+}
+
+function film(t) {
+  const cap = captions(t, [[.3, 2.9, "Type /standby call, and talk."], [3.1, 9.6, "It answers what it can, right away."],
+    [9.8, 11.8, "Real work goes to your Claude Code."], [12.0, 16.0, "Put it away: the orb waits in the corner."],
+    [16.2, 22.2, "It tells you how it went."], [22.4, DUR - .3, "The call's summary, right in Claude Code."]]);
+  return `<rect width="1600" height="900" fill="${PAPER}"/>` + claude(t) + standby(t) + cap;
+}
+play(film);
+</script>
+</body>
+</html>

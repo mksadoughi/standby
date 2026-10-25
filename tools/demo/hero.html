@@ -1,0 +1,187 @@
+<!doctype html>
+<!-- The hero film: "Your Claude Code, right beside you."
+     Claude Code works far off, on your code; the conversation happens here and never reaches it;
+     Standby brings it close, and it hears the rest. About 16 s, looping.
+     The whole frame is a function of time, render(t), so tools/demo/render.py can step it frame
+     by frame into a video. Opened as a file, it plays live. Light and dark follow the system. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Standby: your Claude Code, right beside you</title>
+<style>
+@font-face{font-family:"ui-rounded";src:url("file:///System/Library/Fonts/SFNSRounded.ttf");font-weight:100 900}
+:root{--bg1:#fbfaff;--bg2:#efedf9;--ink:#121226;--mut:#6b6b84;--acc:#5046e5;--dot:rgba(80,70,229,.13);--haze:rgba(124,114,255,.16);
+  --glass:rgba(255,255,255,.78);--glass-line:rgba(18,18,38,.07);--shadow:rgba(30,26,80,.16)}
+@media (prefers-color-scheme:dark){:root{--bg1:#1b1b33;--bg2:#121224;--ink:#ececf8;--mut:#9d9dba;--acc:#8b87ff;--dot:rgba(165,162,255,.14);
+  --haze:rgba(139,135,255,.16);--glass:rgba(38,38,64,.74);--glass-line:rgba(255,255,255,.08);--shadow:rgba(0,0,0,.45)}}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg2);-webkit-font-smoothing:antialiased}
+body{font-family:ui-rounded,-apple-system,system-ui,sans-serif;color:var(--ink)}
+#stage{position:absolute;inset:0;overflow:hidden;background:linear-gradient(180deg,var(--bg1),var(--bg2))}
+
+/* depth: a plane of dots running to the horizon, and a soft haze where the agent works */
+#floor{position:absolute;left:-60%;right:-60%;top:46%;height:120%;transform-origin:50% 0;transform:perspective(46vw) rotateX(64deg);
+  background-image:radial-gradient(circle,var(--dot) .9px,transparent 1.4px);background-size:3.2vw 3.2vw;
+  -webkit-mask-image:linear-gradient(transparent,#000 22%,#000 60%,transparent)}
+#haze{position:absolute;left:50%;top:38%;width:62vw;height:40vw;transform:translate(-50%,-50%);border-radius:50%;
+  background:radial-gradient(closest-side,var(--haze),transparent)}
+
+/* the words on screen */
+.cap{position:absolute;left:0;right:0;top:9%;text-align:center;font-weight:700;letter-spacing:-.025em;font-size:4.5vw;line-height:1.1;
+  will-change:opacity,transform,filter}
+#title{font-size:5.4vw;top:10%}
+#mark{position:absolute;left:3.2vw;bottom:3vw;display:flex;align-items:center;gap:.9vw;font-weight:700;font-size:1.7vw}
+#mark i{width:2.5vw;height:2.5vw;border-radius:.7vw;background:linear-gradient(135deg,#5b4ff0,#8b3fe8);display:flex;align-items:center;justify-content:center;gap:.26vw}
+#mark i b{width:.3vw;border-radius:.2vw;background:#fff}#mark i b:nth-child(1){height:.7vw}#mark i b:nth-child(2){height:1.3vw}#mark i b:nth-child(3){height:.95vw}
+
+/* the agent: Claude Code's terminal far away, which becomes the orb up close */
+#agent{position:absolute;overflow:hidden;will-change:transform,filter,opacity}
+#term{position:absolute;inset:0;background:#18181d;color:#e8e6e3;font:1.42vw/1.62 ui-monospace,SFMono-Regular,Menlo,monospace}
+#term .bar{height:2.5vw;display:flex;align-items:center;gap:.6vw;padding:0 1vw;background:#222228;color:#8d8d97;font:600 1.05vw ui-rounded,system-ui}
+#term .bar i{width:.85vw;height:.85vw;border-radius:50%;background:#ff5f57;box-shadow:1.3vw 0 #febc2e,2.6vw 0 #28c840;margin-right:3vw}
+#term pre{margin:0;padding:1.3vw 1.6vw;font:inherit;white-space:pre}
+#term .you{color:#a6a6b0}#term .dot{color:#d97757}#term .spin{color:#d97757}#term .dim{color:#7d7d88}
+#orb{position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 34% 28%,#d9d6ff 0,#8f86ff 32%,#5046e5 66%,#3b2fc0 100%);
+  display:flex;align-items:center;justify-content:center;gap:9%}
+#orb i{width:9%;border-radius:99px;background:#fff}
+.ring{position:absolute;border-radius:50%;border:.16vw solid var(--acc);pointer-events:none}
+
+/* the conversation: what's said in the room, which a far agent never hears */
+.said{position:absolute;padding:1vw 1.4vw;border-radius:1.3vw;background:var(--glass);backdrop-filter:blur(14px);font-size:1.62vw;line-height:1.35;
+  box-shadow:0 0 0 1px var(--glass-line),0 1vw 2.6vw var(--shadow);white-space:nowrap;will-change:transform,opacity}
+.said b{font-weight:700;margin-right:.5vw}
+#answer{position:absolute;padding:1.1vw 1.5vw;border-radius:1.4vw;background:var(--glass);backdrop-filter:blur(14px);color:var(--acc);
+  font-size:1.75vw;font-weight:500;line-height:1.35;box-shadow:0 0 0 1px var(--glass-line),0 1vw 2.6vw var(--shadow);max-width:34vw}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="floor"></div><div id="haze"></div>
+  <div class="cap" id="c1">Claude Code knows your code.</div>
+  <div class="cap" id="c2">Not the conversation.</div>
+  <div class="cap" id="c3">Standby brings it close.</div>
+  <div class="cap" id="title">Your Claude Code, right beside you.</div>
+  <div id="said"></div>
+  <div class="ring" id="r1"></div><div class="ring" id="r2"></div>
+  <div id="agent"><div id="term"><div class="bar"><i></i>claude · ~/code/trips</div><pre id="lines"></pre></div>
+    <div id="orb"><i></i><i></i><i></i></div></div>
+  <div id="answer"></div>
+  <div id="mark"><i><b></b><b></b><b></b></i>Standby</div>
+</div>
+<script>
+const DUR = 16.6;
+const $ = id => document.getElementById(id);
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, p) => a + (b - a) * p;
+const out = p => 1 - Math.pow(1 - clamp(p), 4);                 // the app's cubic-bezier(.23,1,.32,1), near enough
+const inout = p => (p = clamp(p), p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2);
+const span = (t, a, b) => clamp((t - a) / (b - a));
+// A line of words comes in rising and sharpening, and leaves the same way.
+function words(el, t, a, b, rise = 1.2) {
+  const i = out(span(t, a, a + .7)), o = span(t, b - .45, b);
+  el.style.opacity = i * (1 - o);
+  el.style.transform = `translateY(${(1 - i) * rise - o * rise * .6}vw)`;
+  el.style.filter = `blur(${(1 - i) * 6 + o * 4}px)`;
+}
+
+// Claude Code at work, far off: your few lines in, its steps out (the way Claude Code narrates them).
+const SPIN = "·✢✳✶✻✽✻✶✳✢";
+function terminal(t) {
+  const shown = [[.3, '<span class="you">&gt; make trip search faster</span>'], [1.3, '<span class="dot">⏺</span> Read 12 files in src/trips'],
+    [2.3, '<span class="dot">⏺</span> Bash(npm run load-test)'], [3.4, '<span class="dot">⏺</span> Update(routing.ts) <span class="dim">+9 −3</span>']]
+    .filter(([at]) => t >= at).map(([, l]) => l);
+  const secs = 221 + Math.floor(t), g = SPIN[Math.floor(t / .12) % SPIN.length];
+  $("lines").innerHTML = shown.join("\n") + "\n\n" +
+    `<span class="spin">${g} Working…</span> <span class="dim">(${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s)</span>`;
+}
+
+// What's said in the room. First it just fades away; once the orb is here, it flows into it.
+const SAID = [["Nadia", "The Q4 budget is 300 ms."], ["Theo", "Guests are trickier: regional fares."], ["Jules", "Last week's test used the old stub."]];
+const SPOT = [[9, 64], [27, 73], [11, 82]];                         // left, top, in % of the frame
+function conversation(t, orbX, orbY) {
+  let html = "";
+  SAID.forEach(([who, text], i) => {
+    // lost: said, then gone, before anything far away could hear it
+    const a = 4.9 + i * .75, lost = t >= a && t < a + 2.4;
+    // heard: said again with the orb beside you, and taken in
+    const b = 10.2 + i * .55, heard = t >= b && t < b + 2.2;
+    if (!lost && !heard) return;
+    const [x, y] = SPOT[i];
+    let op, tx = 0, ty = 0, sc = 1, bl = 0;
+    if (lost) {
+      const i1 = out(span(t, a, a + .6)), o1 = span(t, a + 1.5, a + 2.4);
+      op = i1 * (1 - o1); tx = o1 * 5; ty = (1 - i1) * 1.2 - o1 * 3.2; bl = o1 * 7; sc = 1 - o1 * .12;
+    } else {
+      const i2 = out(span(t, b, b + .5)), f = inout(span(t, b + .7, b + 2.0));
+      op = i2 * (1 - span(t, b + 1.55, b + 2.05));
+      tx = (orbX - x - 6) * f; ty = (orbY - y) * f * .5625; sc = 1 - .8 * f;
+    }
+    html += `<div class="said" style="left:${x}%;top:${y}%;opacity:${op};filter:blur(${bl}px);` +
+      `transform:translate(${tx}vw,${ty}vw) scale(${sc})"><b>${who}</b>${text}</div>`;
+  });
+  $("said").innerHTML = html;
+}
+
+function render(t) {
+  t = ((t % DUR) + DUR) % DUR;
+  words($("c1"), t, .8, 4.5); words($("c2"), t, 4.65, 8.1); words($("c3"), t, 8.25, 10.7); words($("title"), t, 10.85, 16.2, 1.6);
+  const m = out(span(t, 11.3, 12)) * (1 - span(t, 16.0, 16.4));
+  $("mark").style.opacity = m;
+
+  // The agent: far off and hazy; then it comes toward you; then it settles in your corner as the orb.
+  const W = innerWidth, H = innerHeight;
+  const p1 = inout(span(t, 8.3, 9.5)), p2 = inout(span(t, 9.3, 10.4));
+  const farW = .34 * W, farH = .205 * W, orbD = .085 * W;
+  const fx = .5 * W, fy = .41 * H + Math.sin(t * .7) * .003 * H, mx = .62 * W, my = .56 * H, nx = .855 * W, ny = .76 * H;
+  const cx = lerp(lerp(fx, mx, p1), nx, p2), cy = lerp(lerp(fy, my, p1), ny, p2);
+  const w = lerp(farW, orbD, p2), h = lerp(farH, orbD, p2);
+  const depth = lerp(lerp(.62, 1.08, p1), 1, p2);                   // far things are smaller and softer
+  const a = $("agent");
+  a.style.width = w + "px"; a.style.height = h + "px";
+  a.style.left = cx - w / 2 + "px"; a.style.top = cy - h / 2 + "px";
+  a.style.borderRadius = lerp(.012 * W, orbD / 2, out(span(p2, .1, .7))) + "px";
+  a.style.transform = `scale(${depth})`;
+  a.style.filter = `blur(${(1 - p1) * 1.2}px) saturate(${lerp(.75, 1, p1)})`;
+  a.style.opacity = lerp(.8, 1, p1) * out(span(t, 0, .5)) * (1 - span(t, 16.0, 16.5));
+  a.style.boxShadow = p2 > .5 ? `0 1.4vw 4vw rgba(80,70,229,${.42 * span(p2, .5, 1)})` : `0 ${lerp(.8, 2, p1)}vw ${lerp(2.4, 5, p1)}vw rgba(0,0,0,${lerp(.16, .26, p1)})`;
+  $("term").style.opacity = 1 - span(p2, .1, .55);
+  $("term").style.transform = `scale(${lerp(1, .55, p2)})`;
+  $("orb").style.opacity = span(p2, .3, .75);
+  const p = p2;
+  terminal(Math.min(t, 8.3));
+
+  // The orb listening: the app's own bars (listening is a 1 s cycle, staggered), and rings while it hears.
+  const bars = [...$("orb").children];
+  [.24, .46, .33].forEach((base, i) => {
+    const live = span(t, 10.1, 10.5);
+    bars[i].style.height = (base + live * .14 * Math.sin((t / 1.0) * 2 * Math.PI + i * 1.3)) * 100 + "%";
+  });
+  ["r1", "r2"].forEach((id, i) => {
+    const r = $(id), q = ((t - 10.2 - i * .9) / 1.8) % 1, on = t > 10.2 + i * .9 && t < 13.6;
+    const d = orbD * depth * (1 + (on ? q : 0) * 1.1);
+    Object.assign(r.style, { width: d + "px", height: d + "px", left: nx - d / 2 + "px", top: ny - d / 2 + "px",
+      opacity: on ? (1 - q) * .35 : 0 });
+  });
+
+  conversation(t, nx / W * 100, ny / H * 100);
+
+  // Its answer, at about the voice's pace, above the orb.
+  const ans = "The load test used the old stub. Rerun it first.";
+  const n = Math.floor(clamp((t - 12.3) * 17, 0, ans.length));
+  const an = $("answer");
+  an.textContent = ans.slice(0, n) || "";
+  an.style.opacity = (n ? 1 : 0) * (1 - span(t, 16.0, 16.4));
+  an.style.right = (W - nx - orbD * .3) + "px"; an.style.bottom = (H - ny + orbD * .72) + "px";
+
+  // the floor drifts toward you as the agent comes close
+  $("floor").style.backgroundPosition = `0 ${p * 3.6}vw`;
+}
+window.render = render;
+if (!/[?&]render/.test(location.search)) {
+  const t0 = performance.now();
+  (function tick(now) { render((now - t0) / 1000); requestAnimationFrame(tick) })(t0);
+} else render(0);
+</script>
+</body>
+</html>

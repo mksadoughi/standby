@@ -1,0 +1,95 @@
+<!doctype html>
+<!-- Terms: what using Standby means, in plain words. Same look as the essay. -->
+<html lang="en" data-repo="mksadoughi/standby">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms · Standby</title>
+<meta name="description" content="Standby's terms in plain words: free and open source, your own Claude Code, what stays on your Mac, recording consent, and the models it uses.">
+<link rel="icon" href="img/icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html"><img src="img/icon.png" alt="">Standby</a>
+  <nav><a href="index.html#how">How it works</a><a href="index.html#install">Install</a><a href="why.html">Why I built it</a><a data-gh="repo" href="index.html#install">GitHub</a></nav>
+  <a class="btn primary" data-gh="download" href="index.html#install">Download for Mac</a>
+</div></header>
+
+<main class="wrap">
+<article class="essay">
+  <span class="who">Terms</span>
+  <h1>The short version.</h1>
+  <p class="dek">Standby is free, open-source software that runs on your Mac and works with your own Claude Code. Here's what
+    that means for you.</p>
+
+  <h2>Free and open source</h2>
+  <p>Standby is released under the <a data-gh="license" href="https://opensource.org/license/mit">MIT License</a>. You can use
+    it, change it and share it, for free, including at work. The code is all on GitHub.</p>
+
+  <h2>No warranty</h2>
+  <p>Standby is provided as it is, without any warranty. Transcripts, speaker names, summaries and what Claude does with them
+    can be wrong: check anything that matters before you rely on it. The people who build Standby aren't liable for how it's
+    used, as the license says in full.</p>
+
+  <h2>Your Claude Code, your account</h2>
+  <p>Standby doesn't come with its own AI. It works through the Claude Code you've already installed and signed in to, so
+    using it is covered by the terms of your Claude account, API key or cloud provider, and what it does counts toward your
+    plan or usage like any Claude Code session. Standby's Settings show how much it used.</p>
+
+  <h2>What stays on your Mac</h2>
+  <p>Speech-to-text, speaker labels and Standby's voice run on your Mac. Audio and voice prints never leave it. A
+    meeting's transcript and what you say on a call go to your own Claude Code as text, along with anything you paste or
+    attach, and Claude Code talks to its model provider as it always does; Claude Code and its tools handle data their own
+    way. Standby has no servers and collects nothing about you. The first install downloads the models from the places
+    listed below, and that's all.</p>
+  <p>Standby learns the voices you name, and your own voice from your calls, to tell people apart. These voice prints
+    stay on your Mac; you can turn this off or forget them in Settings &gt; Recording. Dictation isn't saved: its audio
+    is only processed on your Mac. Deleting a meeting or a call in Standby removes Standby's copies on your Mac, not what
+    was already sent to Claude Code or exported.</p>
+
+  <h2>Recording people is your responsibility</h2>
+  <p>When you transcribe a meeting or a call, tell the people in it, and follow the rules that apply where you and they
+    are. In many places everyone in a conversation has to agree to it being recorded or transcribed.</p>
+
+  <h2>Not affiliated with Anthropic</h2>
+  <p>Standby is an independent project. It isn't made, endorsed or supported by Anthropic. Claude and Claude Code are
+    trademarks of Anthropic, used here only to say what Standby works with.</p>
+
+  <h2>The models Standby uses</h2>
+  <p>Standby downloads open models, each under its own license: NVIDIA's Parakeet for speech-to-text, NVIDIA's
+    Nemotron-3-Diarization (in Fluid Inference's Core ML build, under the OpenMDW License 1.1) and TitaNet for telling
+    voices apart, Whisper for a better transcript afterwards, Smart Turn (BSD-2) and Silero VAD (MIT) for turn-taking, and
+    Kyutai's Pocket TTS (CC BY 4.0) for Standby's voice. The README lists each one with its source.</p>
+
+  <h2>Questions</h2>
+  <p>Open an issue on <a data-gh="issues" href="index.html#install">GitHub</a>. If these terms change, this page and the
+    repository will show it.</p>
+
+  <p class="end"><a class="btn primary" href="index.html">Back to Standby</a></p>
+</article>
+</main>
+
+<footer><div class="wrap">
+  <a class="brand" href="index.html"><img src="img/icon.png" alt="">Standby</a>
+  <span>Free and open source · <a href="terms.html">Terms</a></span>
+  <span class="links"><a data-gh="readme" href="../README.md">Documentation</a><a href="why.html">Why I built it</a><a data-gh="releases" href="index.html#install">Releases</a><a data-gh="repo" href="index.html#install">GitHub</a></span>
+</div></footer>
+
+<script>
+(function () {
+  var repo = document.documentElement.getAttribute("data-repo") || "";
+  if (!repo && /\.github\.io$/i.test(location.hostname)) {
+    var owner = location.hostname.split(".")[0];
+    repo = owner + "/" + (location.pathname.split("/").filter(Boolean)[0] || owner + ".github.io");
+  }
+  var gh = repo ? "https://github.com/" + repo : "";
+  var links = { repo: gh || "index.html#install", readme: gh ? gh + "#readme" : "../README.md", releases: gh ? gh + "/releases" : "index.html#install",
+    download: gh ? gh + "/archive/refs/heads/main.zip" : "index.html#install", issues: gh ? gh + "/issues" : "index.html#install",
+    license: gh ? gh + "/blob/main/LICENSE" : "https://opensource.org/license/mit" };
+  document.querySelectorAll("[data-gh]").forEach(function (a) { a.href = links[a.getAttribute("data-gh")]; });
+})();
+</script>
+</body>
+</html>

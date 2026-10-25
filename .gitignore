@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+.env
+node_modules/
+# Local only: Claude Code's worktrees and settings, the plugin's editor types
+.claude/
+lite/tsconfig.json
+lite/.claude-plugin/types/

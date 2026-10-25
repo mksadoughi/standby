@@ -1,0 +1,4 @@
+{
+  "description": "Standby: the band, the pane and the bridge to the Standby app",
+  "modules": ["./register.js"]
+}

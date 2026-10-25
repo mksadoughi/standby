@@ -1,0 +1,225 @@
+/* Standby's view: past meetings and calls, one of them open, and the call view, one layout at any width.
+   Same tokens as the page; its classes start with mx-. */
+#mview{display:none;flex:1;flex-direction:column;min-height:0}body.mx #mview{display:flex}
+
+/* the header: the traffic lights' corner kept clear (the call's header too) */
+#mview header{display:flex;align-items:center;gap:6px;padding:0 10px 0 14px;height:52px;flex:none}
+html.lights #main header{padding-left:84px}
+.mx-hlogo{display:flex;flex:none}
+/* what's listed, its menu under it */
+.mx-scope{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;line-height:1.25;padding:3px 6px;border-radius:8px;text-align:left}
+.mx-scope:hover{background:var(--soft)}
+.mx-scope b{display:flex;align-items:center;gap:4px;max-width:100%;font-size:15px;font-weight:700}
+.mx-scope b svg{color:var(--muted)}
+.mx-scope small,.mx-scope b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mx-scope small{max-width:100%;font-size:12px;color:var(--muted)}
+.mx-gear{position:relative}.mx-gear .dot{display:none;position:absolute;right:5px;top:5px;width:7px;height:7px;animation:none}.mx-gear.bad .dot{display:block}
+/* one open: back, its name and time (the call's own header looks the same) */
+#mview .vwho .mx-ed{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* the view's body: the list, or a meeting or call open */
+/* the last row always ends clear of the window's bottom edge (and its rounded corners), and a row passing under
+   that edge fades out rather than being cut in half (the user, 2026-10-25) */
+#mbody{flex:1;overflow:auto;padding:4px 0 40px;-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent)}
+
+/* nothing yet, or loading */
+.mx-empty{text-align:center;color:var(--muted);padding:56px 0;font-size:14px}
+.mx-note{font-size:12px;color:var(--muted);text-align:center;margin:4px 0 0}
+
+/* menus */
+.mx-pop{position:fixed;z-index:45;background:var(--raised);border:1px solid var(--edge);border-radius:14px;box-shadow:var(--shadow),0 10px 30px rgba(0,0,0,.12);padding:6px;width:290px;max-height:60vh;overflow:auto}
+.mx-pop .ph{font-size:11.5px;font-weight:600;color:var(--muted);padding:8px 10px 4px}
+.mx-pop .ck{color:var(--accent)}
+.mx-pop input{width:100%;height:32px;border:0;border-radius:8px;background:var(--soft);padding:0 10px;font-size:13px;outline:0;margin-bottom:4px}
+.mx-pop .mi{display:block;width:100%;text-align:left;padding:7px 10px;border-radius:8px;font-size:13.5px}.mx-pop .mi:hover{background:var(--hover)}
+.mx-pop .mi.danger{color:var(--rec)}
+
+/* a meeting or call, open */
+.mx-lwb{padding:0 14px 10px 50px;font-size:13.5px;line-height:1.5}
+.mx-lwb .ln{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}.mx-lwb .ln b{font-weight:600;margin-right:4px}.mx-lwb .ln.now{color:var(--text)}
+.mx-lws{padding:0 14px 6px 50px}.mx-lws ul{margin:0;padding-left:18px;font-size:13.5px;line-height:1.6}.mx-lws li::marker{color:var(--muted)}
+.mx-lwfull{padding:0 16px;max-width:680px;margin:0 auto}
+.mx-tx{padding:4px 0 0}
+/* the transcript: at a speaker's turn their name and its time on one small line, the words at full width */
+.mx-line{padding:1px 0;font-size:14.5px;line-height:1.55}.mx-line.turn{padding-top:11px}
+.mx-lh{display:flex;align-items:baseline;gap:7px;margin-bottom:1px}
+.mx-ts{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mx-who{display:inline-block;font-weight:600;font-size:12.5px;cursor:text;border-radius:4px}.mx-who.known{text-decoration:underline dotted;text-underline-offset:3px}
+.mx-who:hover{background:var(--soft)}.mx-who.editing{outline:2px solid var(--focus);padding:0 4px}
+/* your questions in a meeting: their own colour, so they never read as the meeting */
+.mx-qa{margin:10px 0;border-radius:12px;background:color-mix(in srgb,var(--s4) 8%,transparent);padding:8px 14px;border:1px solid color-mix(in srgb,var(--s4) 24%,transparent)}
+.mx-qa .q{font-size:13px;color:var(--s4);font-weight:600}.mx-qa .q span{font-weight:400;color:var(--muted)}.mx-qa .qt{font-size:14px;margin-top:1px}
+.mx-qa.ans{margin-top:-6px;border-top-left-radius:4px;border-top-right-radius:4px}.mx-qa .a{font-size:14.5px;line-height:1.55}
+.mx-welcome{max-width:460px;margin:12vh auto 0;text-align:center;padding:0 24px}.mx-welcome h2{font-size:22px;margin:8px 0 6px}.mx-welcome p{color:var(--muted);margin:0 0 18px}
+.mx-welcome .btn{height:38px;padding:0 20px;font-size:14px}.mx-welcome .mx-note{margin-top:12px}
+
+/* calm: no avatar on a message, its sender's name in its colour; a run from one sender shares one header */.mx-pop .mi .ck{color:var(--accent)}
+.mx-pop hr{border:0;border-top:1px solid var(--line);margin:4px 6px}
+
+/* one tooltip, in the app's own style, for every title in the window */
+.mx-tip{position:fixed;z-index:200;max-width:280px;padding:5px 9px;border-radius:8px;background:var(--raised);color:var(--text);border:1px solid var(--edge);
+box-shadow:var(--shadow),0 6px 20px rgba(0,0,0,.12);font:500 12px/1.4 ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;pointer-events:none;opacity:0;transform:translateY(2px);transition:opacity .12s,transform .12s;white-space:pre-line}
+.mx-tip.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.mx-tip{transition:none}}
+/* renaming in place */
+.mx-ed{cursor:text;border-radius:5px;padding:0 2px;margin:0 -2px}.mx-ed:hover{background:var(--soft)}
+.mx-ed.empty{color:var(--muted);font-style:normal}
+.mx-editing{outline:2px solid var(--focus);background:var(--bg)!important;padding:0 4px;margin:0 -4px;cursor:text;white-space:nowrap}
+
+/* the (?) beside a control: its explanation, in the app's tooltip, on hover or focus */
+.mx-help{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;margin-left:6px;border-radius:50%;
+border:1.3px solid var(--edge);color:var(--muted);font:700 10px/1 ui-rounded,-apple-system,system-ui,sans-serif;vertical-align:1px;cursor:help;flex:none}
+.mx-help:before{content:"?"}.mx-help:hover,.mx-help:focus-visible{border-color:var(--muted);color:var(--text)}
+.mx-helpop{position:fixed;z-index:200;max-width:min(280px,calc(100vw - 16px));padding:8px 11px;border-radius:9px;background:var(--raised);color:var(--text);border:1px solid var(--edge);
+box-shadow:var(--shadow),0 8px 24px rgba(0,0,0,.14);font:400 12.5px/1.45 ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;white-space:pre-line;text-align:left}
+
+/* your questions in a meeting: the colour alone says whose */
+.mx-qa .qt{margin:0}
+
+/* the mic isn't allowed: it needs you, nothing is broken */
+.mx-micno{display:flex;align-items:center;gap:10px;color:var(--warn);font-size:13.5px;font-weight:500;padding:2px 0}
+.mx-micno .lk{color:var(--warn);font-weight:600;text-decoration:underline;text-underline-offset:2px;background:none;font-size:13px}
+.vstate.mx-warn{color:var(--warn)}.vstate.mx-warn .mx-micno{justify-content:center}
+.mx-lwfull>.col{padding:0}.mx-lwfull>.col .mx-micno{padding:6px 0 2px}
+/* a speaker's name: click to name them, in place */
+.mx-who.known{text-decoration:underline dotted;text-underline-offset:3px}
+.mx-sep2{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);margin:14px 0 4px}.mx-sep2:before,.mx-sep2:after{content:"";flex:1;height:1px;background:var(--line)}
+/* a reply on its way: the text grows, a caret at its end */
+@keyframes mxblink{to{visibility:hidden}}
+
+.mx-cc{font:600 .8em ui-monospace,Menlo,monospace;letter-spacing:-.5px}
+/* a live call's deeper work: one line on the voice's side, its star larger and turning slowly, while it runs */
+.mx-working{display:flex;align-items:center;gap:9px;margin:6px 0 10px;padding:0 2px;font-size:14.5px;color:var(--muted)}
+.mx-star{flex:none;color:var(--accent);animation:mxstar 2.4s linear infinite}
+@keyframes mxstar{to{transform:rotate(1turn)}}
+.mx-dots i{font-style:normal;animation:mxdot 1.2s infinite}.mx-dots i:nth-child(2){animation-delay:.2s}.mx-dots i:nth-child(3){animation-delay:.4s}
+@keyframes mxdot{0%,60%,100%{opacity:.25}30%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.mx-star,.mx-dots i{animation:none}}
+
+/* a call's conversation (live under the call, or ended): who said what at a glance. You on the
+   right in your bubble; the voice on the left, plain */
+#mxcalllog .mx-qa:not(.ans),.mx-lwfull.call .mx-qa:not(.ans){margin:10px 0 6px auto;width:fit-content;max-width:85%;background:var(--me);color:var(--me-text);
+  border:0;border-radius:16px;border-bottom-right-radius:6px;padding:8px 14px}
+#mxcalllog .mx-qa.ans,.mx-lwfull.call .mx-qa.ans{margin:6px 0 10px;max-width:92%;background:none;border:0;border-radius:0;padding:0 2px}
+#mxcalllog .mx-qa.ans .a p,.mx-lwfull.call .mx-qa.ans .a p{margin:0 0 4px}
+.mx-pop .mi[role=menuitemradio]{display:flex;align-items:center;gap:8px;white-space:normal;text-align:left}.mx-pop .mi[role=menuitemradio] .ck{width:14px;flex:none}
+/* words worth copying can be selected (the window turns selection off for the page, so it doesn't
+   catch on buttons and headers); each message of a call or a meeting has a quiet Copy on hover */
+#mxcalllog,.mx-tx,.mx-qa .qt,.mx-qa .a,#mbody .md{-webkit-user-select:text;user-select:text;cursor:text}
+.mx-qa{position:relative}
+.mx-cp{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);background:var(--bg);border:1px solid var(--edge);opacity:0;transition:opacity .12s;cursor:pointer;z-index:1}
+.mx-qa:hover>.mx-cp,.mx-cp:focus-visible{opacity:1}.mx-cp:hover{color:var(--text)}
+#mxcalllog .mx-qa.ans>.mx-cp,.mx-lwfull.call .mx-qa.ans>.mx-cp{top:-2px;right:-6px}
+
+/* the title's menu: All, then each folder and its Claude Code sessions */
+.mx-nit{display:flex;align-items:center;gap:9px;width:100%;padding:6px 10px;border-radius:8px;min-height:32px;white-space:nowrap;text-align:left;font-size:13.5px}
+.mx-nit:hover{background:var(--hover)}.mx-nit.on{background:var(--sel);color:var(--sel-text)}
+.mx-nit .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.mx-nit .n{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}.mx-nit.on .n{color:inherit;opacity:.7}
+.mx-nit .dot{width:7px;height:7px;animation:none}
+.mx-nws{font-size:12px;font-weight:600;color:var(--muted);padding:14px 10px 4px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.mx-nws svg{flex:none}.mx-nws span{overflow:hidden;text-overflow:ellipsis}
+.mx-cc{font:600 9.5px ui-monospace,Menlo,monospace;width:20px;height:20px;border-radius:6px;background:var(--soft);color:var(--muted);display:flex;align-items:center;justify-content:center;flex:none}
+.mx-nit.on .mx-cc{background:var(--bg);color:var(--accent)}
+.mx-navm{max-height:60vh;overflow:auto;padding:2px}.mx-navm .mx-nws{padding-top:8px}
+.mx-plist{padding:4px 10px 16px;max-width:680px;margin:0 auto;width:100%}
+.mx-pday{font-size:12px;font-weight:600;color:var(--muted);padding:14px 10px 4px}
+.mx-prow{display:flex;align-items:center;gap:11px;width:100%;min-height:54px;padding:8px 10px;border-radius:9px;text-align:left;cursor:pointer}
+.mx-prow:hover{background:var(--hover)}
+.mx-prow .t{flex:1;min-width:0}.mx-prow .t b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mx-prow .t small{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mx-prow .at{font-size:12px;color:var(--muted);flex:none;font-variant-numeric:tabular-nums}
+/* a row's ⋯, in its time's place while it's pointed at or focused */
+.mx-pmore{display:none;width:28px;height:28px;margin:-4px -4px -4px 0;border-radius:7px;align-items:center;justify-content:center;color:var(--muted);flex:none}
+.mx-pmore:hover{background:var(--soft);color:var(--text)}
+.mx-prow:hover .mx-pmore,.mx-prow:focus-visible .mx-pmore,.mx-prow.hov .mx-pmore{display:flex}.mx-prow:hover .at,.mx-prow:focus-visible .at,.mx-prow.hov .at{display:none}
+.mx-pico{width:30px;height:30px;border-radius:8px;background:var(--soft);display:flex;align-items:center;justify-content:center;color:var(--muted);flex:none}
+.mx-pico.call{color:var(--accent);background:var(--accent-soft)}
+.mx-prow.live{margin:8px 0 2px;background:var(--rec-soft)}.mx-prow.live:hover{background:color-mix(in srgb,var(--rec) 16%,transparent)}
+.mx-prow.live .mx-pico{background:transparent}.mx-prow.live .dot{width:8px;height:8px;border-radius:50%;background:var(--rec)}.mx-prow.live .at{color:var(--rec);font-weight:600}
+.mx-welcome code{white-space:nowrap;font:12.5px ui-monospace,Menlo,monospace;background:var(--soft);color:var(--text);padding:1px 6px;border-radius:5px}
+.mx-psum{margin:4px 0 14px;padding:12px 14px;border-radius:10px;background:var(--soft);user-select:text;-webkit-user-select:text}
+.mx-psum .lk{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:2px;background:none;border:0;padding:0;font-size:inherit;cursor:pointer}
+.mx-psum .k{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px}.mx-psum ul{margin:0;padding-left:18px}.mx-psum .mx-note{padding:0;margin:0}
+/* a call's conversation, three kinds (the user's design, 2026-10-21): what you said, the mic first; what the
+   voice said, Standby's mark first; what the voice asked Claude Code, one quiet line */
+.mx-mic{display:inline-block;vertical-align:-2px;margin-right:7px;color:var(--accent)}
+#mxcalllog .mx-qa:not(.ans) .mx-mic,.mx-lwfull.call .mx-qa:not(.ans) .mx-mic{color:inherit;opacity:.85}
+.mx-said{display:flex;align-items:flex-start;gap:9px}.mx-said .t{flex:1;min-width:0}
+.mx-vmark{flex:none;margin-top:2px}.mx-vmark .logo{width:18px;height:18px;border-radius:6px;box-shadow:none;gap:1.5px}
+.mx-vmark .logo i{width:2px}.mx-vmark .logo i:nth-child(1){height:5px}.mx-vmark .logo i:nth-child(2){height:9px}.mx-vmark .logo i:nth-child(3){height:6px}
+/* ⋯ on a meeting or call: compact, like a macOS menu (the user, 2026-10-21): tight rows, small type,
+   the row under the pointer in the accent */
+.mx-pop.mx-menu{width:auto;min-width:190px;max-width:280px;padding:5px;border-radius:9px;
+  box-shadow:0 0 0 .5px var(--edge),0 8px 24px rgba(0,0,0,.16);border:0}
+.mx-pop.mx-menu .mi{padding:3px 10px;border-radius:5px;font-size:13px;line-height:18px;white-space:nowrap}
+.mx-pop.mx-menu .mi:hover,.mx-pop.mx-menu .mi:focus-visible{background:var(--accent);color:var(--on-accent);outline:none}
+.mx-pop.mx-menu .mi.danger:hover{background:var(--rec);color:#fff}
+.mx-pop.mx-menu hr{margin:4px 8px}
+.mx-pop.mx-menu .mi[role=menuitemradio]{white-space:normal;gap:6px}.mx-pop.mx-menu .mi[role=menuitemradio]:hover .ck{color:inherit}
+
+/* the recorder's question while a meeting records: one calm box under the header, its answers beside it */
+.mx-ask{display:flex;align-items:center;gap:12px;margin:6px 0 4px;padding:10px 12px;border-radius:12px;background:var(--accent-soft)}
+.mx-ask .q{flex:1;min-width:0}.mx-ask .q b{display:block;font-weight:600;font-size:13.5px}.mx-ask .q small{display:block;font-size:12.5px;color:var(--muted);margin-top:1px}
+.mx-ask .a{display:flex;gap:4px;flex:none}.mx-ask .vtxt{background:var(--bg)}.mx-ask .vtxt.first{background:var(--accent);color:var(--on-accent)}
+
+.mx-noear{flex:none;color:var(--muted)}
+.lv{display:inline-flex;gap:2px;align-items:center;height:12px;flex:none}.lv i{display:block;width:2.5px;height:4px;border-radius:2px;background:var(--rec);animation:spinbar 1s ease-in-out infinite}
+.lv i:nth-child(2){animation-delay:-.3s}.lv i:nth-child(3){animation-delay:-.6s}
+.lv.still i{animation:none;height:3px;background:var(--edge)}
+.mx-src{display:flex;align-items:center;gap:10px;width:100%;padding:8px 0 2px;font-size:13.5px;text-align:left}
+.mx-src .ck{width:18px;height:18px;border-radius:5px;background:var(--accent);color:var(--on-accent);display:flex;align-items:center;justify-content:center;flex:none}
+.mx-src.off .ck{background:transparent;box-shadow:inset 0 0 0 1.5px var(--edge)}
+.mx-src .n{flex:1;min-width:0}.mx-src .n small{display:block;font-size:12px;color:var(--muted)}.mx-src .n small:empty{display:none}.mx-src.off .n{color:var(--muted)}
+
+/* the slide between the list and one meeting or call: the still copy of what was on screen, under the page
+   coming in, or over the list going back; the page coming in above it all */
+.mx-snap{position:absolute;inset:0;z-index:25;pointer-events:none;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+.mx-snap>*{display:flex!important;flex:1;min-height:0;flex-direction:column}
+.mx-snap.over{z-index:40;box-shadow:-8px 0 24px rgba(0,0,0,.12)}
+#mview.mx-sliding{position:relative;z-index:30;background:var(--bg)}.voice.mx-sliding{z-index:30}
+
+/* a call's conversation as a conversation (the user, 2026-10-25): a run of the voice's lines under one mark, a
+   run of yours under one tail, a quiet time where the talk resumed; a reply cut off ends in a faint mark */
+#mxcalllog .mx-qa:not(.ans),.mx-lwfull.call .mx-qa:not(.ans){border-radius:18px 18px 6px 18px;margin:12px 0 2px auto;padding:8px 13px;line-height:1.45}
+#mxcalllog .mx-qa.run:not(.ans),.mx-lwfull.call .mx-qa.run:not(.ans){margin-top:4px;border-top-right-radius:6px}
+#mxcalllog .mx-qa.ans,.mx-lwfull.call .mx-qa.ans{margin:12px 0 2px}
+#mxcalllog .mx-qa.ans.run,.mx-lwfull.call .mx-qa.ans.run{margin-top:4px}
+#mxcalllog .mx-qa.ans.run .mx-vmark,.mx-lwfull.call .mx-qa.ans.run .mx-vmark{visibility:hidden}
+.mx-time{text-align:center;font-size:11.5px;color:var(--muted);opacity:.8;margin:18px 0 6px;font-variant-numeric:tabular-nums}
+.mx-cut{color:var(--muted);font-size:12.5px;white-space:nowrap;margin-left:6px}
+.mx-qa.dropped{opacity:.75}.mx-drop{font-size:11.5px;color:var(--me-text);opacity:.7;margin-top:2px;text-align:right}
+/* work going on, by name, from the call's task records */
+.mx-task{display:grid;grid-template-columns:18px 1fr;column-gap:9px;align-items:center;margin:10px 0 2px;padding:0 2px;font-size:13px;color:var(--muted)}
+.mx-task+.mx-task{margin-top:4px}.mx-task b{font-weight:600;color:var(--text)}.mx-task .s{display:flex;justify-content:center}
+.mx-task.queued b,.mx-task.stalled b{font-weight:500;color:var(--muted)}
+.spin0{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid color-mix(in srgb,currentColor 25%,transparent);border-top-color:currentColor;animation:rot 1s linear infinite;flex:none}
+.mx-task .spin0{color:var(--accent)}.dot0{width:6px;height:6px;border-radius:50%;background:var(--edge)}
+/* busy, quietly, at the right of the call's strip */
+.vbusy{flex:none;display:inline-flex;align-items:center;gap:5px;height:18px;padding:0 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:600;white-space:nowrap}
+.vbusy[hidden]{display:none}.vbusy.stall{background:var(--soft);color:var(--muted)}.vbusy .spin0{width:10px;height:10px}
+/* new rows come in gently */
+.mx-in{animation:mxin .32s cubic-bezier(.2,.8,.2,1) both}@keyframes mxin{from{opacity:0;transform:translateY(6px)}}
+@media (prefers-reduced-motion:reduce){.mx-in,.spin0{animation:none}}
+
+/* the round buttons of a live row at the bottom: Pause (Resume, filled, while paused), End or Stop in red */
+.vic.dk{width:40px;height:40px}.vic.dk.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.vic.dk.end{background:var(--rec);border-color:var(--rec);color:#fff}.vic.dk.end:hover:not(:disabled){background:var(--rec);filter:brightness(.93)}
+/* a live meeting's row at the bottom: its sound as red bars; Listening and its sources; the newest two lines */
+#mview{position:relative}
+.mx-ddock{flex:none;display:flex;align-items:center;gap:10px;height:78px;padding:10px 12px 12px;background:var(--dock);border-top:1px solid var(--line);position:relative}
+.mx-ddock[hidden]{display:none}
+.mx-recb{width:46px;height:46px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;gap:2.5px;background:var(--rec-soft)}
+.mx-recb i{display:block;width:3px;height:8px;border-radius:2px;background:var(--rec);animation:spinbar 1.1s ease-in-out infinite}
+.mx-recb i:nth-child(2){animation-delay:-.3s}.mx-recb i:nth-child(3){animation-delay:-.6s}.mx-recb i:nth-child(4){animation-delay:-.85s}
+.mx-recb.off{background:var(--soft)}.mx-recb.off i{animation:none;background:var(--muted);opacity:.6}
+.mx-dt{flex:1;min-width:0}
+.mx-dstate{display:flex;align-items:center;gap:5px;height:18px;font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden}
+.mx-dsrc{display:inline-flex;align-items:center;gap:4px;font-weight:500;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mx-dsrc:hover{color:var(--text)}.mx-dsrc s{text-decoration:none;opacity:.75;display:inline-flex;align-items:center;gap:3px}
+.mx-dsrc .new{color:var(--accent)}.mx-dsrc>svg{flex:none;transition:transform .15s}.mx-dsrc[aria-expanded=true]>svg{transform:rotate(180deg)}
+.mx-dwords{height:38px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;font-size:14px;line-height:19px;color:var(--text)}
+.mx-dwords .caret{display:inline-block;width:2px;height:14px;margin-left:2px;vertical-align:-2px;background:var(--accent);animation:pulse 1s steps(2) infinite}
+/* its sources, open: a small card above the row */
+.mx-dpop{position:absolute;left:12px;right:12px;bottom:calc(100% + 8px);z-index:5;background:var(--raised);border:1px solid var(--edge);border-radius:14px;
+  box-shadow:0 10px 30px rgba(0,0,0,.14);padding:2px 12px 6px}
+.mx-dpop .mx-src{padding:9px 0 3px}

@@ -1,0 +1,278 @@
+#!/usr/bin/env bash
+# Standby CLI (Mac side). Wraps standby.py in the private venv and manages the
+# background session.
+set -euo pipefail
+
+# UTF-8 for every Python this starts, whatever the caller's locale.
+export PYTHONUTF8=1
+ROOT="$HOME/.standby"
+VENV="$ROOT/venv"
+PY="$VENV/bin/python"
+# This script is invoked through a symlink in ~/.local/bin, so resolve the link
+# chain before deriving HERE, or we look for standby.py next to the symlink.
+# macOS ships BSD readlink, which has no -f, hence the loop.
+SELF="${BASH_SOURCE[0]}"
+while [[ -L "$SELF" ]]; do
+  _target="$(readlink "$SELF")"
+  case "$_target" in
+    /*) SELF="$_target" ;;
+    *)  SELF="$(dirname "$SELF")/$_target" ;;
+  esac
+done
+HERE="$(cd "$(dirname "$SELF")" && pwd)"
+PIDFILE="$ROOT/daemon.pid"
+LOGFILE="$ROOT/daemon.log"
+
+die() { echo "standby: $*" >&2; exit 1; }
+need_venv() { [[ -x "$PY" ]] || die "no venv at $VENV - run the installer first: $(dirname "$HERE")/install.sh"; }
+
+# Every live recorder process, regardless of what the pidfile says: a python
+# running standby.py. The pattern is in every pgrep's own argv, so a bare
+# `pgrep -f` also caught the app's pgrep polling for recorders, and start
+# refused / stop "failed" on it. Keep in step with recorders() in ui.py.
+# Tests narrow STANDBY_RECORDER_MATCH to their own fakes, so `stop` in a test
+# never ends the user's recording or a teammate's test run.
+sb_recorders() { pgrep -lf "${STANDBY_RECORDER_MATCH:-standby[.]py run}" 2>/dev/null | awk '$2 ~ /[Pp]ython[0-9.]*$/ {print $1}' || true; }
+
+usage() {
+  cat <<'EOF'
+standby - a meeting companion powered by your own Claude Code
+
+  standby try                first run: setup, a mic check, start, in one go
+  standby setup [--mode M]   what to record, and the mic
+  standby devices            list audio devices
+  standby selftest           verify the configured channels transcribe
+
+  standby start [label]      start capturing in the background
+    --mode auto              your mic, and what your Mac plays when an app plays (default)
+    --mode mic               your mic only
+    --mode meeting           what your Mac plays only, without your mic
+    --small                  110M model: faster load, lower accuracy
+    --workspace PATH         folder the agent works in (loads its CLAUDE.md)
+    --resume SESSION         keep recording into an ended session
+    --push-lines N           send transcript to the AI every N sentences (10)
+    --push-seconds S         ...or after S seconds with anything unsent (60)
+    --no-claude              record only: Claude off, nothing leaves this Mac
+    --kind talk              Claude without a meeting: your turns only, text only
+  standby stop               stop capturing
+  standby status             is a session running
+  standby tail               follow the live log: lines, heartbeats, errors
+  standby transcript         follow just the raw transcript file
+
+  standby app                open the Standby app (meetings, calls, settings)
+  standby check              is the agent reachable, is Claude Code installed?
+
+  standby dictation on       speak into any app with Standby's model (menu bar),
+                             instead of macOS Dictation; starts at login too
+  standby dictation off      stop it, and no more at login
+  standby dictation          is it on, which shortcut, which permissions
+
+  standby repass [session]   re-transcribe with whisper-large-v3-turbo
+  standby list               list local sessions
+  standby purge <session>    delete a session's audio and transcript
+  standby purge --all        delete every local session
+
+What it records (Settings > Recording, or --mode):
+
+  auto     the default. Your mic (it follows your Mac: AirPods in, AirPods out),
+           and when an app plays (a call in Zoom, Teams, Slack, Meet..., or a
+           video) its sound, straight from macOS: You and Others, headphones or not.
+           Nothing to set up; macOS asks once for Screen & System Audio Recording.
+  mic      your mic only. In a room, or a call on the laptop's speakers.
+  meeting  what your Mac plays only, without your mic.
+EOF
+}
+
+# Start Standby's agent for Claude Code on this Mac.
+sb_ensure_agent() { "$PY" "$HERE/agentctl.py" ensure || \
+  echo "standby: agent NOT ready (capture still works). Run: standby check" >&2; }
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  setup|devices|selftest)
+    need_venv
+    exec "$PY" "$HERE/standby.py" "$cmd" "$@"
+    ;;
+
+  try)
+    # Smallest possible first run: Automatic, which needs nothing set up (the mic
+    # is checked here; a call's sound when one plays). Speak, then ask in Claude Code.
+    need_venv
+    if [[ ! -f "$ROOT/config.json" ]]; then
+      "$PY" "$HERE/standby.py" setup --mode auto
+    fi
+    "$PY" "$HERE/standby.py" selftest --mode mic --seconds 6 || \
+      die "selftest failed, fix that before starting a session"
+    echo ""
+    echo "Starting a session in the background."
+    echo "Talk for ~15 seconds, then ask Claude Code:"
+    echo ""
+    echo "    summarize what I said"
+    echo ""
+    exec "$0" start --mode auto try
+    ;;
+
+  start)
+    if [[ -n "$(sb_recorders)" ]]; then
+      die "a recorder is already running (pid $(sb_recorders | tr '\n' ' ')). Use: standby stop"
+    fi
+    need_venv
+    mode_args=()
+    claude=1
+    while [[ "${1:-}" == --* ]]; do
+      case "$1" in
+        --mode)  mode_args+=(--mode "$2"); shift 2 ;;
+        --small) mode_args+=(--small); shift ;;
+        --workspace) mode_args+=(--workspace "$2"); shift 2 ;;
+        --resume) mode_args+=(--resume "$2"); shift 2 ;;
+        --attach) mode_args+=(--attach "$2"); shift 2 ;;
+        --attach-copy) mode_args+=(--attach-copy); shift ;;
+        --attach-title) mode_args+=(--attach-title "$2"); shift 2 ;;
+        --claude-model) mode_args+=(--claude-model "$2"); shift 2 ;;
+        --claude-voice) mode_args+=(--claude-voice "$2"); shift 2 ;;
+        --push-lines) mode_args+=(--push-lines "$2"); shift 2 ;;
+        --push-seconds) mode_args+=(--push-seconds "$2"); shift 2 ;;
+        --no-claude) mode_args+=(--no-claude); claude=0; shift ;;
+        --kind) mode_args+=(--kind "$2"); [[ "$2" == talk ]] && claude=1; shift 2 ;;
+        *) die "unknown option $1" ;;
+      esac
+    done
+    label="${1:-meeting}"
+    mkdir -p "$ROOT"
+    # The last three runs' logs are kept: a resume or a restart starts a new one, and once
+    # replaced the one before it (where a bug was) was gone. Fresh, not appended: the
+    # wait below reads this run's "Standby is live", never an old one's.
+    for n in 2 1; do
+      if [[ -f "$LOGFILE.$n" ]]; then mv -f "$LOGFILE.$n" "$LOGFILE.$((n + 1))"; fi
+    done
+    if [[ -s "$LOGFILE" ]]; then mv -f "$LOGFILE" "$LOGFILE.1"; fi
+    : > "$LOGFILE"
+    rm -f "$ROOT/daemon.ready"
+    nohup "$PY" "$HERE/standby.py" run "$label" \
+      ${mode_args[@]+"${mode_args[@]}"} >>"$LOGFILE" 2>&1 &
+    echo $! > "$PIDFILE"
+    echo "standby: starting (pid $!), loading the model..."
+    for _ in $(seq 1 90); do
+      if [[ -f "$ROOT/daemon.ready" ]] || grep -q "Standby is live" "$LOGFILE" 2>/dev/null; then
+        sed -n '/Standby is live/,$p' "$LOGFILE" | head -8
+        echo ""
+        [[ $claude -eq 1 ]] && { sb_ensure_agent || true; }
+        exit 0
+      fi
+      if ! kill -0 "$!" 2>/dev/null; then
+        echo "standby: daemon exited. Log:" >&2
+        tail -20 "$LOGFILE" >&2
+        rm -f "$PIDFILE"
+        exit 1
+      fi
+      sleep 1
+    done
+    echo "standby: still starting. Watch: tail -f $LOGFILE"
+    ;;
+
+  stop)
+    # Stop EVERY recorder, not just the one in the pidfile, and never report
+    # success while one is still alive. The old version deleted the pidfile
+    # after 20 s whether or not the process had exited, so a recorder that hung
+    # on shutdown kept capturing the mic, invisibly, for hours.
+    pids="$(sb_recorders)"
+    if [[ -z "$pids" ]]; then
+      rm -f "$PIDFILE" "$ROOT/daemon.ready"
+      echo "standby: not running"
+      exit 0
+    fi
+    kill $pids 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      [[ -z "$(sb_recorders)" ]] && break
+      sleep 0.5
+    done
+    left="$(sb_recorders)"
+    if [[ -n "$left" ]]; then
+      echo "standby: recorder did not exit within 10s, forcing (pid $left)" >&2
+      kill -9 $left 2>/dev/null || true
+      sleep 0.5
+    fi
+    if [[ -n "$(sb_recorders)" ]]; then
+      die "could not stop recorder pid $(sb_recorders). Run: kill -9 $(sb_recorders)"
+    fi
+    rm -f "$PIDFILE" "$ROOT/daemon.ready"
+    tail -3 "$LOGFILE" 2>/dev/null || true
+    echo "standby: stopped (no recorder running)"
+    ;;
+
+  status)
+    n="$(sb_recorders | wc -l | tr -d ' ')"
+    if [[ "$n" -gt 1 ]]; then
+      echo "WARNING: $n recorders running (pids $(sb_recorders | tr '\n' ' ')). Run: standby stop"
+    fi
+    if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "running (pid $(cat "$PIDFILE"))"
+      grep -m1 "Session:" "$LOGFILE" 2>/dev/null || true
+      latest="$(ls -1dt "$ROOT"/sessions/*/ 2>/dev/null | head -1 || true)"
+      [[ -n "$latest" ]] && echo "lines: $(wc -l < "$latest/transcript.jsonl" | tr -d ' ')"
+    else
+      echo "not running"
+    fi
+    ;;
+
+  tail)
+    # The daemon log carries everything: transcript lines as they commit, a
+    # heartbeat every 10s (audio seconds, level, lines, bytes delivered), and errors.
+    [[ -f "$LOGFILE" ]] || die "no log yet - run: standby start"
+    echo "standby: following $LOGFILE  (Ctrl-C to stop; capture keeps running)"
+    exec tail -n 30 -f "$LOGFILE"
+    ;;
+
+  transcript)
+    latest="$(ls -1dt "$ROOT"/sessions/*/ 2>/dev/null | head -1)" || die "no sessions"
+    exec tail -f "$latest/transcript.jsonl"
+    ;;
+
+  list)
+    ls -1t "$ROOT/sessions" 2>/dev/null || echo "(none)"
+    ;;
+
+  app|ui)
+    # The Standby app: a native window (pywebview, which the installer puts in) over
+    # a page served on 127.0.0.1 only.
+    need_venv
+    nohup "$PY" "$HERE/ui.py" --window >>"$ROOT/ui.log" 2>&1 &
+    echo "standby: opening the Standby window  (log: $ROOT/ui.log)"
+    ;;
+
+  ui-stop)
+    pkill -f "$HERE/ui.py" && echo "standby: UI stopped" || echo "standby: UI not running"
+    ;;
+
+  check)
+    need_venv
+    exec "$PY" "$HERE/agentctl.py" "$cmd" "$@"
+    ;;
+
+  repass)
+    need_venv
+    exec "$PY" "$HERE/repass.py" "$@"
+    ;;
+
+  dictation)
+    need_venv
+    exec "$PY" "$HERE/dictation.py" "${1:-status}" "${@:2}"
+    ;;
+
+  purge)
+    target="${1:-}"
+    [[ -n "$target" ]] || die "usage: standby purge <session>|--all"
+    if [[ "$target" == "--all" ]]; then
+      read -r -p "delete ALL local sessions in $ROOT/sessions (not one live or paused)? [y/N] " ans
+      [[ "$ans" == "y" ]] || exit 0
+    fi
+    # The window's delete and this are one routine (forget.py): the folder, and every file the
+    # session left in live/, agent/ and marks/; never a live or paused one. Standard library
+    # only, so the venv's python if there is one, else the Mac's.
+    py="$PY"; [[ -x "$py" ]] || py="$(command -v python3 || echo /usr/bin/python3)"
+    exec "$py" "$HERE/forget.py" --root "$ROOT" "$target"
+    ;;
+
+  ""|-h|--help|help) usage ;;
+  *) usage; exit 1 ;;
+esac

@@ -1,0 +1,6 @@
+{
+  "name": "standby",
+  "version": "0.1.0",
+  "description": "Standby inside Claude Code: listen to a meeting or talk by voice, with Claude in this session hearing it all",
+  "author": { "name": "Standby" }
+}

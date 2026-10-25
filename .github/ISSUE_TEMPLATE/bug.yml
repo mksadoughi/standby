@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in Standby doesn't work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A security problem? Please don't file it here: see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. /standby call in Claude Code
+        2. Say "run the tests"
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "15.5 (Sequoia)"
+    validations:
+      required: true
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Chip
+      options: [M1, M2, M3, M4, M5, Other]
+    validations:
+      required: true
+  - type: input
+    id: memory
+    attributes:
+      label: Memory
+      placeholder: "16 GB"
+  - type: input
+    id: standby
+    attributes:
+      label: Standby version
+      description: The release, or the commit (`git -C <your standby folder> rev-parse --short HEAD`).
+    validations:
+      required: true
+  - type: input
+    id: claude
+    attributes:
+      label: Claude Code version
+      description: "`claude --version`"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        From `~/.standby`: `ui.log` (the app), `daemon.log` (the recorder), `dictation.log` (dictation).
+        The lines around the problem are enough. They hold no audio, but can hold words from your meetings:
+        read them before pasting, and remove anything private.
+      render: text

@@ -1,0 +1,335 @@
+<!doctype html>
+<!-- The home page's feature cards: one short silent loop each, in the films' look (screens.js, cc.js). ?c= picks it:
+       plugin  /standby in Claude Code in the terminal, VS Code and the Claude app: each says you're on a call
+       orb     a call window put away shrinks into the orb in the corner, over other apps; a click pauses it
+       hear    a call, a video, a phone, the room: each lights up and its words reach the orb
+       who     "Speaker 1" is named Toby, every line of his follows, and the voice is known after
+       learn   "castrel" in a transcript becomes Kestrel, and lands in the word fixes
+       plan    speech, speaker labels and the voice tick off as on your Mac; only text, about 50K tokens a day, goes on
+     render.py renders each: render.py tools/demo/cards.html docs/video/card-<c>.mp4 --query c=<c> --size 800x450 --scale 1
+     The frame is render(t), the same every run. Opened as a file, it plays live. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Standby: card loops</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff}
+svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+</style>
+</head>
+<body>
+<svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
+<script>const DUR = ({ slides: 5.0, orbstory: 6.0, sources: 8.6, naming: 5.8 })[new URLSearchParams(location.search).get("c")] || 4.5;   // the longer stories</script>
+<script src="kit.js"></script>
+<script src="screens.js"></script>
+<script src="cc.js"></script>
+<script>
+const CARD = new URLSearchParams(location.search).get("c") || "plugin";
+const BIG = 44, MID = 34;
+
+// plugin: the same Claude Code, three places; in each, "/standby call" and the band says you're on a call
+function plugin(t) {
+  const places = [["Terminal", "#1e1e26", "#e6e6ee"], ["VS Code", "#1f2430", "#e6e6ee"], ["Claude app", "#ffffff", "#1b1b2f"]];
+  let g = "";
+  places.forEach(([name, bg, ink], i) => {
+    const y = 120 + i * 240, a = .3 + i * .55, k = out(span(t, a - .3, a));
+    g += `<g opacity="${fo(k)}">` + box(170, y, 1260, 200, 22, bg, { stroke: i === 2 ? W.line : "none", sw: 2 }) +
+      ui(214, y + 62, name, 30, { fill: i === 2 ? W.mut : "#9a9ab0", weight: 600 });
+    const cmd = typed("/standby call", t, a + .1, 16);
+    g += text(214, y + 128, "> " + cmd + (t < a + 1 && blink(t) ? "▍" : ""), MID, { font: MONO, fill: ink, anchor: "start" });
+    const on = out(span(t, a + 1.0, a + 1.3));
+    if (on > 0) g += `<g opacity="${fo(on)}">` + `<circle cx="226" cy="${y + 168}" r="9" fill="${TC.acc}"/>` +
+      text(250, y + 178, "On a call with Claude", 30, { font: MONO, fill: i === 2 ? "#4f46e5" : "#b9b4ff", anchor: "start" }) + "</g>";
+    g += "</g>";
+  });
+  return g;
+}
+
+// orb: the call's window put away shrinks into the orb in the corner, over other apps; a click pauses it
+function orbScene(t) {
+  let g = `<rect width="1600" height="900" fill="${DARK ? "#262338" : "#e9e7f2"}"/>`;
+  [[140, 120, 760, 520, "Notes"], [520, 230, 760, 520, "Browser"]].forEach(([x, y, w, h, n]) => {
+    g += `<rect x="${x}" y="${y + 10}" width="${w}" height="${h}" rx="18" fill="#1e1a50" opacity=".12" filter="url(#soft)"/>` + box(x, y, w, h, 18, "#fff", { stroke: W.line, sw: 2 }) +
+      [0, 1, 2].map(i => `<circle cx="${x + 30 + i * 26}" cy="${y + 30}" r="8" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
+      ui(x + w / 2, y + 38, n, 26, { anchor: "middle", fill: W.mut }) + [0, 1, 2, 3].map(i => box(x + 50, y + 100 + i * 60, w - 160 - i * 60, 20, 10, "#eceaf4")).join("");
+  });
+  const away = inout(span(t, .6, 1.4)), win = { x: 1000, y: 160, w: 480, h: 560 }, ORB = [1470, 790];
+  if (away < 1) {
+    const s = lerp(1, .06, away), cx = lerp(win.x + win.w / 2, ORB[0], away), cy = lerp(win.y + win.h / 2, ORB[1], away);
+    g += `<g opacity="${fo(1 - span(away, .7, 1))}" transform="translate(${f(cx)} ${f(cy)}) scale(${fs(s)}) translate(${f(-(win.x + win.w / 2))} ${f(-(win.y + win.h / 2))})">` +
+      frame(win) + header(win, "Guest TTL fix", "", { controls: true, call: true, dot: "#b9b4f2", clock: "01:12" }) + orbApp(win.x + 240, win.y + 260, 80, "speaking", t) +
+      ui(win.x + 240, win.y + 410, "On it.", 34, { anchor: "middle", fill: W.ink }) + "</g>";
+  }
+  const paused = t > 3.0, o = out(span(t, 1.2, 1.6));
+  const click = Math.max(0, 1 - Math.abs(t - 3.0) / .16);
+  g += orbApp(ORB[0], ORB[1], 52 * pop(span(t, 1.2, 1.7)), paused ? "muted" : "speaking", t, o);
+  if (click > 0) g += `<circle cx="${ORB[0]}" cy="${ORB[1]}" r="${f(60 + 30 * (1 - click))}" fill="none" stroke="${INDIGO}" stroke-width="4" opacity="${fo(click * .7)}"/>`;
+  if (paused) g += `<g opacity="${fo(out(span(t, 3.1, 3.4)))}">` + box(ORB[0] - 230, ORB[1] - 24, 150, 48, 24, "#2b2b31") + ui(ORB[0] - 155, ORB[1] + 9, "Paused", 26, { anchor: "middle", fill: "#f2f2f5", weight: 600 }) + "</g>";
+  return g;
+}
+
+// hear: a call, a video, a phone on speaker, the room: each lights up, and its words reach the orb
+function hear(t) {
+  const srcs = [["Call", "Nadia: Guests pay by region."], ["Video", "\"…cache keys by route.\""], ["Phone", "Theo: I'll check Thursday."], ["Room", "Ines: Ship members first."]];
+  const ORB = [1180, 420];
+  let g = "";
+  srcs.forEach(([n, said], i) => {
+    const y = 150 + i * 170, a = .2 + i * .9, on = span(t, a, a + .2) * (1 - span(t, a + .9, a + 1.1)), was = t > a;
+    g += box(220, y, 300, 110, 55, "#fff", { stroke: on > 0 ? INDIGO : W.line, sw: on > 0 ? 4 : 2 }) + ui(370, y + 68, n, 40, { anchor: "middle", fill: W.ink, weight: 650 });
+    if (on > 0) {
+      for (let k = 0; k < 4; k++) { const q = ((t - a) * 1.6 + k / 4) % 1; const x = lerp(540, ORB[0] - 110, q), yy = lerp(y + 55, ORB[1], q);
+        g += `<circle cx="${f(x)}" cy="${f(yy)}" r="7" fill="${INDIGO}" opacity="${fo(on * (1 - q))}"/>` }
+      g += `<g opacity="${fo(on)}">` + ui(ORB[0], ORB[1] + 190, said, 34, { anchor: "middle", fill: W.ink }) + "</g>";
+    }
+  });
+  const hearing = srcs.some((_, i) => { const a = .2 + i * .9; return t > a && t < a + 1 });
+  g += orbApp(ORB[0], ORB[1], 100, hearing ? "hearing" : "listening", t);
+  return g;
+}
+
+// who: "Speaker 1" is named Toby, every line of his follows, and the voice is known next time
+function who(t) {
+  const r = { x: 320, y: 60, w: 960, h: 780 }, named = t > 2.0;
+  const lines = [{ at: -1, ts: "2:05", who: named ? "Toby" : "Speaker 1", col: "#d97706", text: "Can we ship the guest search first?", known: named },
+    { at: -1, ts: "2:05", who: "Speaker 2", col: "#0e9f9a", text: "Only once the key has the region." },
+    { at: -1, ts: "2:06", who: named ? "Toby" : "Speaker 1", col: "#d97706", text: "Then let's check it today.", known: named }];
+  let g = meetingWin(r, t, { title: "Routing huddle", clock: "06:12", started: "Started 2:00 PM", rowh: 120, lines });
+  const NX = r.x + 30 + 96, Y0 = r.y + 96 + 44;
+  if (t > 1.0 && t < 2.0) g += box(NX - 8, Y0 + 2, 210, 34, 8, W.win, { stroke: W.acc, sw: 3 }) + ui(NX, Y0 + 28, typed("Toby", t, 1.2, 8) + (blink(t * 2) ? "▍" : ""), 22, { fill: "#d97706", weight: 700 });
+  const flash = span(t, 2.0, 2.15) * (1 - span(t, 2.6, 3.0));
+  if (flash > 0) [0, 2].forEach(i => { g += box(NX - 6, Y0 + i * 120 + 2, 70, 32, 7, "#d97706", { op: .22 * flash }) });
+  const click = Math.max(0, 1 - Math.abs(t - .9) / .16);
+  if (click > 0) g += `<circle cx="${NX + 50}" cy="${Y0 + 18}" r="${f(26 + 20 * (1 - click))}" fill="none" stroke="${INDIGO}" stroke-width="3" opacity="${fo(click * .7)}"/>`;
+  const tip = out(span(t, 2.8, 3.1));
+  if (tip > 0) g += `<g opacity="${fo(tip)}">` + box(NX + 90, Y0 - 44, 430, 42, 9, "#2b2b31") + ui(NX + 110, Y0 - 16, "Recognized from an earlier meeting", 22, { fill: "#f2f2f5" }) + "</g>";
+  return g;
+}
+
+// learn: a misheard name becomes the right one, and lands in the word fixes
+function learn(t) {
+  const r = { x: 230, y: 170, w: 760, h: 560 }, fixed = span(t, 1.0, 1.4);
+  let g = meetingWin(r, t, { title: "Edge cache sync", ended: "Meeting · 12 min · ended 10:42 AM", started: "Started 10:30 AM", rowh: 120, lines: [] });
+  const NX = r.x + 30 + 96, Y0 = r.y + 96 + 44;
+  [["Theo", "#0e9f9a", " already caches the routes."], ["Nadia", "#3f7cf3", " can hold the TTL too."]].forEach(([n, c, rest], i) => {
+    const cy = Y0 + i * 120, right = fixed >= .5, word = right ? "Kestrel" : "castrel";
+    g += ui(r.x + 30, cy + 22, "10:3" + (1 + i) + " AM", 18, { fill: W.mut }) + ui(NX, cy + 22, n, 22, { fill: c, weight: 700 }) +
+      (right ? box(NX - 3, cy + 50, 116, 12, 5, "#30a46c", { op: .45 }) : box(NX - 3, cy + 50, 108, 12, 5, WARM, { op: .4 * span(t, .3, .6) })) +
+      ui(NX, cy + 60, `<tspan font-weight="${right ? 700 : 400}" opacity="${fo(1 - Math.sin(fixed * Math.PI) * .8)}">${word}</tspan>${rest}`, 28, { fill: W.ink });
+  });
+  const wk = out(span(t, 1.8, 2.2));
+  if (wk > 0) {
+    const cx = 1010, cy = 330;
+    g += `<g opacity="${fo(wk)}" transform="translate(0 ${f((1 - wk) * 20)})">` + `<rect x="${cx}" y="${cy + 10}" width="380" height="200" rx="18" fill="#1e1a50" opacity=".14" filter="url(#soft)"/>` +
+      box(cx, cy, 380, 200, 18, W.win, { stroke: W.line, sw: 2 }) + ui(cx + 30, cy + 52, "Word fixes", 26, { fill: W.mut, weight: 700 }) +
+      text(cx + 30, cy + 108, "# learned", 26, { font: MONO, fill: W.mut, anchor: "start" }) + text(cx + 30, cy + 156, "castrel => Kestrel", 30, { font: MONO, fill: W.ink, anchor: "start", weight: 700 }) + "</g>";
+  }
+  return g;
+}
+
+// plan: speech, speaker labels and the voice are on your Mac; only text goes to Claude Code, and a full day of calls took 1 to 2%
+// of a Pro plan's week (the developer's own use)
+function plan(t) {
+  let g = "";
+  ["Speech-to-text", "Speaker labels", "Standby's voice"].forEach((n, i) => {
+    const a = .3 + i * .45, k = out(span(t, a, a + .3)), y = 230 + i * 130;
+    g += `<g opacity="${fo(k)}">` + `<circle cx="250" cy="${y}" r="26" fill="#30a46c"/><path d="M238 ${y} l9 9 16 -18" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>` +
+      ui(300, y + 13, n, BIG, { fill: W.ink, weight: 650 }) + ui(300, y + 56, "on your Mac, free", 28, { fill: W.mut }) + "</g>";
+  });
+  const c = span(t, 1.8, 3.0), n = Math.max(1, Math.round(2 * out(c))), k = out(span(t, 1.6, 1.9));
+  g += `<g opacity="${fo(k)}">` + box(900, 200, 520, 460, 28, "#fff", { stroke: W.line, sw: 2 }) +
+    ui(1160, 300, "Only text goes to Claude Code", 30, { anchor: "middle", fill: W.mut }) +
+    ui(1160, 450, (n > 1 ? "1–2" : "1") + "%", 120, { anchor: "middle", fill: INDIGO, weight: 800, font: ROUND }) +
+    ui(1160, 530, "of a Pro plan's week", 32, { anchor: "middle", fill: W.ink }) + ui(1160, 575, "for a full day of calls", 32, { anchor: "middle", fill: W.ink }) + "</g>";
+  return g;
+}
+
+// slides: Claude Code with a call going in Terminal, then VS Code, then the Claude app, each sliding in from the right;
+// then where it works. Only what's so: the terminal, the VS Code extension and the desktop app share installed plugins
+// (cloud sessions don't load them), and those three are where Standby has been tried.
+function slides(t) {
+  const steps = [[.95, 1.3], [2.15, 2.5], [3.35, 3.7]];          // four slides in five seconds
+  const p = steps.reduce((m, [a, b]) => m + inout(span(t, a, b)), 0);   // 0 the terminal … 3 the closing card
+  const band = (x, y, ink, linkish) => `<circle cx="${x + 12}" cy="${y - 10}" r="10" fill="${TC.acc}"/>` +
+    text(x + 36, y, "On a call with Claude", 32, { font: MONO, fill: ink, anchor: "start" }) +
+    (linkish ? ui(x + 470, y, "Pause · End · Full window", 26, { fill: "#8b87ff" }) : text(x + 480, y, "(1 mute · 2 end)", 28, { font: MONO, fill: "#8d8d97", anchor: "start" }));
+  const title = (x, s) => ui(x + 800, 112, s, 46, { anchor: "middle", fill: INK, weight: 700, font: ROUND });
+  const panels = [
+    x => title(x, "In the terminal") + box(x + 200, 170, 1200, 620, 22, "#1e1e26") + [0, 1, 2].map(i => `<circle cx="${x + 236 + i * 26}" cy="${200}" r="8" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
+      text(x + 250, 280, "Claude Code", 34, { font: MONO, weight: 700, fill: "#e8e6e3", anchor: "start" }) +
+      text(x + 250, 380, "> call me", 36, { font: MONO, fill: "#e6e6ee", anchor: "start" }) + band(x + 250, 680, "#e6e6ee") + box(x + 230, 710, 1140, 56, 10, "none", { stroke: "#55556a", sw: 2 }),
+    x => title(x, "In VS Code") + box(x + 200, 170, 1200, 620, 22, "#1f2430") + box(x + 200, 170, 300, 620, 22, "#181c26") +
+      [0, 1, 2, 3, 4].map(i => box(x + 240, 240 + i * 50, [180, 140, 200, 120, 160][i], 16, 8, "#2c3242")).join("") +
+      box(x + 540, 210, 820, 540, 14, "#252a37") + text(x + 570, 270, "Claude Code", 30, { font: MONO, weight: 700, fill: "#e8e6e3", anchor: "start" }) +
+      text(x + 570, 360, "> call me", 34, { font: MONO, fill: "#e6e6ee", anchor: "start" }) + band(x + 570, 690, "#e6e6ee", false),
+    x => title(x, "In the Claude app") + box(x + 200, 170, 1200, 620, 22, "#ffffff", { stroke: W.line, sw: 2 }) + box(x + 202, 172, 300, 616, 20, "#f4f3ef") +
+      [0, 1, 2].map(i => `<circle cx="${x + 236 + i * 26}" cy="${200}" r="8" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
+      [0, 1, 2, 3].map(i => box(x + 230, 260 + i * 54, [220, 170, 200, 150][i], 18, 9, "#e4e2da")).join("") +
+      box(x + 920, 300, 300, 64, 32, "#ecebfd") + ui(x + 1070, 342, "call me", 32, { anchor: "middle", fill: "#4f46e5" }) +
+      band(x + 560, 690, "#1b1b2f", false),
+    x => ui(x + 800, 360, "Wherever Claude Code plugins run on your Mac", 48, { anchor: "middle", fill: INK, weight: 700, font: ROUND }) +
+      ["Terminal", "VS Code", "Claude app"].map((n, i) => box(x + 380 + i * 290, 450, 260, 90, 45, "#fff", { stroke: W.line, sw: 2 }) + ui(x + 510 + i * 290, 507, n, 34, { anchor: "middle", fill: INK, weight: 600 })).join("") +
+      ui(x + 800, 640, "One plugin, shared by all three", 30, { anchor: "middle", fill: W.mut })];
+  return panels.map((draw, i) => { const x = (i - p) * 1600; return x > -1600 && x < 1600 ? draw(x) : "" }).join("");
+}
+
+// orbstory: a call starts in Claude Code, its window shrinks into the orb in the corner, you go on studying a chart
+// in another app while the orb keeps listening, and a click brings the call's window back
+function orbstory(t) {
+  let g = `<rect width="1600" height="900" fill="${DARK ? "#262338" : "#e9e7f2"}"/>`;
+  // Claude Code, a call starting
+  const T = { x: 120, y: 120, w: 820, h: 560 };
+  g += `<rect x="${T.x}" y="${T.y + 10}" width="${T.w}" height="${T.h}" rx="16" fill="#000" opacity=".16" filter="url(#soft)"/>` + box(T.x, T.y, T.w, T.h, 16, "#1e1e26") +
+    [0, 1, 2].map(i => `<circle cx="${T.x + 26 + i * 24}" cy="${T.y + 26}" r="8" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
+    text(T.x + 46, T.y + 102, "Claude Code", 32, { font: MONO, weight: 700, fill: "#e8e6e3", anchor: "start" }) +
+    text(T.x + 40, T.y + 190, "> " + typed("call me", t, .2, 14), 34, { font: MONO, fill: "#e6e6ee", anchor: "start" });
+  if (t > .9) g += `<circle cx="${T.x + 52}" cy="${T.y + T.h - 64}" r="10" fill="${TC.acc}"/>` + text(T.x + 76, T.y + T.h - 54, "On a call with Claude", 30, { font: MONO, fill: "#e6e6ee", anchor: "start" });
+  // the call's window, then the orb
+  const win = { x: 1020, y: 170, w: 440, h: 500 }, ORB = [1480, 790], away = inout(span(t, 1.8, 2.5));
+  const wk = out(span(t, 1.0, 1.4));
+  if (wk > 0 && away < 1) {
+    const s = lerp(1, .06, away), cx = lerp(win.x + win.w / 2, ORB[0], away), cy = lerp(win.y + win.h / 2, ORB[1], away);
+    g += `<g opacity="${fo(wk * (1 - span(away, .7, 1)))}" transform="translate(${f(cx)} ${f(cy)}) scale(${fs(s)}) translate(${f(-(win.x + win.w / 2))} ${f(-(win.y + win.h / 2))})">` +
+      frame(win) + header(win, "Guest TTL fix", "", { controls: true, call: true, dot: "#b9b4f2", clock: "00:04" }) + orbApp(win.x + 220, win.y + 260, 80, "speaking", t) + "</g>";
+  }
+  // you go on working in another app: a chart you're studying
+  const bk = out(span(t, 2.4, 3.0)), B = { x: 260, y: 170, w: 1040, h: 620 };
+  if (bk > 0) {
+    g += `<g opacity="${fo(bk)}" transform="translate(${f((1 - bk) * 60)} 0)">` + `<rect x="${B.x}" y="${B.y + 12}" width="${B.w}" height="${B.h}" rx="16" fill="#1e1a50" opacity=".16" filter="url(#soft)"/>` +
+      box(B.x, B.y, B.w, B.h, 16, "#fff", { stroke: W.line, sw: 2 }) +
+      [0, 1, 2].map(i => `<circle cx="${B.x + 26 + i * 24}" cy="${B.y + 28}" r="8" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
+      ui(B.x + 110, B.y + 36, "Charts", 24, { fill: W.mut }) + ui(B.x + 60, B.y + 110, "TRIP · 1D", 34, { fill: W.ink, weight: 700 }) + ui(B.x + 260, B.y + 110, "+2.4%", 30, { fill: "#30a46c", weight: 700 });
+    // candles on a gentle climb, drawn once; a crosshair reads along them as you study it
+    const N = 28, cw = (B.w - 140) / N;
+    for (let i = 0; i < N; i++) {
+      const base = B.y + 470 - i * 7 - 40 * Math.sin(i * .55), o = base + 28 * Math.sin(i * 1.7), c = base - 28 * Math.sin(i * 1.3 + 1), up = c < o;
+      const x = B.x + 70 + i * cw, hi = Math.min(o, c) - 18 - 10 * Math.abs(Math.sin(i)), lo = Math.max(o, c) + 18;
+      g += `<line x1="${f(x + cw * .35)}" y1="${f(hi)}" x2="${f(x + cw * .35)}" y2="${f(lo)}" stroke="${up ? "#30a46c" : "#e5484d"}" stroke-width="2"/>` +
+        box(x + cw * .1, Math.min(o, c), cw * .5, Math.max(4, Math.abs(o - c)), 2, up ? "#30a46c" : "#e5484d");
+    }
+    const cx = B.x + 70 + (B.w - 140) * span(t, 3.0, 4.6);
+    if (t > 3.0 && t < 4.8) g += `<line x1="${f(cx)}" y1="${B.y + 140}" x2="${f(cx)}" y2="${B.y + B.h - 30}" stroke="${W.mut}" stroke-width="1.5" stroke-dasharray="4 6"/>`;
+    g += "</g>";
+  }
+  // the orb stays on top, listening
+  const back = inout(span(t, 4.9, 5.6)), ok = out(span(t, 2.3, 2.7)) * (1 - span(t, 4.9, 5.1));
+  if (ok > 0) g += orbApp(ORB[0], ORB[1], 52 * pop(span(t, 2.3, 2.8)), Math.floor(t * 1.2) % 2 ? "hearing" : "listening", t, ok);
+  if (back > 0) {                                                     // a click on the orb: the call's window comes back, full size
+    const s = lerp(.06, 1, back), cx = lerp(ORB[0], win.x + win.w / 2, back), cy = lerp(ORB[1], win.y + win.h / 2, back);
+    g += `<g opacity="${fo(span(back, 0, .3))}" transform="translate(${f(cx)} ${f(cy)}) scale(${fs(s)}) translate(${f(-(win.x + win.w / 2))} ${f(-(win.y + win.h / 2))})">` +
+      frame(win) + header(win, "Guest TTL fix", "", { controls: true, call: true, dot: "#b9b4f2", clock: "01:20" }) + orbApp(win.x + 220, win.y + 260, 80, "listening", t) + "</g>";
+  }
+  return g;
+}
+
+// sources, in two parts. First the mic, a meeting app, a video, a phone on speaker, the room: dashed lines into
+// Standby, each ticked or crossed out; partway, the room is switched off. Then the meeting window as the app has it:
+// a chip for each source it hears; a click opens the list, and Chrome and Telegram are unticked, for this meeting.
+function sources(t) {
+  if (t < 2.6) return sourcesMap(t * 2);                              // the map, at twice its pace, so the window comes sooner
+  const k = out(span(t, 2.6, 3.1));
+  return `<g opacity="${fo(1 - k)}">${sourcesMap(5.2)}</g><g opacity="${fo(k)}">${hearBox(t - 2.8)}</g>`;
+}
+function hearBox(u) {
+  const x = 330, y = 40, w = 940, by = y + 104, ink = W.ink, mut = W.mut;
+  const S = [["Your mic", "MacBook Pro Microphone", 9], ["Zoom", "Playing", 9], ["Google Chrome", "Playing", 2.4], ["Telegram", "Playing", 3.4]];
+  const off = i => u > S[i][2], open = inout(span(u, 1.0, 1.5));
+  const bars = (bx, cy, s = 1) => [0, 1, 2].map(i => { const hh = (8 + 12 * Math.abs(Math.sin(u * 7 + i * 1.7))) * s; return box(bx + i * 9 * s, cy - hh / 2, 5 * s, hh, 2.5 * s, W.red, { op: i ? .7 : 1 }) }).join("");
+  const muteIc = (mx, cy, c, s = 1) => `<g transform="translate(${f(mx)} ${f(cy)}) scale(${fs(s)})" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M-12 -5 h6 l8 -7 v24 l-8 -7 h-6 Z"/><path d="M7 -5 l9 10 M16 -5 l-9 10"/></g>`;
+  const rowsH = 4 * 84 + 20, boxH = 158 + rowsH * open;
+  let g = `<rect x="${x}" y="${y + 14}" width="${w}" height="800" rx="22" fill="#1e1a50" opacity=".14" filter="url(#soft)"/>` + box(x, y, w, 800, 22, W.win, { stroke: W.line });
+  g += [0, 1, 2].map(i => `<circle cx="${x + 34 + i * 28}" cy="${y + 46}" r="9" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
+    `<circle cx="${x + 160}" cy="${y + 46}" r="8" fill="${W.red}" opacity=".7"/>` + ui(x + 182, y + 56, "Design review", 30, { weight: 700, fill: ink }) +
+    box(x + w - 250, y + 22, 110, 50, 25, W.win, { stroke: W.line, sw: 2 }) + ui(x + w - 195, y + 56, "Pause", 22, { anchor: "middle", fill: ink }) +
+    box(x + w - 126, y + 22, 90, 50, 25, W.redsoft, { stroke: "#f2a8b0", sw: 2 }) + ui(x + w - 81, y + 56, "End", 22, { anchor: "middle", fill: W.red });
+  // the box: a chip per source, what's being said, and when open, a tick for each
+  g += box(x + 26, by, w - 52, boxH, 26, W.soft);
+  let cx = x + 50;
+  S.forEach(([n], i) => {
+    const o = off(i), cw = n.length * 13.5 + (o ? 74 : 84);
+    g += box(cx, by + 20, cw, 52, 26, o ? W.soft : W.win, { stroke: o ? "#d5d4e2" : "none", sw: 2 });
+    g += o ? muteIc(cx + 30, by + 46, mut, .9) + ui(cx + 52, by + 56, n, 24, { fill: mut }) : ui(cx + 22, by + 56, n, 24, { fill: ink }) + bars(cx + cw - 42, by + 46, .9);
+    cx += cw + 12;
+  });
+  g += `<path d="M${x + w - 74} ${by + (open > .5 ? 50 : 40)} l10 ${open > .5 ? -10 : 10} 10 ${open > .5 ? 10 : -10}" fill="none" stroke="${mut}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const said = "Nadia: is the region in the fares key?", n = Math.floor(clamp(u * 16, 0, said.length));
+  g += ui(x + 56, by + 126, said.slice(0, n), 26, { fill: ink }) + (n < said.length ? box(x + 60 + n * 10.6, by + 102, 3, 30, 1, W.acc) : "");
+  if (open > 0) {
+    let rg = `<line x1="${x + 56}" y1="${by + 156}" x2="${x + w - 56}" y2="${by + 156}" stroke="#dcdbe8" stroke-width="2"/>`;
+    S.forEach(([nm, det], i) => {
+      const o = off(i), ry = by + 176 + i * 84;
+      rg += o ? box(x + 56, ry + 8, 36, 36, 9, W.win, { stroke: "#cfcfdc", sw: 2.5 })
+        : box(x + 56, ry + 8, 36, 36, 9, W.acc) + `<path d="M${x + 65} ${ry + 26} l7 7 13 -14" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+      rg += ui(x + 114, ry + 26, nm, 26, { fill: o ? mut : ink }) + ui(x + 114, ry + 58, o ? "Playing, not listened to" : det, 21, { fill: mut });
+      rg += o ? muteIc(x + w - 84, ry + 26, mut) : bars(x + w - 100, ry + 26);
+    });
+    g += `<g opacity="${fo(span(open, .4, 1))}">${rg}</g>`;
+  }
+  // under it, the transcript (inside the window); a line notes each source turned off
+  g += `<clipPath id="hbclip"><rect x="${x}" y="${y}" width="${w}" height="800" rx="22"/></clipPath><g clip-path="url(#hbclip)">`;
+  let ty = by + boxH + 50;
+  const lines = [["Nadia", "#3f7cf3", "Guests pay by region."], ["Theo", "#0e9f9a", "I'd check the fares key first."]];
+  const notes = [];
+  [2, 3].forEach(i => { if (off(i)) notes.push(S[i][0] + " is off") });
+  g += ui(x + w / 2, ty, "Started 2:00 PM", 21, { anchor: "middle", fill: mut }); ty += 56;
+  lines.forEach(([who, c, txt]) => { g += ui(x + 56, ty, who, 24, { fill: c, weight: 700 }) + ui(x + 56, ty + 38, txt, 26, { fill: ink }); ty += 96 });
+  notes.forEach(nt => { g += ui(x + w / 2, ty, nt, 21, { anchor: "middle", fill: mut }); ty += 44 });
+  g += "</g>";
+  // the pointer: opens the list, then unticks Chrome and Telegram
+  const rowY = i => by + 176 + i * 84 + 26;
+  g += pointerAt(u, [[0, x + w - 40, by + 300], [.9, x + w - 66, by + 48], [1.6, x + w - 66, by + 48], [2.3, x + 74, rowY(2)], [3.0, x + 74, rowY(2)], [3.3, x + 74, rowY(3)], [9, x + 74, rowY(3)]], [1.0, 2.4, 3.4], span(u, -.2, .2));
+  return g;
+}
+function sourcesMap(t) {
+  const ORB = [1180, 450], roomOff = t > 2.6;
+  const SRC = [["Mic", 0, true], ["Meetings", 1, true], ["Video", 2, false], ["Phone", 3, true], ["Room", 4, !roomOff]];
+  const icon = (k, x, y) => {
+    const ink = `fill="none" stroke="${W.ink}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"`;
+    if (k === 0) return `<g ${ink}><rect x="${x - 14}" y="${y - 30}" width="28" height="42" rx="14"/><path d="M${x - 26} ${y + 2} q26 30 52 0 M${x} ${y + 18} v14"/></g>`;
+    if (k === 1) return `<g ${ink}><rect x="${x - 34}" y="${y - 24}" width="68" height="48" rx="8"/><path d="M${x - 34} ${y} h68 M${x} ${y - 24} v48"/></g>`;
+    if (k === 2) return `<g ${ink}><rect x="${x - 34}" y="${y - 24}" width="68" height="48" rx="8"/></g><path d="M${x - 8} ${y - 12} l20 12 -20 12 Z" fill="${W.ink}"/>`;
+    if (k === 3) return `<g ${ink}><rect x="${x - 18}" y="${y - 32}" width="36" height="64" rx="8"/><path d="M${x - 6} ${y + 22} h12"/></g>`;
+    return `<g ${ink}><circle cx="${x - 14}" cy="${y - 12}" r="10"/><circle cx="${x + 16}" cy="${y - 12}" r="10"/><path d="M${x - 34} ${y + 26} q20 -26 40 0 M${x - 2} ${y + 26} q20 -26 40 0"/></g>`;
+  };
+  let g = "";
+  SRC.forEach(([n, k, on], i) => {
+    const y = 140 + i * 155, x = 330, sx = x + 70, ex = ORB[0] - 120, ey = ORB[1] + (i - 2) * 24;
+    g += box(x - 64, y - 52, 128, 104, 22, "#fff", { stroke: on ? INDIGO : W.line, sw: on ? 3 : 2 }) + icon(k, x, y) + ui(x - 90, y + 10, n, 28, { anchor: "end", fill: on ? W.ink : W.mut, weight: 600 });
+    g += `<line x1="${sx}" y1="${y}" x2="${ex}" y2="${ey}" stroke="${on ? INDIGO : "#c9c8d6"}" stroke-width="4" stroke-dasharray="10 12" stroke-linecap="round" opacity="${on ? .9 : .7}"/>`;
+    if (on) for (let d = 0; d < 3; d++) { const q = ((t * .7 + d / 3 + i * .13) % 1); g += `<circle cx="${f(lerp(sx, ex, q))}" cy="${f(lerp(y, ey, q))}" r="7" fill="${INDIGO}" opacity="${fo(1 - q)}"/>` }
+    const mx = lerp(sx, ex, .42), my = lerp(y, ey, .42);
+    g += on ? `<circle cx="${f(mx)}" cy="${f(my)}" r="20" fill="#30a46c"/><path d="M${f(mx - 9)} ${f(my)} l6 7 12 -13" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>`
+      : `<circle cx="${f(mx)}" cy="${f(my)}" r="20" fill="#e5484d"/><path d="M${f(mx - 7)} ${f(my - 7)} l14 14 M${f(mx + 7)} ${f(my - 7)} l-14 14" stroke="#fff" stroke-width="4.5" stroke-linecap="round"/>`;
+  });
+  const flip = Math.max(0, 1 - Math.abs(t - 2.6) / .2);
+  if (flip > 0) g += `<circle cx="330" cy="${140 + 4 * 155}" r="${f(70 + 30 * (1 - flip))}" fill="none" stroke="#e5484d" stroke-width="4" opacity="${fo(flip * .7)}"/>`;
+  g += orbApp(ORB[0], ORB[1], 96, "hearing", t) + ui(ORB[0], ORB[1] + 150, "Standby", 40, { anchor: "middle", fill: INDIGO, weight: 700, font: ROUND });
+  return g;
+}
+
+// naming: name a voice once and it carries on. Lines arrive; Speaker 1 is renamed Toby; his next lines arrive already
+// as Toby, while Speaker 2 stays Speaker 2 until named
+function naming(t) {
+  const r = { x: 320, y: 40, w: 960, h: 820 }, named = t > 2.2;
+  const L = [[.2, 1, "Can we ship the guest search first?"], [.9, 2, "Only once the key has the region."],
+    [3.0, 1, "Then I'll check the key today."], [3.9, 2, "Good, I'll take the fares side."], [4.7, 1, "Let's sync on Thursday."]];
+  const lines = L.map(([at, w, txt]) => ({ at, ts: "2:0" + (5 + Math.floor(at / 2)), who: w === 1 ? (named ? "Toby" : "Speaker 1") : "Speaker 2",
+    col: w === 1 ? "#d97706" : "#0e9f9a", text: txt, known: w === 1 && named }));
+  let g = meetingWin(r, t, { title: "Routing huddle", clock: "06:12", started: "Started 2:00 PM", rowh: 104, lines });
+  const NX = r.x + 30 + 96, Y0 = r.y + 96 + 44;
+  if (t > 1.5 && t < 2.2) g += box(NX - 8, Y0 + 2, 210, 34, 8, W.win, { stroke: W.acc, sw: 3 }) + ui(NX, Y0 + 28, typed("Toby", t, 1.65, 8) + (blink(t * 2) ? "▍" : ""), 22, { fill: "#d97706", weight: 700 });
+  const click = Math.max(0, 1 - Math.abs(t - 1.4) / .16);
+  if (click > 0) g += `<circle cx="${NX + 50}" cy="${Y0 + 18}" r="${f(26 + 20 * (1 - click))}" fill="none" stroke="${INDIGO}" stroke-width="3" opacity="${fo(click * .7)}"/>`;
+  // each of Toby's lines lights up as it arrives named
+  L.forEach(([at, w], i) => { if (w !== 1) return; const k = (i === 0 ? span(t, 2.2, 2.35) * (1 - span(t, 2.8, 3.2)) : span(t, at, at + .15) * (1 - span(t, at + .6, at + 1.0)));
+    if (k > 0) g += box(NX - 6, Y0 + i * 104 + 2, 70, 32, 7, "#d97706", { op: .22 * k }) });
+  return g;
+}
+
+const SCENES = { naming, orbstory, sources, slides, plugin, orb: orbScene, hear, who, learn, plan };
+// the two window scenes, closer, so their words read at a card's size
+const ZOOM = { who: [1.5, 800, 330], naming: [1.38, 800, 348], learn: [1.18, 800, 450] };
+play(t => { const z = ZOOM[CARD], g = SCENES[CARD](t);
+  return `<rect width="1600" height="900" fill="${PAPER}"/>` + (z ? `<g transform="translate(800 450) scale(${z[0]}) translate(${-z[1]} ${-z[2]})">${g}</g>` : g) });
+</script>
+</body>
+</html>

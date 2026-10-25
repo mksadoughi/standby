@@ -1,0 +1,11 @@
+# Standby
+
+> Standby is a free, open-source Claude Code plugin for macOS (Apple Silicon, macOS 14 or later). It gives the user's own Claude Code session ears and a voice: voice calls with the session, listening to meetings (any meeting app or the room, no bot), and dictation in any app. Speech runs on the Mac; Claude Code gets the user's words as text.
+
+## Docs
+
+- [Agent guide](https://github.com/mksadoughi/standby/blob/main/AGENT-GUIDE.md): how an AI agent installs, uses, troubleshoots and removes Standby for its user
+- [README](https://github.com/mksadoughi/standby#readme): what it is, install, use, privacy
+- [Website](https://mksadoughi.github.io/standby/): overview and demo film
+- [Why I built it](https://mksadoughi.github.io/standby/why.html): the idea behind Standby
+- [Terms](https://mksadoughi.github.io/standby/terms.html)

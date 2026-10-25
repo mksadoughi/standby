@@ -1,0 +1,131 @@
+# The suites tests/run_all.sh runs: name, how, group. Slowest first, so the long ones start at once.
+#   how:   py (python), sh (bash), diar (python with the speaker models: SB_DIAR_PY, else PY)
+#   group: par  runs with the others, in parallel: its own STANDBY_ROOT, no real window, model, ssh or device
+#          full only with STANDBY_TESTS=full, one at a time, behind the machine's lock: it needs the real world
+#                (a window, the display, the speaker models, ssh to localhost); the why is its comment
+test_voice_listening       py    par  
+test_signin                py    par  
+test_meeting_audio         py    par  
+test_echo                  py    par  
+test_voice_speed           py    par  
+test_ui                    py    par  
+test_companion_pointer     py    full   # a real window and the pointer
+test_voice                 py    par  
+test_speechvad             py    par
+test_diarize               py    par  
+test_voice_recorder        py    par  
+test_voice_duplex          py    par  
+test_call_others           py    par  
+test_long_answer           py    par  
+test_asks                  py    par  
+test_meeting_calls         py    par  
+test_installer             sh    par  
+test_stop                  sh    par  
+test_ui_page               sh    par  
+test_mic_follow            py    par  
+test_projects              py    par  
+test_my_voice              py    par  
+test_agent_restart         py    par  
+test_roomonly              py    par  
+test_suite_lock            sh    par  
+test_resume                py    par  
+test_mic_mute              py    par  
+test_claude_dictation      py    par  
+test_push_feed             py    par  
+test_one_server            py    par  
+test_hold                  py    par  
+test_tts                   py    par  
+test_agents                py    par  
+test_daemon_log            sh    par  
+test_selftest_meeting      py    par  
+test_dictation             py    par  
+test_attach                py    par  
+test_sources               py    par  
+test_agent_session_name    py    par  
+test_speech_model          py    par  
+test_voice_agent           py    par  
+test_local_mode            py    par  
+test_meeting_capture       py    par  
+test_channel_mainthread    py    par  
+test_interrupt             py    par  
+test_overlap               py    par  
+test_talk_recorder         py    par  
+test_messenger_http        py    par  
+test_lite                  py    par
+test_calls                 py    par  
+test_icons                 py    par  
+test_talk_agent            py    par  
+test_addmac_ui             py    par  
+test_suggest_agent         py    par  
+test_one_app_probe         py    par  
+test_purge                 py    par  
+test_companion_orb         py    full   # a real window and the display
+test_companion_presence    py    par  
+test_find_claude           py    par  
+test_repass                py    par  
+test_companion_state       py    par  
+test_claude_error          py    par  
+test_lifecycle             sh    par  
+test_startup               py    par  
+test_model_check           py    par  
+test_suggest               py    par  
+test_attach_ui             py    par  
+test_duplex_engine         py    par  
+test_learn_words           py    par  
+test_valid_id              py    par  
+test_argorder              py    par  
+test_crash_watch           py    par  
+test_usage                 py    par  
+test_orphan_session        py    par  
+test_voice_bare            py    par  
+test_screen_why            py    par  
+test_chat_joined           py    par  
+test_mic_denied            py    par  
+test_titlebar              py    full   # a real window
+test_vocabulary            py    par  
+test_voice_memory          diar  full   # the real speaker models
+test_card_delivery         py    par  
+test_closure_names         py    par  
+test_companion_page        sh    par  
+test_companion_spaces      py    full   # real desktops and windows
+test_device_resolve        py    par  
+test_guard                 sh    par  
+test_learned_guard         py    par  
+test_messenger             py    par  
+test_push_param            py    par  
+test_site                  sh    par  
+test_speaker_names         py    par  
+test_ctx_status            py    par
+test_ctx_paths             py    par
+test_speakers_real         diar  full   # the real speaker models
+test_talk_over_note        py    par  
+test_utterance             py    par  
+test_addmac                py    par  
+test_companion_rules       py    par  
+test_setup                 py    par  
+test_port                  py    par
+test_voice_persist         py    par
+test_voice_pause_player    py    par
+test_voice_cold_start      py    par
+test_call_trace            py    par
+test_voice_ledger          py    par
+test_voice_ledger_cache    py    par
+test_voice_model_switch    py    par
+test_core_audio_speed      py    full   # a measurement of this Mac's Core Audio, alone
+test_watchdog              py    par
+test_agent_models          py    par
+test_lite_call             py    par
+test_past                  py    par
+test_delete                py    par
+test_settings_help         py    par
+test_live_box              py    par
+test_export_chat           py    par
+test_bottom_edge           py    par
+test_slide                 py    par
+test_call_gist             py    par
+test_auto_stop             py    par
+test_lite_plugin           sh    par
+test_native_imports        py    par  
+test_relaunch              py    par  
+test_native_service        py    par
+test_api_auth              py    par  

@@ -1,0 +1,138 @@
+<!doctype html>
+<!-- Demo: "Who's who, from then on", 20 s, in the demo look (screens.js, cc.js). Voices remembered across meetings,
+     in the room or on a call.
+     Monday, in the room: two new voices, Speaker 1 and Speaker 2, in Standby's meeting window. You click "Speaker 1" and
+     type Toby: every line of his becomes Toby, the earlier ones too, and his next line lands as Toby. Wednesday, on a
+     call: his first line is a Speaker again; after his second, Standby knows the voice and names him itself (the dotted
+     underline, "Recognized from an earlier meeting"). True to the app: renaming applies to the whole meeting; only named
+     voices are kept, on this Mac; a known voice is named once it has said two lines and the match is clear. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Standby: who's who, from then on</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff}
+svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+</style>
+</head>
+<body>
+<svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
+<script>const DUR = 20;</script>
+<script src="kit.js"></script>
+<script src="screens.js"></script>
+<script src="cc.js"></script>
+<script>
+// ---- the screen at full size, and the laptop in the room it starts on ------------------------------------------------
+const SD = { x: 90, y: 150, w: 1420, h: 712 }, MB = 30;
+const SL = { x: 250, y: 160, w: 1100, h: 1100 * 712 / 1420 }, TABLE = SL.y + SL.h + 34;
+const Z0 = 9.9, Z1 = 11.2, WED = 10.4;                                // into the screen, to Wednesday
+const RENAME = 5.4, KNOWN = 14.6;
+const SB1 = { x: 420, y: 196, w: 760, h: 640 };                       // Monday: Standby's meeting window, in the middle
+const CALLW = { x: 120, y: 200, w: 690, h: 630 }, SB0 = { x: 840, y: 196, w: 640, h: 640 };   // Wednesday: a call, Standby beside it
+const ROW = 84, TOP = 96 + 44;                                       // as meetingWin lays its lines out: under "Started …"
+const AMBER = "#d97706", GREEN = "#30a46c";
+// Monday's lines: [when, who, words]; s1 is Toby, before he's named
+const MON = [[1.0, "s1", "Can we ship the guest search first?"], [2.2, "s2", "Only once the key has the region."], [3.4, "s1", "Then let's check it today."],
+  [7.0, "s1", "I'll write it up after this."]];
+const WEDL = [[11.9, "t", "The cache change shipped this morning."], [13.1, "d", "Any errors from guests?"], [14.3, "t", "None so far. The region's in the key."]];
+const TALK = { s1: [[.6, 1.6], [3.0, 3.9], [6.6, 7.6]], s2: [[1.8, 2.8]] };
+const talking = (who, t) => (TALK[who] || []).reduce((m, [a, b]) => Math.max(m, span(t, a, a + .15) * (1 - span(t, b - .15, b))), 0);
+const cam = (x, y, c) => `<rect x="${x}" y="${y - 7}" width="15" height="13" rx="3" fill="${c}"/><path d="M${x + 16} ${y - 1} l7 -5 v12 l-7 -5 Z" fill="${c}"/>`;
+const NAMEX = r => r.x + 30 + 96, LABEL1 = { x: NAMEX(SB1), y: SB1.y + TOP + 4, w: 110, h: 28 };   // Monday's first "Speaker 1"
+
+function win(r, dark) {
+  return `<rect x="${r.x}" y="${r.y + 12}" width="${r.w}" height="${r.h}" rx="14" fill="#1e1a50" opacity="${DARK ? .45 : .16}" filter="url(#soft)"/>` +
+    box(r.x, r.y, r.w, r.h, 14, dark ? "#1f1f26" : C.win, { stroke: dark ? "none" : C.line });
+}
+const lights = r => [0, 1, 2].map(i => `<circle cx="${r.x + 22 + i * 22}" cy="${r.y + 22}" r="7" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("");
+function tline(r, i, ts, nm, c, words, o = {}) {                     // a line in the meeting window: time, who (icon, dotted if recognised), words
+  const cy = r.y + TOP + i * ROW, nx = NAMEX(r) + (o.call ? 26 : 0);
+  let g = ui(r.x + 30, cy + 22, ts, 15, { fill: W.mut }) +
+    (o.call ? `<rect x="${NAMEX(r)}" y="${cy + 9}" width="14" height="12" rx="3" fill="${W.mut}"/><path d="M${NAMEX(r) + 15} ${cy + 15} l6 -4 v10 l-6 -4 Z" fill="${W.mut}"/>` : "") +
+    (o.flash > 0 ? box(nx - 6, cy + 2, nm.length * 10 + 12, 28, 7, AMBER, { op: .22 * o.flash }) : "");
+  if (o.edit !== undefined) g += box(nx - 6, cy + 1, 130, 30, 7, W.win, { stroke: W.acc, sw: 2 }) + ui(nx, cy + 22, o.edit, 18, { fill: c, weight: 700 });
+  else g += ui(nx, cy + 22, nm, 18, { fill: c, weight: 700, opacity: o.fade ?? 1 });
+  if (o.dotted) g += `<line x1="${nx}" y1="${cy + 28}" x2="${nx + nm.length * 10}" y2="${cy + 28}" stroke="${c}" stroke-width="1.8" stroke-dasharray="2 3"/>`;
+  return g + ui(NAMEX(r), cy + 54, words, 21, { fill: W.ink });
+}
+// ---- Monday: Standby fills the screen, in the room ---------------------------------------------------------------------
+function monday(t) {
+  const r = SB1;
+  let g = meetingWin(r, t, { title: "Routing huddle", clock: "00:" + String(12 + Math.floor(t)).padStart(2, "0"), started: "Started 2:28 PM", lines: [] });
+  const flash = span(t, RENAME, RENAME + .15) * (1 - span(t, RENAME + .6, RENAME + 1.4)), editing = t > 4.45 && t < RENAME;
+  MON.forEach(([a, who, s], i) => {
+    const k = out(span(t, a, a + .35)); if (k <= 0) return;
+    const named = who === "s1" && t > RENAME, nm = who === "s2" ? "Speaker 2" : named ? "Toby" : "Speaker 1";
+    g += `<g opacity="${fo(k)}">` + tline(r, i, i < 2 ? "2:29 PM" : "2:30 PM", nm, who === "s2" ? GREEN : AMBER, s,
+      { edit: i === 0 && editing ? typed("Toby", t, 4.6, 9) + (blink(t * 2) ? "▍" : "") : undefined, flash: who === "s1" && a < RENAME ? flash : 0 }) + "</g>";
+  });
+  const toast = out(span(t, RENAME, RENAME + .2)) * (1 - span(t, 6.4, 6.6));
+  return g;
+}
+// ---- Wednesday: a call, Standby beside it ---------------------------------------------------------------------------------
+function wednesday(t) {
+  const r = CALLW, tiles = [["T", "#4d3f3b", "Toby"], ["I", "#3b4d42", "Ines"], ["Y", "#48425c", "You"]];
+  const now = WEDL.reduce((m, [a, who]) => t > a - .45 ? who : m, ""), on = { t: 0, d: 1 }[now];
+  let g = win(r, true) + lights(r) + ui(r.x + r.w / 2, r.y + 28, "Routing review", 16, { anchor: "middle", fill: "#c9c9d6", weight: 600 });
+  const tw = (r.w - 54) / 2, th = (r.h - 150) / 2;
+  tiles.forEach(([i, c, n], j) => {
+    const tx = r.x + 18 + (j % 2) * (tw + 18), ty = r.y + 50 + Math.floor(j / 2) * (th + 14);
+    g += box(tx, ty, tw, th, 12, c, { stroke: j === on ? "#7fd1a8" : "none", sw: 4 }) + `<circle cx="${tx + tw / 2}" cy="${ty + th / 2 - 8}" r="46" fill="rgba(255,255,255,.14)"/>` +
+      ui(tx + tw / 2, ty + th / 2 + 6, i, 38, { anchor: "middle", fill: "#fff", weight: 700 }) + ui(tx + 14, ty + th - 14, n, 19, { fill: "#e6e6ee", weight: 600 });
+  });
+  const s = SB0;
+  g += meetingWin(s, t, { title: "Routing review", clock: "00:" + String(Math.max(0, Math.floor(t - WED) + 3)).padStart(2, "0"), started: "Started 11:00 AM", lines: [] });
+  const known = t > KNOWN, morph = span(t, KNOWN, KNOWN + .3), flash = span(t, KNOWN, KNOWN + .15) * (1 - span(t, KNOWN + .6, KNOWN + 1.4));
+  WEDL.forEach(([a, who, s2], i) => {
+    const k = out(span(t, a, a + .35)); if (k <= 0) return;
+    const toby = who === "t", nm = toby ? (known ? "Toby" : "Speaker 1") : "Speaker 2", c = toby ? AMBER : GREEN;
+    g += `<g opacity="${fo(k)}">` + tline(s, i, "11:0" + (i < 2 ? 1 : 2) + " AM", nm, c, s2, { dotted: toby && known, flash: toby ? flash : 0, fade: toby && known ? .4 + .6 * morph : 1 }) + "</g>";
+  });
+  const tip = out(span(t, KNOWN + .5, KNOWN + .8)) * (1 - span(t, 17.0, 17.2));
+  if (tip > 0) g += `<g opacity="${fo(tip)}">` + box(NAMEX(s) + 40, s.y + TOP - 34, 330, 34, 8, "#2b2b31") + ui(NAMEX(s) + 54, s.y + TOP - 12, "Recognized from an earlier meeting", 15, { fill: "#f2f2f5" }) + "</g>";
+  return g;
+}
+function desktop(t) {
+  const wall = `<rect x="${SD.x}" y="${SD.y}" width="${SD.w}" height="${SD.h}" fill="${DARK ? "#262338" : "#e9e7f2"}"/>`;
+  const sw = span(t, WED, WED + .3);
+  let g = wall;
+  if (sw < 1) g += `<g opacity="${fo(1 - sw)}">${monday(t)}</g>`;
+  if (sw > 0) g += `<g opacity="${fo(sw)}">${wednesday(t)}</g>`;
+  g += box(SD.x, SD.y, SD.w, MB, 0, DARK ? "#26262f" : "#f2f2f6") + ui(SD.x + 22, SD.y + 21, t < WED ? "Standby" : "Video call", 16, { fill: C.ink, weight: 700 }) +
+    ui(SD.x + SD.w - 20, SD.y + 21, t < WED ? "Mon 2:30 PM" : "Wed 11:00 AM", 16, { fill: C.ink, anchor: "end", weight: 600 });
+  const L1 = [LABEL1.x + 44, LABEL1.y + 12], T1 = [NAMEX(SB0) + 22, SB0.y + TOP + 18];
+  const K = [[0, 1200, 640], [3.7, 1200, 640], [4.25, ...L1], [4.5, ...L1], [4.9, L1[0] + 200, L1[1] + 60], [8.5, L1[0] + 200, L1[1] + 60], [9.6, 1300, 720],
+    [14.5, 1300, 720], [14.95, ...T1], [DUR, ...T1]];
+  return g + pointerAt(t, K, [4.4], 1);
+}
+// ---- the room, until the camera goes into the screen ------------------------------------------------------------------
+function room(t) {
+  const k = 1 - span(t, Z0 - .2, Z0 + .5); if (k <= 0) return { back: "", front: "" };
+  const a = { x: 150, y: 470 }, b = { x: 1450, y: 470 }, t1 = talking("s1", t), t2 = talking("s2", t);
+  return {
+    back: `<g opacity="${fo(k)}">` + human(a.x, a.y, { skin: "#e8b894", hair: "#2b2b3a", shirt: "#e9a23b", look: 1, talk: t1 }, t) +
+      human(b.x, b.y, { skin: "#c98f6b", hair: "#3b2a22", shirt: "#4fb37f", look: -1, long: true, talk: t2 }, t) + "</g>",
+    front: `<g opacity="${fo(k)}">` + voice(a.x + 66, a.y + 20, 1, AMBER, t1, t) + voice(b.x - 66, b.y + 20, -1, GREEN, t2, t) +
+      tag(a.x, a.y - 96, t > RENAME ? "Toby" : "Speaker 1", AMBER, out(span(t, 1.0, 1.3))) + tag(b.x, b.y - 96, "Speaker 2", GREEN, out(span(t, 2.2, 2.5))) + "</g>"
+  };
+}
+function film(t) {
+  let g = `<rect width="1600" height="900" fill="${PAPER}"/>`;
+  const cap = captions(t, [[.3, 3.6, "Monday, in the room. It tells the voices apart."], [3.8, 6.6, "Name one once."],
+    [6.8, 9.7, "Every line of his is Toby now, and the next one too."], [9.9, 11.6, "Wednesday, on a call."],
+    [11.8, 16.9, "Two lines in, Standby knows the voice."], [17.1, DUR - .3, "Only the voices you name are kept, on your Mac."]]);
+  const z = 1 - inout(span(t, Z0, Z1)), sc = lerp(1, SL.w / SD.w, z), sx = lerp(SD.x, SL.x, z), sy = lerp(SD.y, SL.y, z), sw = SD.w * sc, sh = SD.h * sc;
+  const r = room(t), lap = span(z, .4, 1);
+  g += r.back;
+  if (lap > 0) g += `<g opacity="${fo(lap)}">` + box(0, TABLE, 1600, 900 - TABLE, 0, DARK ? "#2a2836" : "#eee7da") + `<line x1="0" y1="${TABLE}" x2="1600" y2="${TABLE}" stroke="${DARK ? "#3a3848" : "#ddd3c2"}" stroke-width="3"/>` +
+    `<path d="M${SL.x - 100} ${SL.y + SL.h + 16} H${SL.x + SL.w + 100} L${SL.x + SL.w + 74} ${TABLE} H${SL.x - 74} Z" fill="${DARK ? "#3a3a4c" : "#d4d3df"}"/>` + box(SL.x + SL.w / 2 - 80, SL.y + SL.h + 16, 160, 7, 3, DARK ? "#2a2a38" : "#bdbccb") + "</g>";
+  const bz = lerp(14, 16, z);
+  g += box(sx - bz, sy - bz, sw + 2 * bz, sh + 2 * bz, lerp(26, 22, z), "#1b1a2e") + `<clipPath id="scr"><rect x="${f(sx)}" y="${f(sy)}" width="${f(sw)}" height="${f(sh)}" rx="10"/></clipPath>` +
+    `<g clip-path="url(#scr)"><g transform="translate(${f(sx)} ${f(sy)}) scale(${fs(sc)}) translate(${-SD.x} ${-SD.y})">${desktop(t)}</g></g>`;
+  return g + r.front + cap;
+}
+play(film);
+</script>
+</body>
+</html>

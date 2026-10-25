@@ -1,0 +1,122 @@
+<!doctype html>
+<!-- Demo: "Speak your prompt, in any app", 16 s, in the demo look (screens.js, cc.js).
+     You press F5 in Claude Code's Terminal and speak; the panel listens, then the text lands at the cursor, punctuated,
+     with one name misheard ("castrel"), which Claude Code reads past. After a meeting where the same name came up, the
+     meeting's own Claude lists the words the speech recognition got wrong: the meeting's transcript shows the name fixed
+     (what was heard is on hover), and it's in the word fixes under # learned (Settings > Dictation). The next dictation
+     has it right. True to the app (README, Dictation in any app): it fixes misheard words, not your writing, and the
+     film makes no comparison with the Mac's own dictation (never measured). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Standby: speak your prompt, in any app</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff}
+svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+</style>
+</head>
+<body>
+<svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
+<script>const DUR = 16;</script>
+<script src="kit.js"></script>
+<script src="screens.js"></script>
+<script src="cc.js"></script>
+<script>
+const T = { x: 150, y: 160, w: 1300, h: 610 };                       // Claude Code, in Terminal
+const S = { x: 470, y: 176, w: 1010, h: 600 };                       // Standby, after a meeting
+const KEY = { x: 80, y: 790, w: 84, h: 78 };                          // F5, the dictation key
+const NB = s => s.replace(/ /g, " ");
+const PRESS = [.9, 3.0, 11.3, 12.7];                                  // F5: start, stop, start, stop
+const FIRST = ["Move the route cache into castrel, keep the TTL at five minutes for",
+               "logged-in users, and add the region to the key for guests."];
+const SECOND = "Then rerun the load test against Kestrel.";
+
+const mic = (x, y, s, col) => `<g transform="translate(${f(x)} ${f(y)}) scale(${fs(s)})" fill="none" stroke="${col}" stroke-width="2.4" stroke-linecap="round">` +
+  `<rect x="-5" y="-12" width="10" height="16" rx="5"/><path d="M-9 0 q9 11 18 0 M0 7 v5 M-5 12 h10"/></g>`;
+function key(t) {                                                      // the key, pressed four times
+  const p = PRESS.reduce((m, a) => Math.max(m, 1 - Math.abs(t - a) / .12), 0), { x, y, w, h } = KEY;
+  return box(x, y + 6, w, h, 14, DARK ? "#0c0c12" : "#c9c8d6") + box(x, y + p * 5, w, h, 14, DARK ? "#3a3a48" : "#fbfbfd", { stroke: DARK ? "#4a4a5c" : "#d6d5e2" }) +
+    ui(x + w / 2, y + 54 + p * 5, "F5", 26, { anchor: "middle", fill: C.ink, weight: 700 }) + mic(x + w / 2, y + 22 + p * 5, .6, C.mut) +
+    (p > 0 ? `<circle cx="${x + w / 2}" cy="${y + h / 2}" r="${f(50 + 30 * (1 - p))}" fill="none" stroke="${C.acc}" stroke-width="3" opacity="${fo(p * .6)}"/>` : "");
+}
+// Standby Dictation's panel: Listening (its red bars), then Transcribing, then gone as the text lands
+function panel(t, a, b) {
+  const k = out(span(t, a + .05, a + .3)) * (1 - span(t, b + .4, b + .6)); if (k <= 0) return "";
+  const listening = t < b, cx = T.x + T.w / 2, cy = T.y + T.h - 150, w = listening ? 250 : 290, x = cx - w / 2;
+  let g = box(x, cy - 34, w, 68, 34, "#2b2b31", { op: .97 });
+  if (listening) g += [0, 1, 2, 3, 4].map(i => { const hh = 12 + 22 * Math.abs(Math.sin(t * 7 + i * 1.3)) * (.5 + .5 * Math.sin(t * 2.3 + i));
+    return box(x + 34 + i * 10, cy - hh / 2, 5, hh, 2.5, "#ff6b6b") }).join("") + ui(x + 104, cy + 8, "Listening", 23, { fill: "#f2f2f5", weight: 600 });
+  else g += `<circle cx="${x + 50}" cy="${cy}" r="12" fill="none" stroke="#5a5a66" stroke-width="4"/><path d="M${x + 50} ${cy - 12} a12 12 0 0 1 12 12" fill="none" stroke="#f2f2f5" stroke-width="4" stroke-linecap="round" transform="rotate(${f(t * 400)} ${x + 50} ${cy})"/>` +
+    ui(x + 80, cy + 8, "Transcribing", 23, { fill: "#f2f2f5", weight: 600 });
+  return `<g opacity="${fo(k)}">${g}</g>`;
+}
+// a soft mark under a word, in the margin's colours: terracotta while it's wrong, green once it's right
+const mark = (x, y, w, col, k) => k <= 0 ? "" : `<rect x="${f(x - 3)}" y="${f(y + 6)}" width="${f((w + 6) * k)}" height="9" rx="4" fill="${col}" opacity=".55"/>`;
+const CW = 14.45;                                                      // Menlo at 24px: one character's width
+function terminal(t) {
+  const { x, y, w, h } = T;
+  let g = `<rect x="${x}" y="${y + 10}" width="${w}" height="${h}" rx="14" fill="#000" opacity="${DARK ? .5 : .18}" filter="url(#soft)"/>` +
+    box(x, y, w, h, 14, DARK ? "#101018" : "#1e1e26") + box(x, y, w, 42, 14, DARK ? "#1a1a28" : "#2a2a34") + box(x, y + 28, w, 14, 0, DARK ? "#1a1a28" : "#2a2a34") +
+    `<circle cx="${x + 24}" cy="${y + 21}" r="7" fill="#ff5f57"/><circle cx="${x + 46}" cy="${y + 21}" r="7" fill="#febc2e"/><circle cx="${x + 68}" cy="${y + 21}" r="7" fill="#28c840"/>` +
+    text(x + w / 2, y + 28, "trips — claude", 19, { font: SYS, fill: "#a9a9b8" }) +
+    text(x + 44, y + 95, "Claude Code", 25, { font: MONO, weight: 700, fill: "#e8e6e3", anchor: "start" }) +
+    text(x + 270, y + 95, "~/code/trips", 22, { font: MONO, fill: "#8d8d97", anchor: "start" });
+  const L = (i, s, col = "#e6e6ee") => { g += `<text x="${x + 32}" y="${y + 160 + i * 40}" font-family="${MONO}" font-size="24" fill="${col}" xml:space="preserve">${s}</text>` };
+  const sent = t > 4.4, land1 = span(t, 3.5, 3.75), land2 = span(t, 13.2, 13.45), bx = x + 26, by = y + h - 140;
+  if (sent) {                                                          // the first prompt, sent, and Claude Code reading past the slip
+    L(0, `<tspan fill="#8b87ff">&gt;</tspan> ${FIRST[0]}`); L(1, `  ${FIRST[1]}`);
+    if (t < 5.0) L(2, `<tspan fill="#d97757">⠹ Thinking…</tspan>`);
+    else L(2, `<tspan fill="#d97757">⏺</tspan> ${typed("Moving it into Kestrel, the edge cache: 5 min for users, guests by region.", t, 5.0, 60)}`);
+    g += mark(x + 32 + CW * 28, y + 160, CW * 7, WARM, span(t, 4.5, 4.8) * (1 - span(t, 10.8, 11.2)));
+  }
+  g += `<rect x="${bx}" y="${by}" width="${w - 52}" height="104" rx="12" fill="none" stroke="#55556a" stroke-width="2"/>`;
+  const PL = (i, s, k) => { g += `<text x="${bx + 20}" y="${by + 42 + i * 38}" font-family="${MONO}" font-size="24" fill="#e6e6ee" opacity="${fo(k)}" xml:space="preserve">${s}</text>` };
+  if (!sent && land1 > 0) {                                            // the words land at the cursor at once, punctuated
+    PL(0, "&gt; " + FIRST[0], land1); PL(1, "  " + FIRST[1], land1);
+    g += mark(bx + 20 + CW * 28, by + 42, CW * 7, WARM, span(t, 3.8, 4.1));
+  } else if (land2 > 0) {
+    PL(0, "&gt; " + SECOND, land2);
+    g += mark(bx + 20 + CW * 35, by + 42, CW * 7, "#30a46c", span(t, 13.6, 13.95));
+  } else PL(0, "&gt; " + (blink(t) ? "▍" : ""), 1);
+  return g;
+}
+// Standby, a meeting just over: its transcript with the misheard name fixed (what was heard on hover), and the word fixes
+function standby(t) {
+  const r = S, fixed = span(t, 7.7, 8.1), TOP = r.y + 140, NX = r.x + 30 + 96;
+  let g = meetingWin(r, t, { title: "Edge cache sync", ended: "Meeting · 12 min · ended 10:42 AM", started: "Started 10:30 AM", lines: [] });
+  const lines = [["10:31", "Theo", "#0e9f9a", " already caches the routes."], ["10:32", "Nadia", "#3f7cf3", " can hold the TTL too."],
+    ["10:32", "You", W.ink, null]];
+  lines.forEach(([ts, who, c, rest], i) => {                         // the misheard name starts the line, so the mark sits under it
+    const cy = TOP + i * 84;
+    g += ui(r.x + 30, cy + 22, ts + " AM", 15, { fill: W.mut }) + ui(NX, cy + 22, who, 18, { fill: c, weight: 700 });
+    if (!rest) { g += ui(NX, cy + 54, "Let's move it this week.", 21, { fill: W.ink }); return; }
+    const right = fixed >= .5, word = right ? "Kestrel" : "Castrel";
+    g += mark(NX, cy + 44, right ? 78 : 74, right ? "#30a46c" : WARM, right ? 1 : span(t, 6.7, 7.0)) +
+      ui(NX, cy + 54, `<tspan font-weight="${right ? 700 : 400}" opacity="${fo(1 - Math.sin(fixed * Math.PI) * .8)}">${word}</tspan>${NB(rest)}`, 21, { fill: W.ink });
+  });
+  const hk = out(span(t, 8.3, 8.6));                                  // what was heard, on hover
+  if (hk > 0) g += `<g opacity="${fo(hk)}">` + box(NX + 92, TOP + 64, 170, 32, 8, "#2b2b31") + ui(NX + 106, TOP + 86, "Heard: castrel", 15, { fill: "#f2f2f5" }) + "</g>";
+  const wk = out(span(t, 9.0, 9.4));                                   // …and in the word fixes, from then on
+  if (wk > 0) {
+    const cx = r.x + r.w - 400, cy = r.y + r.h - 160;
+    g += `<g opacity="${fo(wk)}" transform="translate(0 ${f((1 - wk) * 16)})">` + `<rect x="${cx}" y="${cy + 8}" width="360" height="118" rx="14" fill="#1e1a50" opacity=".14" filter="url(#soft)"/>` +
+      box(cx, cy, 360, 118, 14, W.win, { stroke: W.line }) + ui(cx + 20, cy + 32, "Settings · Dictation · Word fixes", 15, { fill: W.mut, weight: 700 }) +
+      text(cx + 20, cy + 68, "# learned", 19, { font: MONO, fill: W.mut, anchor: "start" }) + text(cx + 20, cy + 100, NB("castrel => Kestrel"), 21, { font: MONO, fill: W.ink, anchor: "start", weight: 700 }) + "</g>";
+  }
+  return g;
+}
+
+function film(t) {
+  let g = `<rect width="1600" height="900" fill="${PAPER}"/>`;
+  const cap = captions(t, [[.3, 3.4, "Press F5 in any app, and speak."], [3.6, 5.9, "It types on your Mac, punctuation included."],
+    [6.1, 11.0, "After a meeting, Standby learns what it misheard."], [11.2, DUR - .3, "From then on, dictation gets it right."]]);
+  g += terminal(t) + panel(t, PRESS[0], PRESS[1]) + panel(t, PRESS[2], PRESS[3]);
+  const open = inout(span(t, 5.9, 6.5)) * (1 - inout(span(t, 10.6, 11.1)));
+  if (open > 0) g += `<g opacity="${fo(open)}" transform="translate(${f((1 - open) * 160)} 0)">${standby(t)}</g>`;
+  return g + key(t) + cap;
+}
+play(film);
+</script>
+</body>
+</html>

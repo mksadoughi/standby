@@ -1,0 +1,391 @@
+<!doctype html>
+<!-- The hero film, round 3: the user's story, drawn warm and playful (their reference: a hand-drawn
+     explainer). Claude Code far away, with a thin line to you; your day busy and fuzzy around you, coming and
+     going; then Standby right beside you: it all funnels through it, the line turns strong, Claude comes close.
+       ?v=a  Sketch: a hand-drawn diagram.         ?v=b  Orbit: flat, your day circling around you.
+       ?v=c  Islands: your island and Claude's.    ?v=d  Ink: line art on cream.
+       ?v=e  The story as the user told it after seeing a-d: A's drawing, D's Claude Code, captions at the top.
+     The frame is render(t); tools/demo/render.py steps it into a video. Opened as a file, it plays live. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Standby: your Claude Code, right beside you</title>
+<style>
+@font-face{font-family:"ui-rounded";src:url("file:///System/Library/Fonts/SFNSRounded.ttf");font-weight:100 900}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff}
+svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+</style>
+</head>
+<body>
+<svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
+<script>
+const V = new URLSearchParams(location.search).get("v") || "a";
+const STORY = V === "e" ? 29 : 12.5;                  // the story's own clock: every time in a version is on it
+// The site's hero (e) plays its story faster than it was drawn: the "today" part most, the stream least, so the
+// words stay readable. WARP: [film time, story time], straight lines between.
+const WARP = V === "e" ? [[0, 0], [7.7, 13.1], [10.2, 16.8], [20.0, 29]] : [[0, 0], [12.5, 12.5]];
+const DUR = WARP[WARP.length - 1][0];                 // the film's length, what render.py steps through
+function storyTime(t) {
+  let i = 0; while (i < WARP.length - 2 && t > WARP[i + 1][0]) i++;
+  const [a, x] = WARP[i], [b, y] = WARP[i + 1];
+  return x + (y - x) * clamp((t - a) / (b - a));
+}
+</script>
+<script src="kit.js"></script>
+<script>
+// A · Sketch: a hand-drawn diagram.
+function sketchVersion(t) {
+  const you = [300, 560], orbAt = [575, 500];
+  const p = inout(span(t, 8.3, 9.6));                              // Claude Code comes close
+  const far = [1290, 250, .62], near = [960, 500, 1];
+  const cl = [lerp(far[0], near[0], p), lerp(far[1], near[1], p) - Math.sin(p * Math.PI) * 60, lerp(far[2], near[2], p)];
+  let g = "";
+  g += pill(115, 112, "Today", PASTEL[0], out(span(t, .2, .8)) * (1 - span(t, 7.0, 7.3)));
+  g += pill(115, 112, "With Standby", PASTEL[4], out(span(t, 7.2, 7.6)) * (1 - span(t, 9.6, 10)));
+  // the thin line: a few typed lines, a long way
+  const thin = out(span(t, 1.0, 1.9)) * (1 - span(t, 8.3, 8.9));
+  if (thin > 0) {
+    const a = [you[0] + 90, you[1] - 30], b = [cl[0] - 160 * cl[2], cl[1]];
+    g += `<g opacity="${fo(thin)}">` + line(a[0], a[1], lerp(a[0], b[0], thin), lerp(a[1], b[1], thin), { sw: 2, seed: 11, twice: false }).replace(/<path /g, '<path stroke-dasharray="8 10" ') + "</g>";
+    const q = span(t, 1.9, 3.6);
+    if (q > 0 && q < 1) g += at(lerp(a[0], b[0], q), lerp(a[1], b[1], q) - 12, .5, sketch(rectPts(-30, -20, 60, 40, 4), { fill: PAPER, seed: 12 }) + squiggle(-18, 0, 36, 1, MUTE, 2.4), 1, -8);
+    g += text(lerp(a[0], b[0], .52) + 20, lerp(a[1], b[1], .52) - 26, "a few typed lines", 30, { fill: MUTE, opacity: out(span(t, 1.8, 2.4)) * (1 - span(t, 7, 7.4)) });
+  }
+  // the day: things come and go around you, and none of it gets anywhere
+  const spots = [[150, 270], [470, 210], [640, 330], [110, 440], [690, 650], [480, 790], [140, 790], [380, 330], [700, 470], [250, 200], [560, 640],
+    [820, 300], [300, 800], [760, 780], [90, 620], [600, 160]];
+  spots.forEach(([x, y], i) => { g += drawThing(thing(i, x, y, 2.9 + i * .27, 2.1), t, { scale: 1.08 }) });
+  g += text(420, 120 + 760, "meetings, chats, ideas…", 34, { fill: MUTE, opacity: out(span(t, 3.6, 4.2)) * (1 - span(t, 6.8, 7.2)) });
+  // Standby, right beside you, and the funnel everything goes through
+  const fun = out(span(t, 7.6, 8.3));
+  if (fun > 0) g += sketch([[orbAt[0] - 190, 250], [orbAt[0] + 190, 250], [orbAt[0] + 26, orbAt[1] - 56], [orbAt[0] - 26, orbAt[1] - 56]],
+    { fill: DARK ? "rgba(139,135,255,.12)" : "rgba(80,70,229,.07)", seed: 31, draw: fun, sw: 2.6 }) +
+    sketch(circlePts(orbAt[0], 250, 190, 30, 26), { seed: 32, draw: fun, sw: 2.6 });
+  [[orbAt[0] - 120, 170], [orbAt[0] + 110, 150], [orbAt[0] - 20, 120], [orbAt[0] + 150, 200], [orbAt[0] - 160, 205], [orbAt[0] + 30, 175]].forEach(([x, y], i) => {
+    const th = thing(i + 3, x, y, 8.0 + i * .3, 1.5), q = inout(span(t, th.born + .45, th.born + 1.45));
+    g += drawThing(th, t, { x: lerp(x, orbAt[0], q), y: lerp(y, orbAt[1], q), shrink: lerp(.62, .08, q), opacity: 1 - span(q, .8, 1) });
+  });
+  // the strong line, once it's beside you
+  const strong = out(span(t, 8.6, 9.4));
+  if (strong > 0) {
+    const a = [orbAt[0] + 56, orbAt[1]], b = [cl[0] - 155 * cl[2], cl[1]];
+    g += line(a[0], a[1], lerp(a[0], b[0], strong), lerp(a[1], b[1], strong), { sw: 10, stroke: INDIGO, seed: 33, amp: 1.2 });
+    for (let k = 0; k < 2; k++) { const q = ((t - 9.4) * .8 + k / 2) % 1; if (t > 9.4) g += `<circle cx="${f(lerp(a[0], b[0], q))}" cy="${f(lerp(a[1], b[1], q))}" r="4.5" fill="#fff" opacity="${fo(Math.sin(q * Math.PI) * .9)}"/>` }
+  }
+  g += at(...cl.slice(0, 2), cl[2] * out(span(t, .3, 1.1)), claude(40, (t * 2 % 1)), 1);
+  g += text(cl[0], cl[1] + 92 * cl[2], "Claude Code", 34 * cl[2] + 4, { fill: MUTE, opacity: out(span(t, .8, 1.4)) * (1 - span(t, 9.8, 10.2)) });
+  g += at(...you, out(span(t, 0, .7)), person(), 1);
+  g += text(you[0], you[1] + 140, "you", 36, { fill: MUTE, opacity: out(span(t, .6, 1.2)) * (1 - span(t, 9.8, 10.2)) });
+  const o = pop(span(t, 7.2, 7.8));
+  if (o > 0) g += at(...orbAt, o, orb(50, t, span(t, 8, 8.6), 70), 1) + text(orbAt[0], orbAt[1] + 92, "Standby", 34, { fill: INDIGO, weight: 700, opacity: out(span(t, 7.6, 8.1)) * (1 - span(t, 9.8, 10.2)) });
+  g += title(t, 10.0, 128);
+  return `<rect width="1600" height="900" fill="${PAPER}"/>` + g;
+}
+
+// B · Orbit: flat and round; your day circles you, then spirals into Standby.
+function orbitVersion(t) {
+  const you = [560, 520], moon = [760, 520];
+  const p = inout(span(t, 8.2, 9.7));
+  const planetFar = [1350, 190, .6], planetNear = [1010, 470, 1.15];
+  const pl = [lerp(planetFar[0], planetNear[0], p), lerp(planetFar[1], planetNear[1], p) - Math.sin(p * Math.PI) * 50, lerp(planetFar[2], planetNear[2], p)];
+  const bg = DARK ? `<radialGradient id="bgb" cx=".35" cy=".6" r=".9"><stop offset="0" stop-color="#25253d"/><stop offset="1" stop-color="#141424"/></radialGradient>`
+                  : `<radialGradient id="bgb" cx=".35" cy=".6" r=".9"><stop offset="0" stop-color="#fffaf3"/><stop offset="1" stop-color="#ece8ff"/></radialGradient>`;
+  let g = `<defs>${bg}</defs><rect width="1600" height="900" fill="url(#bgb)"/>`;
+  // the orbits, faint
+  const rings = out(span(t, .4, 1.4)) * (1 - span(t, 8.0, 9.0));
+  [[250, 115], [355, 165]].forEach(([rx, ry]) => { g += `<ellipse cx="${you[0]}" cy="${you[1]}" rx="${rx}" ry="${ry}" fill="none" stroke="${INDIGO}" stroke-opacity="${fo(.18 * rings)}" stroke-width="2" stroke-dasharray="4 10"/>` });
+  // the thin dotted line to a faraway Claude Code, and a paper plane that takes a while
+  const thin = out(span(t, 1.0, 1.8)) * (1 - span(t, 8.2, 8.8));
+  if (thin > 0) {
+    const a = [you[0] + 80, you[1] - 60], b = [pl[0] - 40 * pl[2], pl[1] + 10];
+    g += `<path d="M${a[0]} ${a[1]} Q ${(a[0] + b[0]) / 2} ${Math.min(a[1], b[1]) - 120} ${b[0]} ${b[1]}" fill="none" stroke="${MUTE}" stroke-width="3" stroke-dasharray="2 12" stroke-linecap="round" opacity="${fo(thin)}"/>`;
+    const q = inout(span(t, 1.8, 4.2));
+    if (q > 0 && q < 1) { const mx = (a[0] + b[0]) / 2, my = Math.min(a[1], b[1]) - 120, x = (1 - q) * (1 - q) * a[0] + 2 * (1 - q) * q * mx + q * q * b[0], y = (1 - q) * (1 - q) * a[1] + 2 * (1 - q) * q * my + q * q * b[1];
+      g += at(x, y, .9, `<path d="M-22 6 L22 -10 L-6 14 Z" fill="${PAPER}" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/><path d="M-6 14 L-2 4 L22 -10" fill="none" stroke="${INK}" stroke-width="2"/>`, 1, -14) }
+    g += text((a[0] + b[0]) / 2 + 40, Math.min(a[1], b[1]) - 100, "a few typed lines", 30, { font: ROUND, fill: MUTE, opacity: out(span(t, 1.8, 2.4)) * (1 - span(t, 7, 7.4)) });
+  }
+  // your day: little round badges orbit you, appear and vanish; then they spiral into Standby
+  const icons = ["📅", "💬", "🎥", "📝", "💡", "📞", "✉️", "👥"];
+  const cols = ["#7aa7ff", "#ffb86b", "#7fd1a8", "#ffd25e", "#f79fc5", "#a99bff", "#6fd3e3", "#ff9b8a"];
+  icons.forEach((ic, i) => {
+    const ring = i % 2 ? [355, 165] : [250, 115], speed = (i % 2 ? .22 : .32) * (i % 3 ? 1 : -1), a0 = i * 1.7;
+    const cyc = (t - 2.4 - i * .33), live = cyc > 0 && t < 10.2;
+    if (!live) return;
+    const k = cyc % 3.1, inn = pop(span(k, 0, .4)), gone = span(k, 2.3, 2.7), visible = t < 7.8 ? inn * (1 - gone) : 1;
+    const ang = a0 + t * speed * TAU * .25;
+    let x = you[0] + Math.cos(ang) * ring[0], y = you[1] + Math.sin(ang) * ring[1];
+    const sp = inout(span(t, 7.8 + i * .12, 9.0 + i * .12));        // the spiral into Standby
+    x = lerp(x, moon[0], sp); y = lerp(y, moon[1], sp);
+    const s = (t < 7.8 ? visible : lerp(1, .15, sp)) * (1 - span(sp, .85, 1));
+    if (s <= 0.01) return;
+    g += at(x, y, s, `<circle r="50" fill="${cols[i]}" filter="url(#soft)"/><text y="16" font-size="46" text-anchor="middle">${ic}</text>`, 1);
+  });
+  // Claude Code, a faraway warm planet with its spinner star
+  const spin = t * 1.4;
+  g += at(pl[0], pl[1], pl[2] * out(span(t, .3, 1.1)), `<circle r="80" fill="url(#warmhalo)"/><circle r="44" fill="${WARM}" filter="url(#soft)"/>` +
+    Array.from({ length: 8 }, (_, i) => { const a = spin + i * TAU / 8, l = i % 2 ? 17 : 22; return `<line x1="${f(Math.cos(a) * 4)}" y1="${f(Math.sin(a) * 4)}" x2="${f(Math.cos(a) * l)}" y2="${f(Math.sin(a) * l)}" stroke="#fff" stroke-width="5.4" stroke-linecap="round"/>` }).join(""), 1);
+  g += text(pl[0], pl[1] + 78 * pl[2] + 8, "Claude Code", 30, { font: ROUND, weight: 700, fill: MUTE, opacity: out(span(t, .8, 1.4)) * (1 - span(t, 9.8, 10.2)) });
+  // the strong band, once it's beside you
+  const band = out(span(t, 8.8, 9.6));
+  if (band > 0) {
+    const a = [moon[0] + 40, moon[1]], b = [pl[0] - 46 * pl[2], pl[1]];
+    g += `<line x1="${a[0]}" y1="${a[1]}" x2="${f(lerp(a[0], b[0], band))}" y2="${f(lerp(a[1], b[1], band))}" stroke="${INDIGO}" stroke-width="16" stroke-linecap="round" opacity=".9"/>`;
+    for (let k = 0; k < 3; k++) { const q = ((t - 9.6) * .9 + k / 3) % 1; if (t > 9.6) g += `<circle cx="${f(lerp(a[0], b[0], q))}" cy="${f(lerp(a[1], b[1], q))}" r="6" fill="#fff" opacity="${fo(Math.sin(q * Math.PI))}"/>` }
+  }
+  // you: a friendly face
+  const face = DARK ? "#f0c7a6" : "#f6d2b5";
+  g += at(you[0], you[1], out(span(t, 0, .8)), `<g filter="url(#soft)"><path d="M-110 150 Q -110 70 0 62 Q 110 70 110 150 Z" fill="${INDIGO}"/><circle r="82" fill="${face}"/></g>` +
+    `<path d="M-82 -6 Q -86 -86 -10 -92 Q 70 -96 84 -20 Q 40 -60 -20 -52 Q -60 -46 -82 -6 Z" fill="${DARK ? "#3d3780" : "#3b3486"}"/>` +
+    `<circle cx="-28" cy="4" r="8" fill="#22223a"/><circle cx="28" cy="4" r="8" fill="#22223a"/><path d="M-26 32 Q 0 52 26 32" fill="none" stroke="#22223a" stroke-width="6" stroke-linecap="round"/>` +
+    `<circle cx="-52" cy="24" r="12" fill="#ff9b8a" opacity=".35"/><circle cx="52" cy="24" r="12" fill="#ff9b8a" opacity=".35"/>`, 1);
+  g += text(you[0], you[1] + 196, "you", 32, { font: ROUND, weight: 700, fill: MUTE, opacity: out(span(t, .6, 1.2)) * (1 - span(t, 9.8, 10.2)) });
+  const o = pop(span(t, 7.2, 7.8));
+  if (o > 0) g += at(moon[0], moon[1], o, orb(44, t, span(t, 8, 8.6), 0, false), 1) + text(moon[0], moon[1] + 84, "Standby", 30, { font: ROUND, weight: 700, fill: INDIGO, opacity: out(span(t, 7.6, 8.1)) * (1 - span(t, 9.8, 10.2)) });
+  g += title(t, 10.0, 128, { font: ROUND, size: 66 });
+  return g;
+}
+
+// C · Islands: your busy island, and Claude Code's island far across the water.
+function islandsVersion(t) {
+  const p = inout(span(t, 8.0, 9.8));
+  const far = [1310, 330, .45], near = [1045, 560, .82];
+  const ci = [lerp(far[0], near[0], p), lerp(far[1], near[1], p), lerp(far[2], near[2], p)];
+  const sea = DARK ? ["#16233a", "#0f1828"] : ["#e6f3fb", "#cbe4f5"];
+  let g = `<defs><linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sea[0]}"/><stop offset="1" stop-color="${sea[1]}"/></linearGradient></defs>` +
+    `<rect width="1600" height="900" fill="url(#sea)"/>`;
+  for (let k = 0; k < 9; k++) {                                     // the water, moving a little
+    const y = 300 + k * 70, dx = ((t * 18 + k * 90) % 260);
+    for (let j = -1; j < 8; j++) g += `<path d="M${f(j * 260 + dx)} ${y} q 22 -12 44 0" fill="none" stroke="${DARK ? "#2a3c5c" : "#ffffff"}" stroke-width="3" stroke-linecap="round" opacity=".8"/>`;
+  }
+  const sand = DARK ? "#5a4d34" : "#f3dfb3", grass = DARK ? "#3b6a4a" : "#a8d5a2";
+  const island = (w, h, seed) => sketch(circlePts(0, 18, w, 30, h), { fill: sand, seed, sw: 3 }) + sketch(circlePts(0, 0, w * .86, 30, h * .72), { fill: grass, seed: seed + 1, sw: 2.6 });
+  const house = (x, y, c, seed) => sketch(rectPts(x - 34, y - 30, 68, 56, 4), { fill: c, seed, sw: 2.6 }) + sketch([[x - 44, y - 28], [x, y - 66], [x + 44, y - 28]], { fill: DARK ? "#b2553f" : "#f08a74", seed: seed + 1, sw: 2.6 }) +
+    sketch(rectPts(x - 10, y - 4, 20, 30, 3), { fill: PAPER, seed: seed + 2, sw: 2 });
+  // Claude Code's island: small, far, its terminal like a lighthouse
+  g += at(ci[0], ci[1], ci[2] * out(span(t, .3, 1.1)), island(230, 80, 60) + sketch(rectPts(-46, -190, 92, 170, 14), { fill: DARK ? "#0d0d14" : "#18181e", seed: 63 }) +
+    text(0, -120, ">_", 44, { font: "Menlo, monospace", weight: 700, fill: (t * 2 % 1) > .5 ? WARM : "#fff" }) + `<circle cx="0" cy="-190" r="56" fill="url(#warmhalo)"/>` +
+    text(0, 110, "Claude Code", 46, { weight: 700, fill: INK }), 1);
+  // your island, busy: houses where things are said, and it all floats off
+  const home = [430, 610];
+  g += at(home[0], home[1], out(span(t, 0, .8)), island(330, 120, 50) + house(-150, -20, PASTEL[0], 51) + house(-20, -44, PASTEL[2], 54) + house(120, -14, PASTEL[3], 57) +
+    at(230, -10, .55, person(5), 1), 1);
+  g += text(home[0] + 128, home[1] + 168, "you", 34, { fill: MUTE, opacity: out(span(t, .6, 1.2)) * (1 - span(t, 9.8, 10.2)) });
+  const chimneys = [[280, 520], [410, 500], [550, 530]];
+  for (let k = 0; k < 12; k++) {                                     // things said, rising and drifting off
+    const [x, y] = chimneys[k % 3], born = 2.6 + k * .38, age = t - born;
+    if (age < 0 || age > 2.4 || t > 7.6) continue;
+    const q = age / 2.4;
+    g += at(x + Math.sin(age * 2 + k) * 30 + q * 60, y - 60 - q * 260, .5 + q * .3, THINGS[k % 2 ? 0 : 4](PASTEL[k % 5], 300 + k), (1 - q) * clamp(age / .2), (k % 5) - 2);
+  }
+  g += text(410, 170, "meetings, chats, ideas…", 34, { fill: MUTE, opacity: out(span(t, 3.4, 4.0)) * (1 - span(t, 6.8, 7.2)) });
+  // the thin link: a paper boat with one note, slowly
+  const boat = span(t, 1.2, 7.4);
+  if (boat > 0 && boat < 1 && t < 7.8) {
+    const bx = lerp(760, ci[0] - 150, boat), by = lerp(640, ci[1] + 40, boat) + Math.sin(t * 3) * 5;
+    g += at(bx, by, .8, `<path d="M-40 0 L40 0 L26 18 L-26 18 Z" fill="${PAPER}" stroke="${INK}" stroke-width="2.6" stroke-linejoin="round"/><path d="M0 0 L0 -50 L28 -6 Z" fill="${PAPER}" stroke="${INK}" stroke-width="2.4" stroke-linejoin="round"/>`, 1, Math.sin(t * 2) * 4);
+    g += text(bx, by - 70, "a few typed lines", 28, { fill: MUTE, opacity: out(span(t, 1.8, 2.4)) * (1 - span(t, 6.8, 7.2)) });
+  }
+  // Standby on your shore; then Claude's island drifts over, and a wide bridge joins them
+  const orbAt = [815, 505], o = pop(span(t, 7.2, 7.8));
+  const bridge = out(span(t, 9.2, 9.9));
+  if (bridge > 0) g += sketch(rectPts(orbAt[0] + 40, orbAt[1] - 14, (ci[0] - 120 - orbAt[0] - 40) * bridge, 30, 12), { fill: INDIGO, seed: 80, stroke: INDIGO, sw: 2 });
+  for (let k = 0; k < 9; k++) {                                      // now what's said goes into Standby, and over
+    const [x, y] = chimneys[k % 3], born = 8.0 + k * .32, q = inout(span(t, born, born + 1.1));
+    if (t < born || q >= 1) continue;
+    const tx = q < .7 ? lerp(x, orbAt[0], q / .7) : lerp(orbAt[0], ci[0] - 120, (q - .7) / .3), ty = q < .7 ? lerp(y - 60, orbAt[1], q / .7) - Math.sin(q / .7 * Math.PI) * 80 : orbAt[1];
+    g += at(tx, ty, lerp(.45, .12, q), THINGS[k % 2 ? 0 : 4](PASTEL[k % 5], 400 + k), 1 - span(q, .9, 1));
+  }
+  if (o > 0) g += at(orbAt[0], orbAt[1], o, orb(46, t, span(t, 8, 8.6), 71), 1) + text(orbAt[0], orbAt[1] + 88, "Standby", 34, { fill: INDIGO, weight: 700, opacity: out(span(t, 7.6, 8.1)) * (1 - span(t, 9.8, 10.2)) });
+  g += title(t, 10.0, 120);
+  return g;
+}
+
+// D · Ink: line art on cream, warm and quiet.
+function inkVersion(t) {
+  const boil = Math.floor(t * 5);                                    // the lines redraw a little, like a pen
+  const ink = DARK ? "#efe8dc" : "#2b2723", paper = DARK ? "#1f1d1a" : "#f6f1e7", accent = DARK ? "#e0876a" : "#c96442";
+  const you = [400, 560], orbAt = [650, 470];
+  const p = inout(span(t, 8.2, 9.8));
+  const sparkFar = [1330, 260, .7], sparkNear = [930, 460, 1.6];
+  const sp = [lerp(sparkFar[0], sparkNear[0], p), lerp(sparkFar[1], sparkNear[1], p) - Math.sin(p * Math.PI) * 70, lerp(sparkFar[2], sparkNear[2], p)];
+  const S = (pts, o) => sketch(pts, { stroke: ink, seed: (o.seed || 1) + boil * 7, amp: 1.4, twice: false, sw: 3.2, ...o });
+  let g = `<rect width="1600" height="900" fill="${paper}"/>`;
+  // you: a few lines
+  const d0 = out(span(t, 0, 1.2));
+  g += S(circlePts(you[0], you[1] - 150, 76, 24), { draw: d0, seed: 2, sw: 4 });
+  g += S([[you[0] - 200, you[1] + 230], [you[0] - 172, you[1] + 40], [you[0] - 80, you[1] - 40], [you[0], you[1] - 52], [you[0] + 80, you[1] - 40], [you[0] + 172, you[1] + 40], [you[0] + 200, you[1] + 230]], { closed: false, draw: d0, seed: 3, sw: 4 });
+  g += text(you[0], you[1] + 200, "you", 36, { fill: ink, opacity: .6 * out(span(t, .8, 1.4)) * (1 - span(t, 9.8, 10.2)) });
+  // the far spark: Claude Code, working on its own
+  g += at(sp[0], sp[1], sp[2] * out(span(t, .4, 1.2)), `<circle r="70" fill="url(#warmhalo)" opacity=".7"/>` + Array.from({ length: 8 }, (_, i) => {
+    const a = t * .9 + i * TAU / 8, l = i % 2 ? 26 : 34; return S([[Math.cos(a) * 7, Math.sin(a) * 7], [Math.cos(a) * l, Math.sin(a) * l]], { closed: false, stroke: accent, sw: 7, seed: 20 + i }) }).join(""), 1);
+  g += text(sp[0], sp[1] + 70 * sp[2] + 14, "Claude Code", 34, { fill: ink, opacity: .6 * out(span(t, 1, 1.6)) * (1 - span(t, 9.8, 10.2)) });
+  // the thin line, dotted, a long way
+  const thin = out(span(t, 1.2, 2.2)) * (1 - span(t, 8.2, 8.8));
+  if (thin > 0) { const a = [you[0] + 80, you[1] - 120], b = [sp[0] - 50 * sp[2], sp[1]];
+    for (let k = 0; k < 40 * thin; k++) { const q = k / 40; g += `<circle cx="${f(lerp(a[0], b[0], q))}" cy="${f(lerp(a[1], b[1], q) - Math.sin(q * Math.PI) * 60)}" r="2.6" fill="${ink}" opacity=".45"/>` }
+    g += text(lerp(a[0], b[0], .5), lerp(a[1], b[1], .5) - 90, "a few typed lines", 30, { fill: ink, opacity: .55 * out(span(t, 2, 2.6)) * (1 - span(t, 7, 7.4)) }); }
+  // the day in your head: loose scribbles and little bubbles, drifting up and away
+  for (let k = 0; k < 22; k++) {
+    const born = 2.5 + k * .22, age = t - born; if (age < 0 || age > 2.3 || t > 7.6) continue;
+    const q = age / 2.3, ang = -Math.PI / 2 + ((k * 5) % 9 - 4) * .3, dist = 150 + q * 260;
+    const x = you[0] + Math.cos(ang) * dist * 1.25, y = you[1] - 160 + Math.sin(ang) * dist * .85;
+    const loop = Array.from({ length: 18 }, (_, i) => [x + Math.cos(i * .9) * (18 + i * 2.2), y + Math.sin(i * .9) * (13 + i * 1.5)]);
+    g += k % 3 === 0 ? `<g opacity="${fo((1 - q) * clamp(age / .2))}">${S(rectPts(x - 64, y - 32, 128, 64, 24), { seed: 40 + k })}${S([[x - 34, y + 30], [x - 46, y + 54], [x - 14, y + 32]], { closed: false, seed: 45 + k, sw: 2.6 })}</g>`
+      : `<g opacity="${fo((1 - q) * clamp(age / .2))}">${S(loop, { closed: false, seed: 50 + k, sw: 2.6 })}</g>`;
+  }
+  // Standby: an indigo circle beside you, its bars; the scribbles bend into it, and a bold line runs to Claude
+  const o = out(span(t, 7.2, 8.0));
+  for (let k = 0; k < 8; k++) {
+    const born = 7.8 + k * .22, q = inout(span(t, born, born + 1.2)); if (t < born || q >= 1) continue;
+    const ang = -Math.PI / 2 + (k % 7 - 3) * .38, x0 = you[0] + Math.cos(ang) * 330, y0 = you[1] - 160 + Math.sin(ang) * 260;
+    const x = lerp(x0, orbAt[0], q), y = lerp(y0, orbAt[1], q) - Math.sin(q * Math.PI) * 40;
+    g += `<g opacity="${fo(1 - span(q, .8, 1))}">${S(Array.from({ length: 12 }, (_, i) => [x + Math.cos(i * .9) * (10 + i) * (1 - q * .7), y + Math.sin(i * .9) * (8 + i * .8) * (1 - q * .7)]), { closed: false, seed: 60 + k, sw: 2.6 })}</g>`;
+  }
+  const ribbon = out(span(t, 8.6, 9.6));
+  if (ribbon > 0) { const a = [orbAt[0] + 62, orbAt[1]], b = [sp[0] - 46 * sp[2], sp[1]];
+    const pts = Array.from({ length: 10 }, (_, i) => { const q = i / 9 * ribbon; return [lerp(a[0], b[0], q), lerp(a[1], b[1], q) + Math.sin(q * 9 - t * 4) * 10 * (1 - q)] });
+    g += sketch(pts, { closed: false, stroke: DARK ? "#8b87ff" : "#5046e5", sw: 8, amp: .8, twice: false, seed: 90 }); }
+  if (o > 0) {
+    g += at(orbAt[0], orbAt[1], 1, `<circle r="58" fill="url(#orbfill)" opacity="${fo(o)}"/>` + S(circlePts(0, 0, 58, 24), { draw: o, stroke: DARK ? "#c9c6ff" : "#3b2fc0", seed: 70 }) +
+      [.24, .46, .33].map((b, i) => { const h = (b + span(t, 8, 8.6) * .13 * Math.sin(t * TAU + i * 1.3)) * 58; return `<rect x="${f((i - 1) * 21 - 5)}" y="${f(-h)}" width="10.5" height="${f(h * 2)}" rx="5" fill="#fff" opacity="${fo(o)}"/>` }).join(""), 1);
+    g += text(orbAt[0], orbAt[1] + 104, "Standby", 34, { fill: DARK ? "#a5a2ff" : "#5046e5", weight: 700, opacity: out(span(t, 7.6, 8.1)) * (1 - span(t, 9.8, 10.2)) });
+  }
+  g += title(t, 10.0, 128, { fill: ink });
+  return g;
+}
+
+// E · The story, as the user told it (2026-10-11), round 2 of their notes.
+// Today: you bottom left, a little overwhelmed; your day above you, four things you hear and see; you type a few lines,
+// and a long dashed line takes them to Claude Code, bottom right. With Standby: it sits beside you, you just talk (a loop,
+// not a line), Claude Code slides over on the same level, and your day streams in: each thing goes whole into Standby,
+// comes out as a small ball and rolls along the straight line into Claude Code, giving it a spin, like a water wheel.
+// Two stages, plainly apart (the user, 2026-10-12): today the drawings are greyed, under "TODAY"; a pause; then the
+// colour comes back from Standby outwards, "WITH STANDBY". Today, a few ghosts float slowly into you, to take in and retell; with Standby they
+// go into it, quick from the start and quicker still. A ghost gets small early on its way.
+// The stream. Three cards stay where they are; each time, a ghost of one (a snapshot of it) floats into Standby.
+const CARDS = [0, 1, 2];                                            // online meeting, in person, thinking out loud
+const SPOTS = [[330, 350], [800, 340], [1270, 350]];
+const CARD = .85;                                                   // a little smaller, so the top isn't crowded
+const ITEMS = (() => {
+  const r = rng(77), items = [];
+  let at0 = 16.8, prev = -1;
+  for (let n = 0; at0 < STORY - 2.4; n++) {
+    let s = n < 3 ? n : Math.floor(r() * 3);
+    if (s === prev) s = (s + 1 + Math.floor(r() * 2)) % 3;
+    const k = Math.min(1, n / 10), travel = lerp(1.4, .95, k), roll = lerp(1.0, .65, k);
+    items.push({ s, leave: at0, travel, roll, hit: at0 + travel + roll, ball: ["#7aa7ff", "#f79fc5", "#7fd1a8"][s] });
+    prev = s; at0 += Math.max(.3, 1.15 * Math.pow(.86, n));
+  }
+  return items;
+})();
+const TODAY = [{ s: 0, leave: 2.5, travel: 1.9 }, { s: 1, leave: 3.9, travel: 1.9 }, { s: 2, leave: 5.3, travel: 1.9 }];   // today: a few, slowly, into you
+const LIGHT0 = 13.1, LIGHT1 = 14.3;                                 // the pause, as the colour comes back from Standby
+const shrink = q => CARD * lerp(1, .12, 1 - Math.pow(1 - q, 1.5));   // small early on its way
+function ghost(it, to, t) {                                          // a see-through snapshot of a card, floating to `to`
+  const q = inout(span(t, it.leave, it.leave + it.travel));
+  if (q <= 0 || q >= 1) return "";
+  const [x, y] = SPOTS[it.s], d = CARDS[it.s];
+  const cx = cubic(x, x, lerp(to[0], x, .35), to[0], q), cy = cubic(y, y + 140, to[1] - 170, to[1], q);
+  return at(cx, cy, shrink(q), DAY[d][1][0](t, 700 + d * 40), .55 * clamp(q * 12) * (1 - span(q, .9, 1)), 0);
+}
+function wheel(t) {                                                 // Claude Code's spin: each ball pushes it, the pushes add up
+  const w0 = .55, kick = 2.4, tau = 3.2, cap = 5.2, dt = 1 / 120;   // capped, so its spokes never strobe on video
+  let a = 0, w = w0;
+  for (let x = 0; x < t; x += dt) {
+    let raw = w0;
+    for (const it of ITEMS) if (x > it.hit) raw += kick * Math.exp(-(x - it.hit) / tau);
+    w = cap * Math.tanh(raw / cap); a += w * dt;
+  }
+  return [a, w];
+}
+function storyVersion(t) {
+  const me = [250, Y], orbAt = [585, Y];
+  const cp = inout(span(t, 15.0, 16.6));                           // Claude Code slides over, on the same level
+  const cl = [lerp(1350, 850, cp), Y];
+  // the words on top stay as they are; the drawings are greyed today, and get their colour back from Standby outwards
+  const stage = (s, c, k) => k > 0 ? text(70, 44, s, 19, { font: "Menlo, monospace", weight: 700, fill: c, anchor: "start", opacity: k }) : "";
+  let hdr = stage("TODAY", MUTE, out(span(t, .3, .9)) * (1 - span(t, 12.8, 13.2))) + stage("WITH STANDBY", INDIGO, out(span(t, 14.0, 14.6)));
+  hdr += caption(t, [[.4, 4.8, "Most of your day happens in conversations."], [5.0, 9.4, "Later, you type a few lines for Claude Code."],
+    [9.6, 12.9, "Most of the context stays behind."], [14.2, 19.0, "With Standby, Claude Code hears it all, as it happens."],
+    [19.2, 23.0, "Nothing to remember. Nothing to retell."], [23.2, STORY - .3, "Your Claude Code, right beside you."]]);
+  let g = "";
+  const dim = 1 - .55 * span(t, 10.2, 11.0) * (1 - span(t, 14.0, 14.8));   // what stays behind fades, until Standby is here
+  // your day: three cards that stay; ghosts of them float down into Standby
+  CARDS.forEach((d, i) => {
+    const [x, y] = SPOTS[i], [label, looks] = DAY[d], sIn = pop(span(t, 1.0 + i * .6, 1.55 + i * .6));
+    if (sIn > 0) g += at(x, y, CARD * sIn, looks[0](t, 700 + d * 40) + text(0, 122, label, 34, { fill: MUTE }), dim, 0);
+  });
+  for (const it of TODAY) g += ghost(it, [me[0] + 6, Y - 64], t);  // today: into you, to take in
+  for (const it of ITEMS) g += ghost(it, orbAt, t);                  // with Standby: into it, as it happens
+  // today: you type, and a long dashed line takes a few lines all the way to Claude Code
+  const thin = out(span(t, 6.4, 7.4)) * (1 - span(t, 14.6, 15.2));
+  if (thin > 0) {
+    const a = [me[0] + 110, Y - 6], b = [cl[0] - 80, Y - 6];
+    g += `<line x1="${a[0]}" y1="${a[1]}" x2="${f(lerp(a[0], b[0], thin))}" y2="${a[1]}" stroke="${INK}" stroke-width="2.6" stroke-dasharray="14 12" stroke-linecap="round" opacity="${fo(thin)}"/>`;
+    const q = inout(span(t, 7.6, 10.2));
+    if (q > 0 && q < 1) g += at(lerp(a[0], b[0], q), a[1] - 20, .6, sketch(rectPts(-34, -22, 68, 44, 5), { fill: PAPER, seed: 12 }) + squiggle(-20, 0, 40, 1, MUTE, 2.6), 1, 0);
+    g += text((a[0] + b[0]) / 2, a[1] - 48, "a few typed lines", 32, { fill: MUTE, opacity: out(span(t, 7.0, 7.6)) * (1 - span(t, 12.8, 13.2)) });
+  }
+  // with Standby: you talk and it listens, then it answers and you listen. Words go each way as little waves.
+  const turn = x => { if (x < 15.6) return ""; const c = (x - 15.6) % 4.0; return c < 2.4 ? "you" : c >= 2.7 && c < 3.7 ? "standby" : "" };
+  if (t > 15.6) for (let k = 0; k < 60; k++) {
+    const born = 15.6 + k * .38, who = turn(born), q = span(t, born, born + 1.0);
+    if (!who || q <= 0 || q >= 1) continue;
+    const mouth = [me[0] + 52, Y - 72], ear = [orbAt[0] - 66, Y - 6];
+    const [a, b, dir] = who === "you" ? [mouth, ear, 1] : [ear, [me[0] + 60, Y - 66], -1];
+    const x = lerp(a[0], b[0], q), y = lerp(a[1], b[1], q), h = 16 + q * 14;
+    g += `<path d="M${f(x)} ${f(y - h)} q ${f(dir * (10 + q * 6))} ${f(h)} 0 ${f(h * 2)}" fill="none" stroke="${who === "you" ? INDIGO : "#8f86ff"}" stroke-width="4" stroke-linecap="round" opacity="${fo(Math.sin(q * Math.PI) * .9)}"/>`;
+  }
+  const link = out(span(t, 16.4, 17.2));
+  const x1 = orbAt[0] + 58, x2 = cl[0] - 60;
+  if (link > 0) g += `<line x1="${x1}" y1="${Y}" x2="${f(lerp(x1, x2, link))}" y2="${Y}" stroke="${INDIGO}" stroke-width="8" stroke-linecap="round"/>`;
+  // each thing that went in comes out as a small ball and rolls along the line into Claude Code
+  for (const it of ITEMS) {
+    const r0 = it.leave + it.travel, q = span(t, r0, r0 + it.roll);
+    if (q <= 0 || q >= 1) continue;
+    const e = q * q * (3 - 2 * q), rr = 16, bx = lerp(x1 + 4, x2 - 20, e), spin = (bx - x1) / rr;
+    g += `<g transform="translate(${f(bx)} ${f(Y - rr - 4)}) rotate(${f(spin * 180 / Math.PI)})" opacity="${fo(clamp(q * 8) * (1 - span(q, .92, 1)))}">` +
+      `<circle r="${rr}" fill="${it.ball}" stroke="${INK}" stroke-width="2.2"/><path d="M-7 -3 q 7 -7 14 0" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"/></g>`;
+  }
+  // Claude Code, turning like a water wheel: faster with each ball, then easing off
+  const [ang, speed] = wheel(t), glow = clamp((speed - .55) / 4.6);
+  g += at(cl[0], cl[1], (1 + glow * .08) * out(span(t, .4, 1.2)), spark(46, ang, glow), 1);
+  g += text(cl[0], cl[1] + 104, "Claude Code", 34, { fill: MUTE, opacity: out(span(t, .9, 1.5)) });
+  // you: a little overwhelmed as it piles up; typing; then happy, and talking, once Standby is beside you
+  const took = TODAY.reduce((m, it) => m + .4 * out(span(t, it.leave + it.travel - .2, it.leave + it.travel + .4)), 0);   // more worried with each
+  const mood = -clamp(took) * (1 - span(t, 14.2, 14.8)) + out(span(t, 14.6, 15.4));
+  const talking = turn(t) === "you" ? Math.max(0, Math.sin(t * 7.5)) : 0;
+  const typing = out(span(t, 6.6, 7.0)) * (1 - span(t, 9.4, 9.8));
+  g += at(...me, out(span(t, 0, .7)), you(3, mood, talking, typing, t), 1);
+  g += text(me[0], me[1] + 140, "you", 34, { fill: MUTE, opacity: out(span(t, .6, 1.2)) });
+  const o = pop(span(t, 14.2, 14.8));
+  if (o > 0) {
+    const gulp = Math.min(1.4, ITEMS.reduce((m, it) => m + Math.max(0, 1 - Math.abs(t - (it.leave + it.travel)) / .3), 0));
+    const speaks = turn(t) === "standby";                         // when it answers, its bars move as they do when it speaks
+    g += at(...orbAt, o * (1 + gulp * .07), orb(52, speaks ? t * 2 : t, speaks ? 1.7 : span(t, 15.4, 16.0)), 1) +
+      text(orbAt[0], orbAt[1] + 96, "Standby", 34, { fill: INDIGO, weight: 700, opacity: out(span(t, 14.6, 15.1)) });
+  }
+  const lit = inout(span(t, LIGHT0, LIGHT1)), grey = `<g filter="url(#today)" opacity=".9">${g}</g>`;
+  const scene = lit <= 0 ? grey : lit >= 1 ? g : grey + `<clipPath id="lit"><circle cx="${orbAt[0]}" cy="${orbAt[1]}" r="${f(lit * 1700)}"/></clipPath><g clip-path="url(#lit)">` +
+    `<rect width="1600" height="900" fill="${PAPER}"/>${g}</g>`;
+  return `<rect width="1600" height="900" fill="${PAPER}"/><filter id="today"><feColorMatrix type="saturate" values=".12"/></filter>` + scene + hdr;
+}
+
+const S0 = document.getElementById("s");
+function render(t) {
+  t = ((t % DUR) + DUR) % DUR;
+  const body = ({ a: sketchVersion, b: orbitVersion, c: islandsVersion, d: inkVersion, e: storyVersion })[V](storyTime(t));
+  const fade = out(span(t, 0, .5)) * (1 - span(t, DUR - .5, DUR));
+  const zoom = V === "d" || V === "e" ? "" : ` transform="translate(800 470) scale(1.08) translate(-800 -450)"`;
+  S0.innerHTML = DEFS + `<g opacity="${fo(fade)}"><g${zoom}>${body}</g></g>`;
+  S0.style.background = V === "d" ? (DARK ? "#1f1d1a" : "#f6f1e7") : PAPER;
+}
+window.render = render;
+if (!/[?&]render/.test(location.search)) {
+  const t0 = performance.now();
+  (function tick(now) { render((now - t0) / 1000); requestAnimationFrame(tick) })(t0);
+} else render(0);
+</script>
+</body>
+</html>

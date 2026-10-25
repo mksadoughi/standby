@@ -1,0 +1,14 @@
+{
+  "name": "standby",
+  "owner": {
+    "name": "Standby"
+  },
+  "description": "Standby, the Mac meeting and call companion, inside Claude Code",
+  "plugins": [
+    {
+      "name": "standby",
+      "source": "./lite",
+      "description": "Standby inside Claude Code: listen to a meeting or talk by voice, with Claude in this session hearing it all"
+    }
+  ]
+}
