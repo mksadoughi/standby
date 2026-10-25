@@ -50,13 +50,23 @@ jobs:
       # The suites that need no microphone, speaker, model or window (group "par" in
       # tests/suites.txt), each in a folder of its own, with no devices.
       - name: Fast test suites
+        env:
+          PYTHONUNBUFFERED: "1"
+          STANDBY_TEST_LOG_DIR: ${{ runner.temp }}/standby-test-logs
         run: PY="$(command -v python)" bash tests/run_all.sh
 
+      - name: Keep complete test logs
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.os }}
+          path: ${{ runner.temp }}/standby-test-logs/*.log
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Validate the Claude Code plugin
+        if: ${{ !cancelled() }}
         run: |
-          if npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 && command -v claude >/dev/null; then
-            claude plugin validate .
-            claude plugin validate lite
-          else
-            echo "Claude Code's CLI couldn't be installed here: plugin validation skipped"
-          fi
+          npm install -g @anthropic-ai/claude-code
+          claude plugin validate .
+          claude plugin validate lite
