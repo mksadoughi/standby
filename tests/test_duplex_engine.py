@@ -578,6 +578,35 @@ check("  none better than the default installed: the system's own",
 b.idle(0.05)
 check("idle: the main thread's run loop, where the speech engine delivers, in short slices",
       loops and all(x <= duplex.AVFBackend.SLICE + 1e-9 for x in loops), loops)
+# Check the requested deadline exactly with a controlled clock. A real OS can
+# resume any sleep/run-loop call late; that must not make idle request more time.
+real_clock = duplex.time
+for late in (0.0, 0.05):
+    clock, requested, slept = [0.0], [], []
+
+    def run_until(deadline):
+        requested.append((clock[0], deadline))
+        clock[0] = deadline + late
+
+    def sleep_for(seconds):
+        slept.append((clock[0], seconds))
+        clock[0] += seconds
+
+    timed_fd = types.SimpleNamespace(
+        NSDate=types.SimpleNamespace(dateWithTimeIntervalSinceNow_=lambda s: clock[0] + s),
+        NSRunLoop=types.SimpleNamespace(currentRunLoop=lambda: types.SimpleNamespace(runUntilDate_=run_until)))
+    duplex.time = types.SimpleNamespace(time=lambda: clock[0], sleep=sleep_for)
+    try:
+        timed = duplex.AVFBackend(avf=avf, foundation=timed_fd, default_input=lambda: "x", log=logged.append)
+        timed.idle(0.1)
+    finally:
+        duplex.time = real_clock
+    check("idle requests no time past its deadline, even after a late wakeup (%s)" % late,
+          requested and all(0 < end - start <= duplex.AVFBackend.SLICE + 1e-9 and end <= 0.1 + 1e-9
+                            for start, end in requested)
+          and all(start + seconds <= 0.1 + 1e-9 for start, seconds in slept)
+          and 0.1 <= clock[0] <= 0.1 + late + 1e-9,
+          {"run_loop": requested, "sleep": slept, "end": clock[0]})
 bs = backend()
 bs.start_mic("MacBook Pro Microphone", lambda x: None)
 real_sleep = duplex.time.sleep
@@ -593,21 +622,29 @@ bs.synth.asked[-1][1](PCM(256, fmt))
 check("  a quick one is not", len([m for m in logged if "first sound took" in m]) == n)
 bs.halt()
 
-# The real run loop (no audio): idle waits one tick, no longer, without spinning the
-# CPU, and runs what was handed to the main thread meanwhile (as the speech engine does).
+# The real run loop (no audio): it waits without spinning and services main-thread
+# work. Queue the operation before measuring: a Timer can itself run after idle
+# has returned on a busy host. The exact deadline contract is checked above.
 try:
     import Foundation
     import threading
     import time as _t
     br = duplex.AVFBackend(avf=avf, foundation=Foundation, default_input=lambda: "x", log=logged.append)
     ran = []
-    threading.Timer(0.03, lambda: Foundation.NSOperationQueue.mainQueue().addOperationWithBlock_(
-        lambda: ran.append(_t.time()))).start()
+    queued = threading.Event()
+
+    def enqueue():
+        Foundation.NSOperationQueue.mainQueue().addOperationWithBlock_(lambda: ran.append(_t.time()))
+        queued.set()
+
+    worker = threading.Thread(target=enqueue)
+    worker.start()
+    check("  the test operation is queued before idle starts", queued.wait(5))
+    worker.join(5)
     w0, c0 = _t.time(), _t.process_time()
     br.idle(0.1)
     wall, cpu = _t.time() - w0, _t.process_time() - c0
-    check("idle on the real run loop: one tick, never more (a decode waits at most that)",
-          0.09 <= wall <= 0.13, wall)
+    check("idle on the real run loop waits for the requested tick", wall >= 0.09, wall)
     check("  without spinning the CPU", cpu < 0.05, cpu)
     check("  and main-thread work handed over meanwhile runs in it", len(ran) == 1 and w0 <= ran[0] <= w0 + wall,
           {"ran": ran, "start": w0, "wall": wall})
