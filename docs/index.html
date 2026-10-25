@@ -210,6 +210,13 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   footer .links{width:100%;margin-left:0;flex-wrap:wrap;gap:10px 18px}
 }
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.thread .card{transition:none}.thread .glow{display:none}.thread .knot.on:before,.thread .knot.on:after{animation:none}}
+
+.github-link{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;flex:none;border-radius:50%;text-decoration:none;color:inherit}
+.github-link img{width:26px;height:26px;max-width:none}
+.github-link:hover{opacity:.7}
+.github-link:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+
+.end .github-link img{filter:brightness(0) invert(1)}
 </style>
 </head>
 <body>
@@ -217,7 +224,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 <header class="top"><div class="wrap">
   <a class="brand" href="#"><img src="img/icon.png" alt="">Standby</a>
   <nav><a href="#what">Features</a><a href="#install">Install</a><a href="why.html">Why I built it</a></nav>
-  <div class="right"><a class="btn dark" data-gh="repo" href="#install">GitHub</a></div>
+  <div class="right"><a class="github-link" data-gh="repo" href="#install" aria-label="Standby on GitHub" title="GitHub"><img src="img/github.svg" width="26" height="26" alt=""></a></div>
 </div></header>
 
 <main class="wrap">
@@ -298,7 +305,7 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
 
 <div class="joint tall" aria-hidden="true"></div>
 <div class="end"><div><h2>Give your Claude Code ears and a voice.</h2><p>Free and open source, for Apple Silicon Macs.</p></div>
-  <a class="btn" data-gh="repo" href="#install">GitHub</a></div>
+  <a class="github-link" data-gh="repo" href="#install" aria-label="Standby on GitHub" title="GitHub"><img src="img/github.svg" width="26" height="26" alt=""></a></div>
 
 <div class="sign" aria-hidden="true"></div>
 </main>
