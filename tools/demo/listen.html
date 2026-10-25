@@ -1,0 +1,89 @@
+<!doctype html>
+<!-- Demo: "Right inside Claude Code", 22 s, in the demo look (screens.js, cc.js).
+     A call is on beside Claude Code. You type /standby listen: Claude Code answers in one dim line, and Standby's band
+     appears above the prompt ("● Listening · Trip search sync  <1m  (1 pause · 2 stop · 3 window)"), the latest finished
+     line dim under it. You ask Claude about the meeting in the normal chat; the transcript goes with your prompt, so it
+     answers from it. The call ends; you press 2 to stop, and the summary is on the band ("Summarizing…", then its points).
+     True to the plugin: the band's words, marks and keys are lite/hooks/register.js's; by default nothing is sent to
+     Claude until you ask (On ask); the summary is shown, kept in Standby, and not sent to Claude.
+     The frame is render(t); tools/demo/render.py steps it into a video. Opened as a file, it plays live. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Standby: right inside Claude Code</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff}
+svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+</style>
+</head>
+<body>
+<svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
+<script>const DUR = 22;</script>
+<script src="kit.js"></script>
+<script src="screens.js"></script>
+<script src="cc.js"></script>
+<script>
+const T = { x: 60, y: 150, w: 980, h: 710 };                          // Claude Code, in Terminal
+const CALL = { x: 1070, y: 190, w: 470, h: 400 };                     // the call, beside it
+const CMD = "/standby listen", ASK = "what did Nadia say about guests?";
+const TYPE1 = .7, ENTER1 = 2.1, TYPE2 = 9.6, ENTER2 = 11.6, ENDCALL = 15.0, STOP = 16.0;
+const LINES = [[3.0, "Nadia", "Guests pay by region."], [4.6, "Theo", "So we can't cache them the same way."],
+  [6.2, "Nadia", "The region has to be in the key first."], [7.8, "Jules", "Then logged-in users ship first."],
+  [12.4, "Theo", "I'll size that work by Thursday."]];
+const LINE_S = 1.2;                                                   // how long a line takes to say; the band shows it once it's said
+const ANSWER = ["Guests pay by region, so they can't share the route cache",
+                "until the region is in the cache key. Logged-in users go first."];
+const POINTS = ["Logged-in users get the route cache first.", "Guests wait for the region in the cache key.", "Theo sizes the work by Thursday."];
+
+function call(t) {
+  const k = out(span(t, .1, .6)) * (1 - span(t, ENDCALL, ENDCALL + .4)); if (k <= 0) return "";
+  const r = CALL, tiles = [["N", "#3d4659", "Nadia"], ["T", "#3b4d4c", "Theo"], ["J", "#4d3f3b", "Jules"], ["Y", "#48425c", "You"]];
+  const now = LINES.find(([a]) => t > a && t < a + LINE_S), on = now ? ["Nadia", "Theo", "Jules"].indexOf(now[1]) : -1;
+  let g = `<rect x="${r.x}" y="${r.y + 12}" width="${r.w}" height="${r.h}" rx="14" fill="#1e1a50" opacity="${DARK ? .45 : .16}" filter="url(#soft)"/>` + box(r.x, r.y, r.w, r.h, 14, "#1f1f26") +
+    [0, 1, 2].map(i => `<circle cx="${r.x + 22 + i * 22}" cy="${r.y + 22}" r="7" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
+    ui(r.x + r.w / 2, r.y + 28, "Trip search sync", 16, { anchor: "middle", fill: "#c9c9d6", weight: 600 });
+  const tw = (r.w - 50) / 2, th = (r.h - 76) / 2;
+  tiles.forEach(([i, c, n], j) => {
+    const tx = r.x + 16 + (j % 2) * (tw + 18), ty = r.y + 48 + Math.floor(j / 2) * (th + 12);
+    g += box(tx, ty, tw, th, 12, c, { stroke: j === on ? "#7fd1a8" : "none", sw: 4 }) + `<circle cx="${tx + tw / 2}" cy="${ty + th / 2 - 6}" r="36" fill="rgba(255,255,255,.14)"/>` +
+      ui(tx + tw / 2, ty + th / 2 + 4, i, 30, { anchor: "middle", fill: "#fff", weight: 700 }) + ui(tx + 12, ty + th - 12, n, 16, { fill: "#e6e6ee", weight: 600 });
+  });
+  return `<g opacity="${fo(k)}" transform="translate(${f((1 - k) * 30)} 0)">${g}</g>`;
+}
+
+function claude(t) {
+  const rows = [], band = [];
+  let prompt = "";
+  if (t < ENTER1) prompt = typed(CMD, t, TYPE1, 12);
+  else {
+    rows.push(me(CMD), under(dim("Listening. Claude here gets the transcript with each of your prompts.")), "");
+    if (t > TYPE2 && t < ENTER2) prompt = typed(ASK, t, TYPE2, 18);
+    if (t > ENTER2) {
+      rows.push(me(ASK));
+      if (t < ENTER2 + 1.0) rows.push(thinking(t));
+      else ANSWER.forEach((s, i) => { const n = typed(s, t, ENTER2 + 1.0 + i * 1.0, 60); if (n) rows.push(i ? "  " + n : said(n)) });
+    }
+  }
+  if (t > ENTER1 + .15 && t < STOP) {
+    const said_ = LINES.filter(([a]) => t > a + LINE_S).pop();
+    band.push(bandLine("●", TC.red, "Listening · Trip search sync", mins(t, ENTER1, 1.1), [["1", "pause"], ["2", "stop"], ["3", "window"]], t, { 2: STOP }));
+    band.push(said_ ? dim(esc(said_[1] + ": " + said_[2])) : "");
+  } else if (t >= STOP) {
+    band.push(`<tspan fill="${TC.ink}">⏺</tspan> <tspan font-weight="700">Summary · Trip search sync</tspan>  ${dim("12m")}  ${dim("(")}<tspan fill="${TC.acc}">1</tspan>${dim(" close)")}`);
+    if (t < STOP + 1.4) band.push(dim("  ⎿  Summarizing…"));
+    else POINTS.forEach((p, i) => { if (t > STOP + 1.4 + i * .3) band.push(under(p, !i)) });     // the points in full ink, as the band has them
+  }
+  const c = inout(span(t, ENDCALL + .3, ENDCALL + 1.1));                // the call gone, Claude Code takes the middle
+  return terminal(Object.assign({}, T, { x: lerp(T.x, (1600 - T.w) / 2, c) }), t, { rows, band, prompt, size: 20, row: 33 });
+}
+
+function film(t) {
+  const cap = captions(t, [[.3, 2.7, "When a meeting starts, type /standby listen."], [2.9, 9.4, "One quiet line shows it's listening."],
+    [9.6, 15.7, "Ask Claude about it, right in the chat."], [15.9, DUR - .3, "Stop, and the summary is there."]]);
+  return `<rect width="1600" height="900" fill="${PAPER}"/>` + call(t) + claude(t) + cap;
+}
+play(film);
+</script>
+</body>
+</html>

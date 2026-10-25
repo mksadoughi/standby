@@ -1,0 +1,133 @@
+<!doctype html>
+<!-- The essay: why Standby, in the author's words. The home page's bar, serif and colours, but warmer and quieter:
+     cream paper, the text set in the serif, small waves (the logo's shape) between its parts. Nothing loaded from elsewhere. -->
+<html lang="en" data-repo="mksadoughi/standby">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Not smarter. Better informed. · Standby</title>
+<meta name="description" content="Why I built Standby: our coding agents don't lack intelligence. They lack the conversations where half our thinking happens.">
+<meta property="og:title" content="Not smarter. Better informed.">
+<meta property="og:description" content="Why I built Standby: our coding agents don't lack intelligence. They lack the conversations where half our thinking happens.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://mksadoughi.github.io/standby/why.html">
+<meta property="og:image" content="https://mksadoughi.github.io/standby/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://mksadoughi.github.io/standby/why.html">
+<link rel="icon" href="img/icon.png">
+<style>
+:root{--ink:#2a2420;--muted:#7a6e64;--line:#e9dfd0;--accent:#4f46e5;--warm:#c4693f;
+--serif:"Iowan Old Style","Charter","Palatino Linotype",Georgia,serif}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font:17px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+background:radial-gradient(1000px 600px at 50% -12%,#fbe9d8 0,transparent 62%),radial-gradient(800px 600px at 110% 60%,#f4eadc 0,transparent 60%),#f8f2e8}
+a{color:inherit}img{display:block;max-width:100%}
+.wrap{max-width:1140px;margin:0 auto;padding:0 32px}
+h1,h2{font-family:var(--serif);font-weight:700;letter-spacing:-.01em;margin:0}
+/* the bar, as on the home page */
+.top{position:sticky;top:0;z-index:5;background:rgba(248,242,232,.85);backdrop-filter:blur(10px)}
+.top .wrap{display:flex;align-items:center;height:68px;gap:30px}
+.brand{display:flex;align-items:center;gap:10px;font:700 21px var(--serif);text-decoration:none}.brand img{width:30px;height:30px;border-radius:8px}
+.top nav{display:flex;gap:24px;font-size:15px}.top nav a{text-decoration:none;color:#4a4038}.top nav a:hover{color:var(--ink)}
+.top .right{margin-left:auto}
+.btn{display:inline-flex;align-items:center;height:44px;padding:0 20px;border-radius:10px;font-weight:650;font-size:15px;text-decoration:none;border:1px solid var(--line);background:#fff}
+.btn.dark{background:var(--accent);border-color:var(--accent);color:#fff}
+/* the essay: a letter more than a page */
+.essay{max-width:680px;margin:0 auto;padding:80px 0 0}
+.opener{font:italic 20px/1.5 var(--serif);color:var(--warm);margin:0 0 18px}
+.essay h1{font-size:clamp(40px,5.2vw,60px);line-height:1.08}
+.dek{font:22px/1.55 var(--serif);color:var(--muted);margin:22px 0 0}
+.essay p{font:20px/1.75 var(--serif);margin:0 0 26px}
+.essay .first{margin-top:48px}
+/* between the parts: a small wave, the logo's shape */
+.wave{display:block;width:84px;height:14px;margin:52px auto 40px;opacity:.55;
+background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%2721%27%20height%3D%2714%27%20viewBox%3D%270%200%2021%2014%27%3E%3Cpath%20d%3D%27M0%207%20Q5.25%200%2010.5%207%20T21%207%27%20fill%3D%27none%27%20stroke%3D%27%23c4693f%27%20stroke-width%3D%272.2%27%20stroke-linecap%3D%27round%27/%3E%3C/svg%3E") repeat-x 0 0/21px 14px}
+.essay h2{font-size:28px;line-height:1.2;margin:0 0 18px}
+.essay p a{text-decoration:underline;text-decoration-color:var(--warm);text-decoration-thickness:1.5px;text-underline-offset:4px}.essay p a:hover{color:var(--warm)}
+/* the end: a quiet note, and the way to it */
+.thanks{margin:56px 0 0;padding:30px 32px;border:1px solid var(--line);border-radius:18px;background:#fffaf3;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.thanks p{margin:0;font:italic 20px/1.5 var(--serif);color:var(--muted)}
+.thanks .go{display:flex;gap:14px;align-items:center}.thanks .go a:not(.btn){font-size:15px;color:var(--muted)}
+footer .wrap{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding-top:72px;padding-bottom:44px;font-size:14px;color:var(--muted)}
+footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:none}footer a:hover{color:var(--ink)}
+@media (max-width:700px){.wrap{padding:0 18px}.top nav{display:none}.essay{padding-top:48px}.essay p{font-size:19px}.thanks{padding:24px}}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html"><img src="img/icon.png" alt="">Standby</a>
+  <nav><a href="index.html#what">Features</a><a href="index.html#install">Install</a><a href="why.html">Why I built it</a></nav>
+  <div class="right"><a class="btn dark" data-gh="repo" href="index.html#install">Get it on GitHub</a></div>
+</div></header>
+
+<main class="wrap">
+<article class="essay">
+  <p class="opener">A short story about why I built Standby.</p>
+  <h1>Not smarter. Better informed.</h1>
+  <p class="dek">Our coding agents don't lack intelligence. They lack the conversations where half our thinking happens.</p>
+
+  <p class="first">In the last year, coding agents changed how I work. I hand Claude Code a task, and it reads the code, runs the
+    tests and comes back with a change. I can't imagine working without it. For a lot of us it feels like a 10x.</p>
+  <p>But only at the desk. About half my working day is in meetings: design reviews, brainstorms, a quick call to sort
+    something out. That's where much of the thinking happens, and Claude Code, the most capable colleague I've ever
+    had, isn't in the room. The meetings run the way they did years ago. Afterwards, back at my desk, I retell what I
+    remember in a few typed lines.</p>
+
+  <span class="wave" aria-hidden="true"></span>
+  <h2>Smart enough, not informed enough</h2>
+  <p>The newest models are remarkable, and for most of my work I don't think more intelligence is what's missing.
+    What's missing is context. Everything Claude Code knows about my work reaches it through me: the prompt I write, the
+    docs and skills I set up, the code. All of it was chosen and shortened by a person first. The conversations, where
+    the reasons and the half-formed ideas live, never make it through.</p>
+  <p>They don't need shortening. Four hours of meetings is about 35,000 spoken words, around 50,000 tokens. A model
+    takes that in at once, and it's small next to a codebase. Most of it won't matter, and that's fine: telling what's
+    relevant from what isn't is what these models are good at, often better than our summaries.</p>
+
+  <span class="wave" aria-hidden="true"></span>
+  <h2>What it needs</h2>
+  <p>Two things. To be closer in time: in the meeting, while what it knows can still change the discussion, not just
+    the notes afterwards. And all of it: everything that's said, as it's said, rather than my summary of it.</p>
+
+  <span class="wave" aria-hidden="true"></span>
+  <h2>Why not the tools we already have</h2>
+  <p>There are meeting tools with AI in them, and they didn't fit. Some send a bot into the call; others live inside
+    one meeting app, each with its own assistant and its own slice of my history. None of them is the agent that knows
+    my code.</p>
+  <p>And I didn't want one more app. We're all a little tired of AI tools piling up around us. I like Claude Code, and
+    I want to stay in it, with one ear in front of it that hears whatever reaches me.</p>
+
+  <span class="wave" aria-hidden="true"></span>
+  <h2>Why now</h2>
+  <p>Building that used to mean building something beside Claude Code. Then Claude Code opened up, with
+    <a href="https://code.claude.com/docs/en/plugins">plugins</a> and
+    <a href="https://code.claude.com/docs/en/plugins/mods/overview">mods</a>, so an idea like this can live inside it
+    instead. That's what unblocked me.</p>
+
+  <span class="wave" aria-hidden="true"></span>
+  <h2>What I built</h2>
+  <p>That's Standby. It lives inside the Claude Code you already use, the one that knows your code. It hears your
+    meetings on your Mac, with no bot in the call, and you can call it and talk things through while it does the work.</p>
+  <p>It doesn't make Claude any smarter. It makes it better informed: not a better brain, but a seat in the room.</p>
+
+  <div class="thanks"><p>Thanks for reading.</p>
+    <div class="go"><a href="index.html">See what it does</a><a class="btn dark" data-gh="repo" href="index.html#install">Get it on GitHub</a></div></div>
+</article>
+</main>
+
+<footer><div class="wrap">
+  <a class="brand" href="index.html"><img src="img/icon.png" alt="">Standby</a>
+  <span>Free and open source · <a href="terms.html">Terms</a></span>
+  <span class="links"><a data-gh="readme" href="../README.md">Documentation</a><a href="why.html">Why I built it</a><a data-gh="releases" href="index.html#install">Releases</a><a data-gh="repo" href="index.html#install">GitHub</a></span>
+</div></footer>
+
+<script>
+(function () {
+  var repo = document.documentElement.getAttribute("data-repo") || "";
+  var gh = repo ? "https://github.com/" + repo : "";
+  var links = { repo: gh || "index.html#install", readme: gh ? gh + "#readme" : "../README.md", releases: gh ? gh + "/releases" : "index.html#install" };
+  document.querySelectorAll("[data-gh]").forEach(function (a) { a.href = links[a.getAttribute("data-gh")]; });
+})();
+</script>
+</body>
+</html>

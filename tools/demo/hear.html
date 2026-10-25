@@ -1,0 +1,117 @@
+<!doctype html>
+<!-- Demo: "Any meeting app, or the room you're in", 20 s, in the demo look (screens.js, cc.js). Standby hears whatever
+     the conversation is, a call or the room, in one transcript.
+     The desktop: a call, and Standby's meeting window beside it, the call's lines landing by name. The call ends and the
+     window takes the middle; the camera comes out of the laptop: Nadia and Toby at the table, carrying on, and their
+     lines land in the same transcript.
+     True to the app: no bot joins; Automatic records the mic and what the Mac plays in a meeting, so nothing needs
+     doing when the call ends; Nadia, Theo and Toby are named because their voices were named in earlier meetings (the
+     dotted underline); while someone talks, their words so far show dim after the red bars.
+     The frame is render(t); tools/demo/render.py steps it into a video. Opened as a file, it plays live. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Standby: any meeting app, or the room</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#fff}
+svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+</style>
+</head>
+<body>
+<svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
+<script>const DUR = 20;</script>
+<script src="kit.js"></script>
+<script src="screens.js"></script>
+<script src="cc.js"></script>
+<script>
+// ---- the desktop (drawn at full size), and the laptop it turns out to be ----------------------------------------------
+const SD = { x: 90, y: 150, w: 1420, h: 712 }, MB = 30;               // the screen, filling the frame
+const SL = { x: 250, y: 160, w: 1100, h: 1100 * 712 / 1420 };          // the same screen, on the laptop in the room
+const TABLE = SL.y + SL.h + 34;
+const Z0 = 9.0, Z1 = 10.4;                                             // the camera comes out of the laptop
+const ENDCALL = 7.95;
+const CALLW = { x: 120, y: 200, w: 690, h: 630 };
+const SB0 = { x: 840, y: 196, w: 640, h: 640 }, SB1 = { x: 420, y: 196, w: 760, h: 640 };   // Standby beside the call; then in the middle
+const P = { nadia: ["Nadia", "#3f7cf3"], theo: ["Theo", "#0e9f9a"], you: ["You", W.ink], toby: ["Toby", "#d97706"] };
+// one transcript: [when it lands, who, words, the time it was said]; the call's lines carry the call app's icon
+const LINES = [[2.4, "nadia", "Guests pay by region.", "10:35"], [3.6, "theo", "So we can't cache them the same way.", "10:35"],
+  [4.8, "you", "Let's look at the cache key.", "10:36"], [6.0, "nadia", "I'll come by your desk with Toby.", "10:36"], [7.1, "theo", "Thanks, all. Talk tomorrow.", "10:36"],
+  [12.0, "nadia", "The region has to be in the key first.", "10:38"], [13.4, "toby", "Then logged-in users ship first.", "10:38"], [14.8, "nadia", "I'll check the cache key today.", "10:39"]];
+const SAY = 1.0;                                                       // how long a line takes to say, before it lands
+const TALK = { nadia: [[11.0, 12.0], [13.8, 14.8]], toby: [[12.4, 13.4]] };   // in the room: Nadia came over, with Toby
+const move = t => inout(span(t, ENDCALL + .3, ENDCALL + 1.1));
+const sbRect = t => { const g = move(t); return { x: lerp(SB0.x, SB1.x, g), y: SB0.y, w: lerp(SB0.w, SB1.w, g), h: SB0.h } };
+const LEAVE = { x: CALLW.x + CALLW.w / 2 + 34, y: CALLW.y + CALLW.h - 64, w: 60, h: 36 };
+const talking = (who, t) => (TALK[who] || []).reduce((m, [a, b]) => Math.max(m, span(t, a, a + .15) * (1 - span(t, b - .15, b))), 0);
+const clock = t => { const s = 362 + t * 9; return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(Math.floor(s % 60)).padStart(2, "0") };
+// ---- on the screen ---------------------------------------------------------------------------------------------------
+function menubar(t) {
+  return box(SD.x, SD.y, SD.w, MB, 0, DARK ? "#26262f" : "#f2f2f6") + ui(SD.x + 22, SD.y + 21, t < ENDCALL + .1 ? "Video call" : "Standby", 16, { fill: C.ink, weight: 700 }) +
+    ui(SD.x + SD.w - 20, SD.y + 21, t < 10 ? "Mon 10:36 AM" : "Mon 10:38 AM", 16, { fill: C.ink, anchor: "end", weight: 600 });
+}
+function win(r, title) {                                              // a window: shadow, frame, its three lights
+  return `<rect x="${r.x}" y="${r.y + 12}" width="${r.w}" height="${r.h}" rx="14" fill="#1e1a50" opacity="${DARK ? .45 : .16}" filter="url(#soft)"/>` +
+    box(r.x, r.y, r.w, r.h, 14, title === "call" ? "#1f1f26" : C.win, { stroke: title === "call" ? "none" : C.line }) +
+    [0, 1, 2].map(i => `<circle cx="${r.x + 22 + i * 22}" cy="${r.y + 22}" r="7" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("");
+}
+function call(t) {
+  const k = 1 - span(t, ENDCALL + .1, ENDCALL + .4); if (k <= 0) return "";
+  const r = CALLW, tiles = [["N", "#3d4659", "Nadia"], ["T", "#3b4d4c", "Theo"], ["J", "#4d3f3b", "Jules"], ["Y", "#48425c", "You"]];
+  const now = LINES.reduce((m, [a, who]) => t > a - .45 && a < 8 ? who : m, ""), on = { nadia: 0, theo: 1, you: 3 }[now];
+  let g = win(r, "call") + ui(r.x + r.w / 2, r.y + 28, "Design sync", 16, { anchor: "middle", fill: "#c9c9d6", weight: 600 });
+  const tw = (r.w - 54) / 2, th = (r.h - 150) / 2;
+  tiles.forEach(([i, c, n], j) => {
+    const tx = r.x + 18 + (j % 2) * (tw + 18), ty = r.y + 50 + Math.floor(j / 2) * (th + 14);
+    g += box(tx, ty, tw, th, 12, c, { stroke: j === on && t > 2 && t < 7.8 ? "#7fd1a8" : "none", sw: 4 }) + `<circle cx="${tx + tw / 2}" cy="${ty + th / 2 - 8}" r="46" fill="rgba(255,255,255,.14)"/>` +
+      ui(tx + tw / 2, ty + th / 2 + 6, i, 38, { anchor: "middle", fill: "#fff", weight: 700 }) + ui(tx + 14, ty + th - 14, n, 19, { fill: "#e6e6ee", weight: 600 });
+  });
+  const pressed = Math.max(0, 1 - Math.abs(t - ENDCALL) / .15);
+  g += box(r.x + r.w / 2 - 110, r.y + r.h - 72, 220, 52, 26, "rgba(255,255,255,.1)") + `<circle cx="${r.x + r.w / 2 - 56}" cy="${r.y + r.h - 46}" r="15" fill="rgba(255,255,255,.2)"/>` +
+    `<circle cx="${r.x + r.w / 2 - 12}" cy="${r.y + r.h - 46}" r="15" fill="rgba(255,255,255,.2)"/>` + box(LEAVE.x, LEAVE.y, LEAVE.w, LEAVE.h, 18, pressed > 0 ? "#b8343a" : "#e5484d");
+  return `<g opacity="${fo(k)}" transform="translate(0 ${f((1 - k) * 20)})">${g}</g>`;
+}
+function standby(t) {
+  const k = out(span(t, .6, 1.2)); if (k <= 0) return "";
+  const lines = LINES.map(([a, who, s, ts]) => ({ at: a, ts, who: P[who][0], col: P[who][1], text: s, known: who !== "you", call: a < ENDCALL && who !== "you" }));
+  const now = LINES.find(([a]) => t > a - SAY && t < a), live = now ? { who: P[now[1]][0], text: now[2], from: now[0] - SAY, to: now[0] } : null;
+  return `<g opacity="${fo(k)}" transform="translate(${f((1 - k) * 60)} 0)">` +
+    meetingWin(sbRect(t), t, { title: "Design sync", clock: clock(t), started: "Started 10:30 AM", lines, live, rowh: 78 }) + "</g>";
+}
+function desktop(t) {                                                 // everything on the screen, in the screen's own place
+  const wall = `<rect x="${SD.x}" y="${SD.y}" width="${SD.w}" height="${SD.h}" fill="${DARK ? "#262338" : "#e9e7f2"}"/>`;
+  const K = [[0, 900, 620], [7.3, 900, 620], [7.8, ...mid(LEAVE)], [8.1, ...mid(LEAVE)], [8.8, 1240, 760], [DUR, 1240, 760]];
+  return wall + call(t) + standby(t) + menubar(t) + pointerAt(t, K, [ENDCALL], out(span(t, 6.8, 7.2)) * (1 - span(t, 8.6, 9.0)));
+}
+// ---- the room: the laptop on a table, two people beside it (Nadia, who was on the call, and Toby: both voices named in
+// earlier meetings, so they're known by name, the dotted underline) -----------------------------------------------------------
+function room(t) {
+  const k = out(span(t, 10.0, 10.8)); if (k <= 0) return { back: "", front: "" };
+  const a = { x: 150 - (1 - k) * 260, y: 470 }, b = { x: 1450 + (1 - k) * 260, y: 470 }, t3 = talking("toby", t), t4 = talking("nadia", t);
+  return {
+    back: `<g opacity="${fo(k)}">` + human(a.x, a.y, { skin: "#e8b894", hair: "#2b2b3a", shirt: "#e9a23b", look: 1, talk: t3 }, t) +
+      human(b.x, b.y, { skin: "#c98f6b", hair: "#3b2a22", shirt: "#5b8def", look: -1, long: true, talk: t4 }, t) + "</g>",
+    front: voice(a.x + 66, a.y + 20, 1, P.toby[1], t3, t) + voice(b.x - 66, b.y + 20, -1, P.nadia[1], t4, t) +
+      tag(a.x, a.y - 96, "Toby", P.toby[1], out(span(t, 13.4, 13.7)) * k) + tag(b.x, b.y - 96, "Nadia", P.nadia[1], out(span(t, 12.0, 12.3)) * k)
+  };
+}
+
+function film(t) {
+  let g = `<rect width="1600" height="900" fill="${PAPER}"/>`;
+  const cap = captions(t, [[.3, 3.2, "A call is on. Standby is listening."], [3.4, 7.8, "It hears the call's own sound. No bot joins."],
+    [8.0, 11.6, "The call ends. The talk goes on in the room."], [11.8, 16.0, "It's all one transcript."], [16.2, DUR - .3, "Ask your Claude Code about any of it."]]);
+  const z = inout(span(t, Z0, Z1)), sc = lerp(1, SL.w / SD.w, z), sx = lerp(SD.x, SL.x, z), sy = lerp(SD.y, SL.y, z), sw = SD.w * sc, sh = SD.h * sc;
+  const r = room(t), lap = span(z, .4, 1);
+  g += r.back;
+  if (lap > 0) g += `<g opacity="${fo(lap)}">` + box(0, TABLE, 1600, 900 - TABLE, 0, DARK ? "#2a2836" : "#eee7da") + `<line x1="0" y1="${TABLE}" x2="1600" y2="${TABLE}" stroke="${DARK ? "#3a3848" : "#ddd3c2"}" stroke-width="3"/>` +
+    `<path d="M${SL.x - 100} ${SL.y + SL.h + 16} H${SL.x + SL.w + 100} L${SL.x + SL.w + 74} ${TABLE} H${SL.x - 74} Z" fill="${DARK ? "#3a3a4c" : "#d4d3df"}"/>` +
+    box(SL.x + SL.w / 2 - 80, SL.y + SL.h + 16, 160, 7, 3, DARK ? "#2a2a38" : "#bdbccb") + "</g>";
+  const bz = lerp(14, 16, z);
+  g += box(sx - bz, sy - bz, sw + 2 * bz, sh + 2 * bz, lerp(26, 22, z), "#1b1a2e") + `<clipPath id="scr"><rect x="${f(sx)}" y="${f(sy)}" width="${f(sw)}" height="${f(sh)}" rx="10"/></clipPath>` +
+    `<g clip-path="url(#scr)"><g transform="translate(${f(sx)} ${f(sy)}) scale(${sc.toFixed(4)}) translate(${-SD.x} ${-SD.y})">${desktop(t)}</g></g>`;
+  return g + r.front + cap;
+}
+play(film);
+</script>
+</body>
+</html>

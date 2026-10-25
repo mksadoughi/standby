@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Standby companion</title>
+<!--
+  The companion: a call in a corner (the orb is for calls only, never a meeting). Two
+  small windows from mac/native/macos/companion.py, each hugging what it holds:
+    /companion        the orb's window, the anchor: the orb, and its controls on hover
+    /companion#words  the words' window, its child: only a mic macOS refuses, said
+  the orb's window is one fixed size while live and never animates; the page grows the
+  orb by transform from its corner (26 at rest, 40 pointed at, 72 talking) and slides its
+  buttons in beside it. Clicks outside the hit areas pass to the app beneath.
+  Opened anywhere else (ui_preview), it draws a stand-in for the glass.
+  Native → page: edge("left"|"right", "top"|"bottom"), hover(bool).
+  Page → native, through messageHandlers.sb:
+    {type:"orb", w, h, glyph, inset, glass:{x, y, w, h, radius}|null}  x from the inner side
+    {type:"hit", areas:[{x, y, r} | {x, y, w, h, radius}]}           page px from the top left
+    {type:"words", w, h, radius, ms}                                 w: 0 hides; radius null: no glass
+    {type:"menu", x, y}, {type:"expand"}, {type:"end"}, {type:"settings", pane}
+-->
+<style>
+:root{--c-rec:#e5484d;--c-text:#1d1d1f;--c-muted:#6e6e73;--c-hover:rgba(0,0,0,.06);--c-press:rgba(0,0,0,.1);
+--c-attn:#f5a524;--c-surface:rgba(252,252,252,.92);--c-edge:rgba(0,0,0,.09);
+--c-shadow:0 10px 30px rgba(0,0,0,.16),0 1px 3px rgba(0,0,0,.12);--c-ring:rgba(80,70,229,.6);--orb:88px;--ox:100%;--oy:100%;
+--c-cap:rgba(246,246,250,.8);--c-you:#55556a;--c-claude:#3a30c8;
+--c-pz:radial-gradient(circle at 34% 28%,#f0f0f0 0%,#d2d2d2 38%,#bababa 75%,#b0b0b0 100%);--c-pzbar:rgba(255,255,255,.92);
+--c-down:radial-gradient(circle at 34% 28%,#e6e6e6 0%,#b0b0b0 38%,#828282 75%,#707070 100%)}
+@media (prefers-color-scheme:dark){:root{--c-rec:#ff5f63;--c-text:#f2f2f4;--c-muted:#a1a1a6;--c-hover:rgba(255,255,255,.08);
+--c-press:rgba(255,255,255,.14);--c-surface:rgba(36,36,38,.9);--c-edge:rgba(255,255,255,.1);
+--c-shadow:0 10px 30px rgba(0,0,0,.45),0 1px 3px rgba(0,0,0,.4);--c-ring:rgba(143,134,255,.75);
+--c-cap:rgba(34,34,46,.72);--c-you:#c9c9d6;--c-claude:#c3bfff;
+--c-pz:radial-gradient(circle at 34% 28%,#5c5c5c 0%,#3e3e3e 38%,#262626 75%,#1b1b1b 100%);--c-pzbar:rgba(255,255,255,.4);
+--c-down:radial-gradient(circle at 34% 28%,#a6a6a6 0%,#707070 38%,#424242 75%,#303030 100%)}}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden}
+body{font:500 13px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;color:var(--c-text);
+-webkit-user-select:none;user-select:none;cursor:default;-webkit-font-smoothing:antialiased}
+body:not(.r){--ox:0%}[data-v=top]{--oy:0%}
+
+/* the orb's window: one size while live; the orb pinned 12 in from the corner, the pill beside it */
+.cmp{position:fixed;right:0;bottom:0;width:var(--w,360px);height:var(--h,112px)}
+body:not(.r) .cmp{right:auto;left:0}
+[data-v=top] .cmp{bottom:auto;top:0}
+.cmp button{all:unset;position:relative;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;
+flex:none;color:var(--c-muted);transition:background .12s,color .12s,transform .12s}
+.cmp button:hover{background:var(--c-hover);color:var(--c-text)}
+.cmp button:active{background:var(--c-press);transform:scale(.94)}
+.cmp button:focus-visible{outline:2px solid rgba(80,70,229,.55);outline-offset:1px}
+.cmp button:disabled{opacity:.35}.cmp button:disabled:hover{background:none;color:var(--c-muted)}
+/* the mini window's buttons, words only: End in red */
+.cmp button.lab{width:auto;height:32px;padding:0 11px;gap:4px;border-radius:16px;color:var(--c-text);font:500 13px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;white-space:nowrap}
+.cmp button.lab:hover{color:var(--c-text)}
+/* End: the red hang-up phone, its word in the tip */
+.cmp button.hang{color:var(--c-rec)}.cmp button.hang:hover{color:var(--c-rec);background:color-mix(in srgb,var(--c-rec) 14%,transparent)}
+/* the buttons, on their own glass, beside the orb. The glass is the panel's and brings its own
+   edge: the page draws nothing past the pill or the orb, as the window's edge would cut it into
+   a faint rectangle (the user's screen).
+   pointed at, the orb stays as it is and the pill rolls out from under it. The pill rides
+   a rail that ends at the orb's centre and lies under the orb: shut, it waits behind the orb;
+   out, it slides to its place, its outer end round and its inner end running on under the orb
+   to its centre, so the menu reads as sliding out of the mini window (the user, 2026-10-23). */
+.rail{position:absolute;right:calc(12px + var(--g) / 2);bottom:calc(12px + var(--g) / 2 - 20px);width:calc(var(--w) - 12px - var(--g) / 2);height:40px;
+overflow:hidden;pointer-events:none;z-index:0;transition:right .32s cubic-bezier(.23,1,.32,1),bottom .32s cubic-bezier(.23,1,.32,1),width .32s cubic-bezier(.23,1,.32,1)}
+body:not(.r) .rail{right:auto;left:calc(12px + var(--g) / 2);transition-property:left,bottom,width}
+[data-v=top] .rail{bottom:auto;top:calc(12px + var(--g) / 2 - 20px);transition-property:right,top,width}
+body:not(.r)[data-v=top] .rail{transition-property:left,top,width}
+.ctls{position:absolute;top:0;right:0;display:flex;flex-direction:row;align-items:center;gap:2px;height:40px;padding:0 calc(var(--g) / 2 + 10px) 0 3px;
+box-sizing:border-box;border-radius:20px;pointer-events:auto;transform:translateX(var(--shut,200px));
+transition:transform .26s cubic-bezier(.5,0,.75,0),padding .32s cubic-bezier(.23,1,.32,1)}
+.rail.out .ctls{transform:none;transition:transform .34s cubic-bezier(.23,1,.32,1),padding .32s cubic-bezier(.23,1,.32,1)}
+body:not(.r) .ctls{right:auto;left:0;padding:0 3px 0 calc(var(--g) / 2 + 10px);transform:translateX(calc(-1 * var(--shut,200px)))}
+body:not(.r) .rail.out .ctls{transform:none}
+.ctls:empty{visibility:hidden}
+
+/* the orb is Claude: a click starts voice mode, another ends it. Its box is always the full
+   88, pinned to the corner; it shows at 52 or 88 by one transform from that corner. */
+.cmp button.talk{position:absolute;right:12px;bottom:12px;width:var(--orb);height:var(--orb);border-radius:50%;pointer-events:none;z-index:1}
+.cmp button.talk:hover,.cmp button.talk:active{background:none;transform:none}
+body:not(.r) .cmp button.talk{right:auto;left:12px}
+[data-v=top] .cmp button.talk{bottom:auto;top:12px}
+.orbs{position:absolute;inset:0;transform:scale(var(--k,.591));transform-origin:var(--ox) var(--oy);transition:transform .32s cubic-bezier(.23,1,.32,1);pointer-events:auto;border-radius:50%}
+.orb{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;height:100%;border-radius:50%;
+transform:scale(var(--lv,1));transition:transform .1s linear;
+background:radial-gradient(circle at 34% 28%,#d9d6ff 0%,#8f86ff 38%,#5046e5 75%,#3b2fc0 100%);
+box-shadow:0 0 8px rgba(80,70,229,.45),0 1px 2px rgba(30,20,120,.25),inset -8px -10px 20px rgba(30,20,120,.35)}
+/* its glow stays inside the 12 around it at every size, even grown with your voice: past the
+   window's edge it would be cut straight */
+/* C · Wave: the sound inside, three bars. At rest the logo's, bold enough to read at 26;
+   talking, finer, and they move: with you listening, in a slow ripple thinking, quick speaking */
+/* each bar its own layer: in the panel, a bar that shrank into a dot left its old pixels painted under the
+   dots (thinking over listening), as WebKit doesn't clear them in the shared one there */
+.orb i{display:block;flex:none;width:10px;height:18px;border-radius:5px;background:rgba(255,255,255,.92);will-change:transform;
+transition:width .32s cubic-bezier(.23,1,.32,1),height .32s cubic-bezier(.23,1,.32,1)}
+.orb i:nth-child(2){height:35px}.orb i:nth-child(3){height:24px}
+.cmp.voice .orb i{width:7px;height:13px}.cmp.voice .orb i:nth-child(2){height:20px}
+.talk:active .orb{filter:brightness(.93)}
+.cmp.idle .orb{filter:grayscale(1);opacity:.55}
+/* The five states (the user, 2026-10-11), each its own motion, not just its own speed:
+   listening, nothing heard: the bars barely move, slowly; hearing you: as before, with you;
+   thinking: three dots rising in turn; Claude talking: quick bars and rings going out;
+   off: three flat dashes, grey. */
+.cmp.listening .orb i{animation:calm 2.8s ease-in-out infinite}.cmp.listening .orb i:nth-child(2){animation-delay:-.9s}.cmp.listening .orb i:nth-child(3){animation-delay:-1.8s}
+.cmp.listening.hearing .orb i{animation:bar 1s ease-in-out infinite}.cmp.listening.hearing .orb i:nth-child(2){animation-delay:-.35s}.cmp.listening.hearing .orb i:nth-child(3){animation-delay:-.7s}
+.cmp.thinking .orb i:nth-child(n),.cmp.starting .orb i:nth-child(n){width:10px;height:10px;border-radius:50%;animation:dot 1.25s ease-in-out infinite}
+.cmp.thinking .orb i:nth-child(2),.cmp.starting .orb i:nth-child(2){animation-delay:.16s}.cmp.thinking .orb i:nth-child(3),.cmp.starting .orb i:nth-child(3){animation-delay:.32s}
+.cmp.speaking .orb{animation:speak 1.05s ease-in-out infinite}
+.cmp.speaking .orb i{animation:bar .5s ease-in-out infinite}.cmp.speaking .orb i:nth-child(2){animation-delay:-.15s}.cmp.speaking .orb i:nth-child(3){animation-delay:-.3s}
+.rp{position:absolute;inset:0;border-radius:50%;box-shadow:0 0 0 2px rgba(80,70,229,.55);opacity:0;pointer-events:none}
+/* Halo (the user's pick, 2026-10-12): the orb stays Standby's indigo, and a soft glow around it
+   says the state: faint indigo listening, cyan with your voice, a turning rainbow thinking,
+   violet while Claude talks. It stays inside the 12 around the orb, grown with your voice too. */
+.halo{position:absolute;inset:-4px;border-radius:50%;filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .35s}
+.cmp.listening .halo{background:#5046e5;animation:hbreathe 3.6s ease-in-out infinite}
+.cmp.listening.hearing .halo{background:#22d3ee;animation:none;opacity:calc(.2 + .7 * var(--hl,0));transform:scale(calc(1 + .05 * var(--hl,0)))}
+.cmp.thinking .halo,.cmp.starting .halo{background:conic-gradient(#5046e5,#8b5cf6,#ec4899,#f59e0b,#22d3ee,#5046e5);opacity:.9;animation:spin 2.4s linear infinite}
+.cmp.speaking .halo{background:#a855f7;animation:hbreathe2 1.05s ease-in-out infinite}
+.cmp.speaking .rp{box-shadow:0 0 0 2px rgba(168,85,247,.55)}
+.cmp.holding .halo,.cmp.muted .halo,.cmp.paused .halo,.cmp.down .halo{display:none}
+@keyframes hbreathe{0%,100%{opacity:.18}50%{opacity:.4}}
+@keyframes hbreathe2{0%,100%{opacity:.45}50%{opacity:.8}}
+/* listening, the two outer bars are eyes that blink now and then (the user: "just for cuteness") */
+.cmp.listening:not(.hearing).blink .orb i:nth-child(1),.cmp.listening:not(.hearing).blink .orb i:nth-child(3){animation:blink .17s ease-in-out 1}
+@keyframes blink{0%,100%{transform:scaleY(1)}45%{transform:scaleY(.12)}}
+.cmp.speaking .rp{animation:ripple 1.8s ease-out infinite}.cmp.speaking .rp+.rp{animation-delay:.9s}
+/* paused, and Claude out of reach: grey, as the ball was at .42 and .75 over the screen, but opaque, so
+   the pill tucked under it never shows through */
+.cmp.muted .orb,.cmp.paused .orb{filter:grayscale(1);background:var(--c-pz)}
+.cmp.muted .orb i,.cmp.paused .orb i{background:var(--c-pzbar)}
+.cmp.idle .orb i:nth-child(n),.cmp.muted .orb i:nth-child(n),.cmp.paused .orb i:nth-child(n){height:7px;animation:none}
+.cmp.holding .orb i:nth-child(n){animation:none;width:7px;height:13px;border-radius:5px;opacity:1;transform:none}.cmp.holding .orb i:nth-child(2){height:20px}.cmp.holding .orb{filter:saturate(.75) brightness(1.04)}
+/* Claude can't be reached: no words, the orb grey with a small red dot at its edge; the line on hover */
+.cmp.down .orb{filter:grayscale(1);background:var(--c-down)}
+.cmp.down .orbs:after{content:"";position:absolute;top:4%;right:4%;width:24%;height:24%;border-radius:50%;background:var(--c-rec)}
+/* a paused call with finished work held for it: a small bell at the orb's edge (the user), in the
+   same red, with a light rim so it reads on the grey orb, until Resume says it */
+.cmp.waiting .orbs:after{content:"";position:absolute;top:-1%;right:-1%;width:32%;height:32%;background:var(--c-rec);
+-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6v-5a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-1.7 1.7a.75.75 0 0 0 .5 1.3h16.4a.75.75 0 0 0 .5-1.3z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6v-5a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-1.7 1.7a.75.75 0 0 0 .5 1.3h16.4a.75.75 0 0 0 .5-1.3z'/%3E%3C/svg%3E") center/contain no-repeat;
+filter:drop-shadow(0 0 1.2px #fff) drop-shadow(0 0 .6px #fff)}
+/* tilted, as a bell ringing (the user, 2026-10-23), its top leaning out from the mini window */
+.cmp.waiting .orbs:after{transform:rotate(15deg)}
+body:not(.r) .cmp.down .orbs:after{right:auto;left:4%}body:not(.r) .cmp.waiting .orbs:after{right:auto;left:-1%;transform:rotate(-15deg)}
+/* Standby's voice fetched the first time: a thin ring fills around the orb; no words, its percent on hover */
+.cmp.prep .orbs:before{content:"";position:absolute;inset:-7px;border-radius:50%;
+background:conic-gradient(var(--c-ring) calc(var(--pp,25) * 1%),rgba(80,70,229,.14) 0);
+-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2.5px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 2.5px))}
+.cmp.prep.unknown .orbs:before{animation:spin 1.6s linear infinite}
+.cmp.prep .orb:after{display:none}
+@keyframes spin{to{transform:rotate(1turn)}}
+@keyframes bar{0%,100%{height:12px}50%{height:33px}}
+@keyframes calm{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.2)}}
+@keyframes dot{0%,70%,100%{opacity:.45;transform:none}35%{opacity:1;transform:translateY(-6px)}}
+/* out to 1.22: still inside the 12 around the orb, so never cut by the window's edge */
+@keyframes ripple{from{transform:scale(1);opacity:.7}to{transform:scale(1.22);opacity:0}}
+@keyframes speak{0%,100%{transform:scale(1)}26%{transform:scale(1.07)}58%{transform:scale(.98)}82%{transform:scale(1.04)}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+/* a passing message, like "Standby isn't answering" */
+.txt{padding:0 6px;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;color:var(--c-muted);font-weight:400}
+
+/* the words' window, hugging its text: on a call only a mic macOS refuses is said */
+.says{position:fixed;right:0;bottom:0;box-sizing:border-box;width:max-content;max-width:300px;padding:8px 14px;
+font:400 15px/21px ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;text-align:right;
+display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+body:not(.r) .says{right:auto;left:0;text-align:left}
+[data-v=top] .says{bottom:auto;top:0}
+.says p{margin:0;color:var(--c-claude)}
+.says p.warn{color:var(--c-attn)}
+.says p.in{animation:fadein .34s ease both}
+
+/* outside the panel (a preview), a stand-in for the glass and its shadow; the orb's canvas
+   clips as its window does, so a preview shows anything the window's edge would cut */
+.preview .cmp,.preview .says{margin:16px}
+.preview .cmp{overflow:hidden}
+.preview .ctls{background:var(--c-surface);box-shadow:0 1px 4px rgba(0,0,0,.14),inset 0 0 0 .5px var(--c-edge)}
+.preview .says{background:var(--c-cap);-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6)}
+.preview .says{border-radius:14px}
+@media (prefers-reduced-motion:reduce){.orb,.orb i,.orbs,.rail,.ctls,.says p{animation:none!important;transition:none!important}}
+.cmp .orb{cursor:default}
+</style></head><body>
+<div class="cmp idle" id="cmp" style="display:none"></div>
+<div class="says" id="says" style="display:none" aria-live="polite"><p id="sp"></p></div>
+<script>
+const SB = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.sb;
+const post = m => { if (SB) SB.postMessage(m) };
+if (!SB) document.documentElement.classList.add("preview");
+const WORDS = location.hash === "#words", $ = id => document.getElementById(id);
+// The orb's size in voice mode and at rest; its window is 24 more.
+const ORB = 88, REST = 52, INSET = 12, W = 360, H = 112, PH = 40, GAP = 10;
+document.documentElement.style.setProperty("--orb", ORB + "px");
+document.documentElement.style.setProperty("--w", W + "px");
+document.documentElement.style.setProperty("--h", H + "px");
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const SBT = "__SB_TOKEN__";        // this launch's token (the app puts it here): every request carries it
+async function api(p, body) { const r = await fetch(p, body !== undefined ? { method: "POST",
+  headers: { "Content-Type": "application/json", "X-Standby-Token": SBT }, body: JSON.stringify(body) } : { headers: { "X-Standby-Token": SBT } }); return r.json() }
+
+let C = null, open = false, busy = null, flash = "", lastSize = "", hoverT = null;
+const VOICE = ["starting", "listening", "thinking", "speaking", "muted", "paused"];
+// Listening: nothing heard yet, or hearing you (your voice above this level, then 0.7 s more)
+const HEARD = 0.02; let heardAt = 0;
+
+function now() {
+  const l = C && C.live, v = C && C.voice || { state: "off" };
+  const vs = VOICE.includes(v.state) ? v.state : busy ? "starting" : (C && C.starting ? "starting" : null);
+  return { l, v, vs };
+}
+function render() {
+  if (WORDS) return words();
+  const { l, v, vs } = now(), el = $("cmp");
+  const state = vs || (l ? "recording" : "idle");
+  const pp = v.preparing_pct != null ? v.preparing_pct : v.preparing && /(\d+)%/.test(v.preparing) ? +/(\d+)%/.exec(v.preparing)[1] : null;
+  const down = C && C.claude_error, orbTip = down ? down.text + " " + down.fix
+    : vs && v.preparing ? "Getting Standby's voice ready" + (pp === null ? "…" : ", " + pp + "%") + ". Your Mac's voice speaks meanwhile"
+    : vs ? (vs === "muted" || v.muted ? (v.waiting ? "Paused. Something's waiting: click to resume and hear it" : "Paused. Click to go on with the call") : "Click to pause the call" + (l && l.call ? " with " + l.call.name : ""))
+    : l ? "Talk to Claude" : "";
+  // The mini window's three (the user, 2026-10-23): Full window and Settings in words, then End as
+  // the red hang-up phone. A click on the mini window itself pauses and resumes.
+  const B = (label, fn) => `<button class="lab" onclick="${fn}">${label}</button>`;
+  const btns = !open ? "" : B("Full window", "full()") + B("Settings", "callSettings()") +
+    `<button class="hang" title="End" aria-label="End" onclick="end()"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-3.2 0-6.2.9-8.6 2.6a1.6 1.6 0 0 0-.6 1.8l.7 2a1.3 1.3 0 0 0 1.6.8l3.2-1a1.3 1.3 0 0 0 .9-1.1l.2-1.6a12 12 0 0 1 5.2 0l.2 1.6a1.3 1.3 0 0 0 .9 1.1l3.2 1a1.3 1.3 0 0 0 1.6-.8l.7-2a1.6 1.6 0 0 0-.6-1.8C18.2 9.9 15.2 9 12 9z"/></svg></button>`;
+  const fl = flash ? `<span class="txt">${esc(flash)}</span>` : "";
+  const inner = fl + btns;
+  // The orb and the rail are built once and kept, so the orb's motion runs on and the pill can
+  // roll; what changes is their classes, the orb's tip and what the pill holds.
+  if (!el.firstChild) el.innerHTML = '<button class="talk" onclick="orb()"><span class="orbs"><span class="halo"></span><span class="orb" id="orb"><i></i><i></i><i></i></span><span class="rp"></span><span class="rp"></span>' +
+    '</span></button><span class="rail"><span class="ctls"></span></span>';
+  if (vs === "listening" && (v.level || 0) > HEARD) heardAt = Date.now();
+  const hearing = vs === "listening" && Date.now() - heardAt < 700;
+  const cls = "cmp " + state + (vs ? " voice" : "") + (blinking ? " blink" : "") + (hearing ? " hearing" : "") + (v.holding ? " holding" : "") + (down ? " down" : "") +
+    ((vs === "muted" || v.muted) && v.waiting ? " waiting" : "") +
+    (vs && v.preparing ? " prep" + (pp === null ? " unknown" : "") : "");
+  if (el.className !== cls) el.className = cls;
+  const t = el.querySelector(".talk");
+  if (t && t.title !== orbTip) { t.title = orbTip; t.ariaLabel = orbTip || "Claude" }
+  el.style.display = "";
+  // The orb's size: 52 at rest, pointed at or not, 88 talking.
+  const g = vs ? ORB : REST, r_ = document.body.classList.contains("r"), top = document.body.dataset.v === "top";
+  el.style.setProperty("--k", (g / ORB).toFixed(4));
+  el.style.setProperty("--g", g + "px");
+  const rail = el.querySelector(".rail"), c = el.querySelector(".ctls");
+  if (rail && c) pillTo(rail, c, inner, g);
+  el.style.setProperty("--pp", pp === null ? 25 : Math.max(3, pp));
+  const lv = vs === "listening" ? Math.min(1, Math.sqrt((v.level || 0) * 5)) : 0;
+  $("orb").style.setProperty("--lv", (1 + lv * .06).toFixed(3)); el.style.setProperty("--hl", lv.toFixed(2));
+  size(el, g, inner && c ? c : null, r_, top);
+}
+// The pill: out with what it holds, or rolling back under the orb, its last content kept until
+// it is gone. Shut, it waits behind the orb, its inner edge at the orb's centre less 20.
+let shown = "", shutT = null;
+function pillTo(rail, c, inner, g) {
+  if (inner && inner !== shown) { c.innerHTML = inner; shown = inner }
+  const pw = shown ? Math.ceil(c.offsetWidth) : 0;
+  c.style.setProperty("--shut", (pw - PH / 2) + "px");      // pw runs on to the orb's centre
+  const out = !!inner;
+  if (out === rail.classList.contains("out")) return;
+  clearTimeout(shutT);
+  if (out) { void c.offsetWidth; rail.classList.add("out") }
+  else { rail.classList.remove("out"); shutT = setTimeout(() => { if (!rail.classList.contains("out")) { c.innerHTML = ""; shown = "" } }, 300) }
+}
+// The orb's window: one size while live, so it never animates. Where things will be is
+// worked out from the sizes, not measured, since they're mid-transition when this runs.
+let lastHit = "";
+function size(el, g, c, r_, top) {
+  // the pill runs from its round outer end to the orb's centre (its inner end hidden under the orb)
+  const pw = c ? Math.ceil(c.offsetWidth) : 0, px = INSET + g / 2, py = top ? INSET + g / 2 - PH / 2 : H - INSET - g / 2 - PH / 2;
+  // the pill, in page px from the window's top left; glass is the same rect from the inner side
+  const pill = pw ? { x: r_ ? W - px - pw : px, y: py, w: pw, h: PH, radius: PH / 2 } : null;
+  const glass = pill ? { x: W - px - pw, y: py, w: pw, h: PH, radius: PH / 2 } : null;
+  // where the glass rolls out from and back to: a circle under the orb's centre
+  const under = { x: W - INSET - g / 2 - PH / 2, y: py, w: PH, h: PH, radius: PH / 2 };
+  const m = { type: "orb", w: W, h: H, glyph: g, inset: INSET, glass, under, ms: glass ? 340 : 260 }, k = JSON.stringify(m);
+  if (k !== lastSize) { lastSize = k; post(m) }
+  const cx = r_ ? W - INSET - g / 2 : INSET + g / 2, cy = top ? INSET + g / 2 : H - INSET - g / 2;
+  const hit = { type: "hit", areas: [{ x: cx, y: cy, r: g / 2 }].concat(pill ? [pill] : []) }, hk = JSON.stringify(hit);
+  if (hk !== lastHit) { lastHit = hk; post(hit) }
+}
+
+// The words' window: on a call, just the orb (the user: "just the orb itself"); its state is in its
+// animation, with no time, captions or working line. Only a mic macOS refuses is said: the call can't
+// hear you then.
+let lastW = "";
+function words() {
+  const l = C && C.live, box = $("says"), p = $("sp");
+  const text = l && l.mic_denied ? "Your mic isn't allowed" : "";
+  if (!text) {
+    box.style.display = "none"; p.textContent = "";
+    if (lastW !== "0") { lastW = "0"; post({ type: "words", w: 0, h: 0, radius: null, ms: 180 }) }
+    return;
+  }
+  if (text !== p.textContent) { p.textContent = text; p.className = "warn"; void p.offsetWidth; p.className = "warn in" }
+  box.style.display = ""; box.style.minWidth = "";
+  const r = box.getBoundingClientRect();
+  // The window hugs the text in steps of 8, so it breathes rather than twitching per word.
+  const w = Math.min(300, Math.max(90, Math.ceil(r.width / 8) * 8)), h = Math.ceil(r.height);
+  box.style.minWidth = w + "px";
+  if (w + "x" + h !== lastW) { lastW = w + "x" + h; post({ type: "words", w, h, radius: 14, material: "soft", ms: 180 }) }
+}
+
+// What the panel and its menu call.
+// The corner it sits nearest: the controls grow away from h, the words open away from v.
+window.edge = (h, v) => { document.body.classList.toggle("r", h === "right"); document.body.dataset.v = v || ""; lastSize = ""; lastHit = ""; lastW = ""; render() };
+
+// The controls.
+async function orb() {
+  const { l, vs } = now();
+  if (!l) return;                  // the orb is the live call's: it never starts one
+  if (C && C.claude_error && !vs) return post({ type: "expand" });   // Claude can't be reached: Standby says why, and how
+  // A click pauses the call (muted, so the user can type to Claude Code) or goes on; End is
+  // deliberate, a button beside it.
+  if (vs && vs !== "starting") return mute(!(vs === "muted" || now().v.muted));
+  if (vs || busy) return;
+  busy = "start"; render();
+  try {
+    const r = await api("/api/voice", { id: l.id, action: "start" });
+    if (r.error) say(r.error);
+  } catch (e) { say("Standby isn't answering") }
+  busy = null; poll(true);
+}
+async function mute(on) { const { l } = now(); if (l) await api("/api/voice", { id: l.id, action: on ? "mute" : "unmute", from: "mini window" }); poll(true) }
+async function menu(x, y) { post({ type: "menu", x, y }) }
+// End: as the menu's End Call (the panel says so and goes); Full window: Standby's window, at the call
+function end() { if (now().l) post({ type: "end" }) }
+function full() { post({ type: "expand" }) }
+// Settings: Standby's Settings, straight on its Call pane (the voice and its model)
+function callSettings() { post({ type: "settings", pane: "call" }) }
+function say(t) { flash = t.length > 40 ? t.slice(0, 39) + "…" : t; render(); setTimeout(() => { flash = ""; render() }, 2500) }
+
+// Hover: the pill comes after 120 ms and goes 600 ms after the pointer leaves. Over other apps
+// only the panel sees the pointer (judged against the hit areas), so hover() is what counts;
+// the page's own events do the same in a preview, or while Standby itself is in front.
+let want = false;
+function hover(on) { on = !!on; if (on === want) return; want = on; clearTimeout(hoverT);
+  hoverT = setTimeout(() => { if (open !== want) { open = want; render() } }, on ? 120 : 600) }
+window.hover = hover;
+if (!WORDS) {
+  const pill = $("cmp");
+  pill.addEventListener("mouseover", e => { if (e.target.closest && e.target.closest(".orbs,.ctls")) hover(true) });
+  pill.addEventListener("mouseleave", () => hover(false));
+  pill.addEventListener("dblclick", e => { if (!e.target.closest("button")) post({ type: "expand" }) });
+  document.addEventListener("contextmenu", e => { e.preventDefault(); menu(e.clientX, e.clientY) });
+}
+
+// One endpoint, read by both windows: every second, and quickly while voice mode is on.
+// The eyes' blinks: every 2.2 to 7 s, a fifth of them doubled, only while it listens to quiet.
+let blinkT = null, blinking = false;
+function blinkLater() { clearTimeout(blinkT); blinkT = setTimeout(blinkNow, 2200 + Math.random() * 4800) }
+function blinkNow(again) {
+  const el = $("cmp"), c = el ? el.className : "";
+  if (c.includes("listening") && !c.includes("hearing")) {
+    blinking = true; render(); setTimeout(() => { blinking = false; render() }, 190);
+    if (!again && Math.random() < .2) return setTimeout(() => blinkNow(true), 300);
+  }
+  blinkLater();
+}
+if (!WORDS) blinkLater();
+let polling = null;
+async function poll(once) {
+  try { C = await api("/api/companion") } catch (e) {}
+  render();
+  if (once) return;
+  const fast = C && C.voice && C.voice.state && C.voice.state !== "off";
+  polling = setTimeout(poll, fast ? 120 : 1000);
+}
+document.body.classList.add("r"); poll();
+</script></body></html>

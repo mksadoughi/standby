@@ -1,0 +1,483 @@
+#!/usr/bin/env python3
+"""standby-ctx - the transcript reader Claude Code uses during a meeting.
+
+Reads the live meeting transcript the Mac delivers (locally or over ssh) and hands Claude
+Code just the slice it asked for. Deliberately never prints the whole meeting
+unless asked, so a live question costs a few hundred tokens, not fifty thousand.
+
+Python 3.6+.
+"""
+
+from __future__ import print_function
+
+import argparse
+import json
+import os
+import re
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import sbspeakers  # noqa: E402
+
+ROOT = os.path.expanduser(os.environ.get("STANDBY_ROOT", "~/.standby"))
+LIVE = os.path.join(ROOT, "live")
+MARKS = os.path.join(ROOT, "marks")
+SESSIONS = os.path.join(ROOT, "sessions")      # this Mac's own sessions: the recorder writes here first
+# A session id as Standby makes it: never a path, "..", or anything to join outside its folder.
+# The same as mac/forget.py's (tests/test_ctx_paths checks they agree); this runs on the
+# agent's machine too, where the Mac's code isn't.
+SESSION_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}-\d{8}-\d{4}(?:\d{2})?(?:-\d{1,4})?$")
+
+
+def die(msg, code=1):
+    sys.stderr.write("standby-ctx: %s\n" % msg)
+    sys.exit(code)
+
+
+def valid(session):
+    return isinstance(session, str) and bool(SESSION_ID.match(session))
+
+
+def inside(folder, *parts):
+    """folder/parts, or None if that leads out of folder: a link to elsewhere, or a name
+    that isn't a session's. Every file this reads or writes is found through here."""
+    path = os.path.join(folder, *parts)
+    base = os.path.realpath(folder)
+    real = os.path.realpath(path)
+    return path if real == base or real.startswith(base + os.sep) else None
+
+
+def exists(path):
+    return path is not None and os.path.exists(path)
+
+
+def current_session():
+    """(session, is it live): the one being delivered (live/CURRENT), else the one recording
+    on this Mac now (a meeting from Claude Code isn't delivered, its Claude being the user's
+    session), else the latest delivered one, ended."""
+    pointer = os.path.join(LIVE, "CURRENT")
+    if os.path.exists(pointer):
+        with open(pointer) as fh:
+            name = fh.read().strip()
+        if valid(name):
+            return name, True
+    here = recording_here()
+    if here:
+        return here, True
+    paused = sorted((n for n in (os.listdir(SESSIONS) if os.path.isdir(SESSIONS) else []) if valid(n) and paused_here(n)),
+                    reverse=True)
+    if paused:
+        return paused[0], False                  # paused on this Mac: still its meeting, not recording
+    sessions = list_sessions()
+    if not sessions:
+        return None, False
+    return sessions[0], False
+
+
+def recording_here():
+    """The session this Mac's recorder is recording now, as Standby itself reads it (its
+    daemon.ready, and a recorder running), or None."""
+    try:
+        with open(os.path.join(ROOT, "daemon.ready")) as fh:
+            name = fh.read().strip()
+    except (IOError, OSError):
+        return None
+    if not name:
+        return None
+    import subprocess
+    try:
+        match = os.environ.get("STANDBY_RECORDER_MATCH") or "standby[.]py run"      # as the CLI's sb_recorders
+        out = subprocess.Popen(["pgrep", "-lf", match], stdout=subprocess.PIPE,
+                               universal_newlines=True).communicate(timeout=5)[0]
+    except Exception:
+        return None
+    running = any(len(f) > 1 and re.search(r"[Pp]ython[0-9.]*$", f[1]) for f in (l.split(None, 2) for l in out.splitlines()))
+    return name if running and valid(name) else None
+
+
+def paused_here(session):
+    """A meeting of this Mac's that is paused (stopped recording, not ended), as Standby has it."""
+    path = inside(SESSIONS, session, "agent.json") if valid(session) else None
+    if path is None:
+        return False
+    try:
+        with open(path) as fh:
+            bound = json.load(fh)
+    except (IOError, OSError, ValueError):
+        return False
+    return isinstance(bound, dict) and bool(bound.get("paused_at")) and not bound.get("ended_at")
+
+
+def list_sessions():
+    if not os.path.isdir(LIVE):
+        return []
+    names = set()
+    for fn in os.listdir(LIVE):
+        if fn.endswith(".jsonl") and valid(fn[:-6].replace(".repass", "")):
+            names.add(fn[:-6].replace(".repass", ""))
+    return sorted(names, key=lambda n: -_mtime(n))
+
+
+def _mtime(session):
+    best = 0.0
+    for path in [inside(LIVE, session + suffix) for suffix in (".jsonl", ".repass.jsonl")] + \
+            [inside(SESSIONS, session, "transcript.jsonl")]:      # this Mac's own copy too
+        if exists(path):
+            best = max(best, os.path.getmtime(path))
+    return best
+
+
+def transcript_path(session, prefer_repass=True):
+    if not valid(session):
+        return None, False
+    repass = inside(LIVE, session + ".repass.jsonl")
+    live = inside(LIVE, session + ".jsonl")
+    own = inside(SESSIONS, session, "transcript.jsonl")      # this Mac's, as it's written
+    if prefer_repass and exists(repass):
+        return repass, True
+    if exists(own) and (not exists(live) or os.path.getsize(own) > os.path.getsize(live)):
+        return own, False                  # not delivered, or ahead of what was (Claude off for it)
+    if exists(live):
+        return live, False
+    return None, False
+
+
+def read_rows(session, prefer_repass=True):
+    path, is_repass = transcript_path(session, prefer_repass)
+    if not path:
+        return [], None, False
+    rows = []
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if "text" in row:
+                rows.append(row)
+    rows.sort(key=lambda r: r.get("t", 0.0))
+    return rows, path, is_repass
+
+
+def meta(session):
+    if not valid(session):
+        return {}
+    path = inside(LIVE, session + ".meta.json")
+    if not exists(path):
+        path = inside(SESSIONS, session, "meta.json")      # this Mac's own, not delivered
+    if not exists(path):
+        return {}
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except ValueError:
+        return {}
+
+
+def fmt_t(seconds):
+    seconds = int(seconds or 0)
+    return "%02d:%02d" % (seconds // 60, seconds % 60)
+
+
+_ALIAS, _NAMES = {}, {}
+
+
+def use_session_names(session):
+    """Load speaker aliases and user-given names for this session."""
+    global _ALIAS, _NAMES
+    _ALIAS, _NAMES = sbspeakers.load(LIVE, session)
+
+
+def fmt_row(row):
+    who = sbspeakers.label(row, _ALIAS, _NAMES)
+    return "%s %s%s" % (fmt_t(row.get("t")), (who + ": ") if who else "",
+                        row.get("text", "").strip())
+
+
+def resolve(args):
+    if getattr(args, "session", None):
+        if not valid(args.session):
+            die("no such session: %s" % args.session)
+        use_session_names(args.session)
+        return args.session
+    session, _live = current_session()
+    if not session:
+        die("no sessions found under %s - is a Standby session running?" % LIVE)
+    use_session_names(session)
+    return session
+
+
+# ---------------------------------------------------------------- commands
+
+def cmd_status(args):
+    session, is_live = current_session()
+    if not session:
+        print("no session (nothing under %s)" % LIVE)
+        print("start one on the Mac:  standby start <label>")
+        return 0
+    use_session_names(session)
+    rows, path, is_repass = read_rows(session)
+    info = meta(session)
+    age = time.time() - os.path.getmtime(path) if path else None
+    print("session : %s" % session)
+    print("state   : %s" % ("LIVE" if is_live else "paused" if paused_here(session) else "ended"))
+    if info.get("started_iso"):
+        print("started : %s" % info["started_iso"])
+    if info.get("started"):
+        print("elapsed : %s" % fmt_t(time.time() - info["started"]))
+    print("lines   : %d%s" % (len(rows), "  (archival re-pass)" if is_repass else ""))
+    if age is not None:
+        print("last    : %.0fs ago" % age)
+        if is_live and age > 90:
+            print("WARNING : no new text for %.0fs. Either nobody is speaking," % age)
+            print("          the connection from the Mac dropped (standby check),")
+            if info.get("mode") in ("both", "system"):
+                print("          or the app's audio is not routed to the")
+                print("          Multi-Output Device (Zoom keeps its own setting).")
+            else:
+                print("          or the mic is muted or lost permission.")
+    shipped = inside(LIVE, session + ".log")
+    if exists(shipped):
+        print("mac log : %s (%.0fs old)" % (shipped, time.time() - os.path.getmtime(shipped)))
+        with open(shipped) as fh:
+            stops = [l.strip() for l in fh if "STOPPING" in l]
+        for l in stops[-3:]:
+            print("          " + l)
+    err = inside(LIVE, session + ".error")
+    if exists(err):
+        with open(err) as fh:
+            text = fh.read().strip()
+        print("")
+        print("CAPTURE FAILED on the Mac. Reason shipped with the session:")
+        for line in text.splitlines()[-12:]:
+            print("  " + line)
+    if rows:
+        print("")
+        print("last line: %s" % fmt_row(rows[-1]))
+    return 0
+
+
+def cmd_recent(args):
+    session = resolve(args)
+    # Live answers must never wait on the slower archival file.
+    rows, path, _ = read_rows(session, prefer_repass=False)
+    if not rows:
+        die("no transcript lines yet for %s" % session)
+    end = rows[-1].get("t", 0.0)
+    window = end - args.minutes * 60.0
+    picked = [r for r in rows if r.get("t", 0.0) >= window]
+    if args.lines:
+        picked = picked[-args.lines:]
+    print("# %s  last %g min  (%d lines)" % (session, args.minutes, len(picked)))
+    for row in picked:
+        print(fmt_row(row))
+    return 0
+
+
+def cmd_search(args):
+    session = resolve(args)
+    rows, _path, _ = read_rows(session)
+    if not rows:
+        die("no transcript lines yet for %s" % session)
+    try:
+        pattern = re.compile(args.query, re.IGNORECASE)
+    except re.error:
+        pattern = re.compile(re.escape(args.query), re.IGNORECASE)
+    hits = [i for i, r in enumerate(rows) if pattern.search(r.get("text", ""))]
+    if not hits:
+        print("no match for %r in %s" % (args.query, session))
+        return 0
+    print("# %s  %d match(es) for %r" % (session, len(hits), args.query))
+    shown = set()
+    for i in hits[: args.max_hits]:
+        lo = max(0, i - args.context)
+        hi = min(len(rows), i + args.context + 1)
+        if lo not in shown:
+            print("---")
+        for j in range(lo, hi):
+            if j in shown:
+                continue
+            shown.add(j)
+            marker = ">" if j == i else " "
+            print("%s %s" % (marker, fmt_row(rows[j])))
+    return 0
+
+
+def cmd_all(args):
+    session = resolve(args)
+    rows, path, is_repass = read_rows(session)
+    if not rows:
+        die("no transcript lines yet for %s" % session)
+    text = "\n".join(fmt_row(r) for r in rows)
+    if len(text) > args.max_chars and not args.force:
+        die("transcript is %d chars, over the %d cap. Use search/recent instead, "
+            "or pass --force if you really need all of it."
+            % (len(text), args.max_chars))
+    print("# %s  %d lines  %s" % (session, len(rows),
+                                  "archival re-pass" if is_repass else "live pass"))
+    print(text)
+    return 0
+
+
+def cmd_mark(args):
+    session = resolve(args)
+    if not os.path.isdir(MARKS):
+        os.makedirs(MARKS)
+    rows, _path, _ = read_rows(session, prefer_repass=False)
+    at = rows[-1].get("t", 0.0) if rows else 0.0
+    entry = {"t": round(at, 2), "wall": time.strftime("%Y-%m-%dT%H:%M:%S"),
+             "note": " ".join(args.note)}
+    path = inside(MARKS, session + ".jsonl")
+    if path is None or os.path.islink(path):
+        die("no such session: %s" % session)
+    with open(path, "a") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    print("marked at %s: %s" % (fmt_t(at), entry["note"]))
+    return 0
+
+
+def cmd_marks(args):
+    session = resolve(args)
+    path = inside(MARKS, session + ".jsonl")
+    if not exists(path):
+        print("no marks for %s" % session)
+        return 0
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            entry = json.loads(line)
+            print("%s  %s" % (fmt_t(entry.get("t")), entry.get("note", "")))
+    return 0
+
+
+DEMO_LINES = [
+    (0.0, "Others", "Okay, let's start with the pricing page review."),
+    (6.2, "Others", "Where did we land on the trip search latency for Europe?"),
+    (12.9, "Me", "The cache is at the edge now, the database calls are unchanged."),
+    (21.4, "Others", "And what was the P ninety nine after that change?"),
+    (25.0, "Me", "About two hundred milliseconds, but that's per page, not per request."),
+    (33.7, "Others", "Right, and the old gate way is still in front for now?"),
+    (39.1, "Me", "Yes, replacing the gateway is phase two."),
+    (46.5, "Others", "Action item, you confirm the Europe baseline by Friday."),
+    (52.0, "Others", "Before we move on, remind me what a p ninety nine actually measures?"),
+]
+DEMO_SESSION = "demo-20000101-0000"        # a session id's shape, like any
+
+
+def cmd_demo(args):
+    """Seed a synthetic live session so the agent can be tested without audio."""
+    pointer = os.path.join(LIVE, "CURRENT")
+    if args.clear:
+        for suffix in (".jsonl", ".repass.jsonl", ".meta.json"):
+            path = os.path.join(LIVE, DEMO_SESSION + suffix)
+            if os.path.exists(path):
+                os.remove(path)
+        mark = os.path.join(MARKS, DEMO_SESSION + ".jsonl")
+        if os.path.exists(mark):
+            os.remove(mark)
+        if os.path.exists(pointer):
+            with open(pointer) as fh:
+                if fh.read().strip() == DEMO_SESSION:
+                    os.remove(pointer)
+        print("demo session cleared")
+        return 0
+
+    if not os.path.isdir(LIVE):
+        os.makedirs(LIVE)
+    started = time.time() - 60
+    with open(os.path.join(LIVE, DEMO_SESSION + ".jsonl"), "w") as fh:
+        for at, speaker, text in DEMO_LINES:
+            fh.write(json.dumps({"t": at, "end": at + 4, "speaker": speaker,
+                                 "text": text}, ensure_ascii=False) + "\n")
+    with open(os.path.join(LIVE, DEMO_SESSION + ".meta.json"), "w") as fh:
+        json.dump({"session": DEMO_SESSION, "label": "demo", "mode": "both",
+                   "speakers": ["Me", "Others"], "started": started,
+                   "started_iso": time.strftime("%Y-%m-%dT%H:%M:%S",
+                                                time.localtime(started))}, fh)
+    with open(pointer, "w") as fh:
+        fh.write(DEMO_SESSION + "\n")
+    print("seeded a fake live meeting (%d lines). Now try:" % len(DEMO_LINES))
+    print("")
+    print('  standby-agent ask "what did they just say" --timing')
+    print('  standby-agent ask "what did they just say" --timing')
+    print("")
+    print("Clean up with: standby-ctx demo --clear")
+    return 0
+
+
+def cmd_sessions(_args):
+    sessions = list_sessions()
+    live, live_now = current_session()
+    if live and live not in sessions:                # recording here, never delivered (a meeting from Claude Code)
+        sessions.insert(0, live)
+    if not sessions:
+        print("(none)")
+        return 0
+    for name in sessions:
+        rows, _p, is_repass = read_rows(name)
+        flags = []
+        if name == live and live_now:
+            flags.append("LIVE")
+        if is_repass:
+            flags.append("repass")
+        print("%-34s %5d lines  %s" % (name, len(rows), " ".join(flags)))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="standby-ctx")
+    sub = ap.add_subparsers(dest="cmd")
+
+    p = sub.add_parser("status", help="is a meeting live, and is text arriving")
+    p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("recent", help="the last few minutes of transcript")
+    p.add_argument("--minutes", type=float, default=3.0)
+    p.add_argument("--lines", type=int, default=0, help="cap to the last N lines")
+    p.add_argument("--session")
+    p.set_defaults(func=cmd_recent)
+
+    p = sub.add_parser("search", help="find something said earlier")
+    p.add_argument("query")
+    p.add_argument("--context", type=int, default=1)
+    p.add_argument("--max-hits", type=int, default=12)
+    p.add_argument("--session")
+    p.set_defaults(func=cmd_search)
+
+    p = sub.add_parser("all", help="whole transcript (for the close step)")
+    p.add_argument("--max-chars", type=int, default=120000)
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--session")
+    p.set_defaults(func=cmd_all)
+
+    p = sub.add_parser("mark", help="drop a timestamped note to follow up on")
+    p.add_argument("note", nargs="+")
+    p.add_argument("--session")
+    p.set_defaults(func=cmd_mark)
+
+    p = sub.add_parser("marks", help="list marks")
+    p.add_argument("--session")
+    p.set_defaults(func=cmd_marks)
+
+    p = sub.add_parser("sessions", help="list known sessions")
+    p.set_defaults(func=cmd_sessions)
+
+    p = sub.add_parser("demo", help="seed a fake live meeting to test the agent")
+    p.add_argument("--clear", action="store_true", help="remove it again")
+    p.set_defaults(func=cmd_demo)
+
+    args = ap.parse_args()
+    if not getattr(args, "func", None):
+        ap.print_help()
+        return 1
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

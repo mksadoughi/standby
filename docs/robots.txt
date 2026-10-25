@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mksadoughi.github.io/standby/sitemap.xml

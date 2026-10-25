@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/mksadoughi/standby/security/advisories/new
+    about: Please don't file security problems as issues.

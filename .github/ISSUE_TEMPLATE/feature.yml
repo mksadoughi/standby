@@ -1,0 +1,27 @@
+name: Idea or change
+description: Something Standby could do, or do differently
+labels: [idea]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Standby is open source, not open contribution: changes start here, as an issue, and a pull request
+        only follows once it's agreed. See CONTRIBUTING.md.
+  - type: textarea
+    id: need
+    attributes:
+      label: What you're trying to do
+      description: The situation, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you picture it working. Rough is fine.
+  - type: checkboxes
+    id: build
+    attributes:
+      label: Building it
+      options:
+        - label: I'd like to make this change myself, once it's agreed here.

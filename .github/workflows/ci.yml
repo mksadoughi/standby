@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Only once the repository is public: a private one's macOS minutes are limited.
+    if: ${{ !github.event.repository.private }}
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15, macos-26]    # Apple Silicon: Sonoma, Sequoia, Tahoe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: constraints.txt
+
+      - uses: actions/setup-node@v4        # the page and plugin smoke tests run in node
+        with:
+          node-version: "22"
+
+      # The packages install.sh installs, at the pinned versions, without any model:
+      # the fast suites need none.
+      - name: Install Python packages
+        run: |
+          python -m pip install --upgrade pip wheel
+          python -m pip install -c constraints.txt numpy sounddevice parakeet-mlx mlx-whisper sherpa-onnx \
+            pywebview onnxruntime pyobjc-framework-AVFoundation pyobjc-framework-ScreenCaptureKit \
+            pyobjc-framework-CoreML mlx-audio sentencepiece
+
+      # The suites that need no microphone, speaker, model or window (group "par" in
+      # tests/suites.txt), each in a folder of its own, with no devices.
+      - name: Fast test suites
+        run: PY="$(command -v python)" bash tests/run_all.sh
+
+      - name: Validate the Claude Code plugin
+        run: |
+          if npm install -g @anthropic-ai/claude-code >/dev/null 2>&1 && command -v claude >/dev/null; then
+            claude plugin validate .
+            claude plugin validate lite
+          else
+            echo "Claude Code's CLI couldn't be installed here: plugin validation skipped"
+          fi
