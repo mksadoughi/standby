@@ -161,6 +161,10 @@ SIGNIN = "I can't reach Claude: it can't sign in. Your Google Cloud credentials 
 srv = subprocess.Popen([PY, agent, "--model", "opus", "--voice-model", "sonnet", "serve"],
                        env=env, stderr=open(log, "w"))
 try:
+    # Measure sign-in handling after the test daemon is serving, rather than
+    # including an unrelated cold Python/server startup in the three-second budget.
+    check("the test agent is serving before measuring sign-in latency",
+          wait(lambda: "standby-agent: serving" in serve_log()), serve_log())
     # -- expired: never recovers by itself
     answer, took = ask("[VOICE] Can you hear me?")
     check("Google Cloud credentials gone: a voice question hears it in under 3 s, not 40 s on",

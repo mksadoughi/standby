@@ -80,6 +80,7 @@ class FakeEngine(object):
     aec, fail_mic, stuck, fail_say, loading = True, False, False, False, False
     def __init__(self):
         self.mic, self.played, self.halts, self._until = None, [], 0, 0.0
+        self.hold_next = False
         self.begun = 0
         engines.append(self)
     def start_mic(self, device, feed):
@@ -97,7 +98,8 @@ class FakeEngine(object):
         if FakeEngine.fail_say:
             raise RuntimeError("no synthesizer")
         self.played.append(text)
-        self._until = time.time() + (2.5 if "long" in text else 0.3)
+        self._until = float("inf") if self.hold_next else time.time() + (2.5 if "long" in text else 0.3)
+        self.hold_next = False
     @property
     def playing(self): return FakeEngine.stuck or time.time() < self._until
     def begin(self): self.begun += 1
@@ -223,11 +225,14 @@ check("  they are the next turn", wait(lambda: any(r.get("end_turn") and r.get("
 # Words from before Claude took the floor, then talking over it (2026-10-12): they are
 # not dropped at the barge-in either; one turn with both, asked once.
 say("and the hiring plan")                     # no closing punctuation: the turn is open
-time.sleep(0.4)
+check("  the words before the floor have reached the open turn",
+      wait(lambda: any(r.get("text") == "and the hiring plan" and not r.get("end_turn") for r in rows())), rows()[-3:])
 (sdir / "dictate").write_text("hold 7\n")
 wait(lambda: vlive().get("mode") == "hold")
+eng.hold_next = True                            # this answer ends by interruption, never by a wall-clock race
 speak(say="The hiring plan is two engineers.")
 wait(lambda: vlive().get("saying"))
+check("  Claude is still speaking before the user talks over it", eng.playing)
 halts = eng.halts
 Script.talking, Script.voiced = "no wait", 0.4
 wait(lambda: eng.halts > halts) and wait(lambda: vlive().get("mode") == "voice")
@@ -454,9 +459,27 @@ speak(seq=10, say="Said once the voice is there.")
 time.sleep(3.0)                                       # past STUCK_BASE + STUCK_COLD, on purpose
 check("a sentence waiting for Standby's voice to load is not a stopped engine: nothing made again",
       len(engines) == n0 + 1 and vlive().get("speaks") and not vlive().get("half"), (len(engines) - n0, vlive()))
-FakeEngine.loading = False
-t0 = time.time()
+# Keep the fake voice loading until the recorder has read both sentences. The
+# assertion below is about sentences held by the stopped engine, not a row the
+# recorder has yet to consume when a replacement starts at the end of the file.
+held = threading.Event()
+step = sb.VoiceIO._step
+pending = speak_id[0] + 1
+
+
+def observe_pending(self):
+    step(self)
+    with self._lock:
+        if any(item[0] == pending for item in self._queue):
+            held.set()
+
+
+sb.VoiceIO._step = observe_pending
 speak(seq=10, say="The first sentence of a voice mode, on a cold voice.")
+check("  both sentences have reached the loading engine", held.wait(PATIENCE))
+sb.VoiceIO._step = step
+t0 = time.time()
+FakeEngine.loading = False
 check("a sentence that never ends (the engine stopped): its engine made again, once, and playing",
       wait(lambda: len(engines) == n0 + 2 and engines[-1].mic is not None and vlive().get("speaks"))
       and time.time() - t0 >= 2.2 and engines[n0].mic is None, (len(engines) - n0, time.time() - t0, vlive()))

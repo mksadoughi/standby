@@ -85,7 +85,9 @@ class FakeEngine(object):
         if FakeEngine.fail_say:
             raise RuntimeError("no synthesizer")
         self.played.append(text)
-        self._until = time.time() + (2.5 if "long" in text else 0.3)
+        # The interruption scenarios own this answer's end. A slow test must not
+        # accidentally let it finish while checking the other person's speech.
+        self._until = float("inf") if "long" in text else time.time() + 0.3
     @property
     def playing(self): return FakeEngine.stuck or time.time() < self._until
     def begin(self): self.begun += 1
@@ -187,6 +189,7 @@ check("a call: someone else talking over Claude doesn't stop it", eng.halts == h
 check("  their words don't show, and they aren't the user going on",
       live().get("partial") == "" and (live().get("voice") or {}).get("you_speaking") is False, live())
 quiet(); ticks()
+check("  the answer is still playing when the user interrupts", eng.playing)
 talks(0.9, "wait, stop that", 2, voiced=0.3)                     # the user, not yet half a second
 # Not yet told apart, it acts at once: this engine can't duck, so it stops (a short "Yes." was lost
 # waiting for 0.5 s).
