@@ -45,16 +45,28 @@ def call(path, body=None):
 
 
 try:
-    end = time.time() + 30
-    while time.time() < end:
+    # Cold PyObjC imports can take over 30 seconds on a busy hosted Mac. Wait for
+    # the launch token before constructing a request: an empty token queued while
+    # serve() is starting still fails authentication once the server accepts it.
+    end = time.monotonic() + 90
+    ready = False
+    last = "the launch token is not written yet"
+    while time.monotonic() < end:
         if srv.poll() is not None:
             print("FAIL: the test's own server exited:\n%s" % (root / "ui.err").read_text())
             sys.exit(1)
+        if not (root / ".standby" / "ui.token").exists():
+            time.sleep(0.2)
+            continue
         try:
             call("/api/msg/workspaces")
+            ready = True
             break
-        except (urllib.error.URLError, OSError):
+        except (urllib.error.URLError, OSError) as exc:
+            last = "HTTP %s" % exc.code if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
             time.sleep(0.2)
+    if not ready:
+        raise RuntimeError("the test server was not ready after 90s (%s):\n%s" % (last, (root / "ui.err").read_text()))
 
     got = call("/api/msg/workspaces")
     check("the navigator's list: the workspace and its agent, with what of it is live",

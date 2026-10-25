@@ -46,22 +46,46 @@ def js(expr):
 
 MID = """(() => ({snap: !!document.querySelector('.mx-snap'), moving: document.getAnimations().filter(a => a.playState === 'running').length,
   open: MX.exp || null}))()"""
+
+
+def slide(expr):
+    # Observe the real Web Animations at their midpoint, in one browser task.
+    # Wall-clock sleeps can miss a 250 ms animation on a busy hosted runner.
+    return js("""(async () => {
+      const original = Element.prototype.animate, animations = [];
+      Element.prototype.animate = function(...args) {
+        const a = original.apply(this, args);
+        a.pause(); a.currentTime = a.effect.getTiming().duration / 2;
+        animations.push(a); return a;
+      };
+      try {
+        await (%s); await Promise.resolve();
+        const mid = {snap: !!document.querySelector('.mx-snap'), open: MX.exp || null,
+          moving: animations.length,
+          progress: animations.map(a => a.effect.getComputedTiming().progress)};
+        const ended = animations.map(a => new Promise(r => a.addEventListener('finish', r, {once: true})));
+        animations.forEach(a => a.finish());
+        await Promise.all(ended);
+        return {mid, done: %s};
+      } finally { Element.prototype.animate = original; }
+    })()""" % (expr, MID))
+
+
 try:
     chrome.shoot("%s?s=mx-past#mx-past" % html.as_uri(), out / "x.png", False, size=(500, 720), settle=4)
+    chrome.call("Emulation.setEmulatedMedia", session=True, features=[{"name": "prefers-reduced-motion", "value": "no-preference"}])
     sid = js("[...document.querySelectorAll('.mx-prow[data-sid]')].find(r => !r.classList.contains('live')).dataset.sid")
-    js("mxPastOpen(%s)" % json.dumps(sid))
-    time.sleep(0.1)
-    m = js(MID)
-    check("opening one from its row: it slides in, the list's still copy under it", m["snap"] and m["moving"] >= 2 and m["open"] == sid, m)
-    time.sleep(0.7)
-    m = js(MID)
+    state = slide("mxPastOpen(%s)" % json.dumps(sid))
+    m = state["mid"]
+    check("opening one from its row: it slides in, the list's still copy under it", m["snap"] and m["moving"] >= 2 and m["open"] == sid
+          and all(0 < p < 1 for p in m["progress"]), m)
+    m = state["done"]
     check("  done: nothing left behind, the one open", not m["snap"] and m["moving"] == 0 and m["open"] == sid, m)
-    js("mxBack()")
-    time.sleep(0.1)
-    m = js(MID)
-    check("back (its ‹): it slides out, the list comes back", m["snap"] and m["moving"] >= 2 and m["open"] is None, m)
-    time.sleep(0.7)
-    m = js(MID)
+    state = slide("mxBack()")
+    m = state["mid"]
+    check("back (its ‹): it slides out, the list comes back", m["snap"] and m["moving"] >= 2 and m["open"] is None
+          and all(0 < p < 1 for p in m["progress"]), m)
+    m = state["done"]
     check("  done: nothing left behind", not m["snap"] and m["moving"] == 0, m)
     chrome.call("Emulation.setEmulatedMedia", session=True, features=[{"name": "prefers-reduced-motion", "value": "reduce"}])
     js("mxPastOpen(%s)" % json.dumps(sid))

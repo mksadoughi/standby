@@ -151,6 +151,9 @@ def dry(session):
 
 check("a talk's meeting agent has every tool a meeting's has (only the prompt differs)",
       dry(TALK) == dry(MEET) and "--add-dir" in " ".join(dry(TALK)), (dry(TALK), dry(MEET)))
+# Trace batches for a missing session folder are deliberately discarded. Create the
+# call's folder before warming its voice, so the startup event survives even a slow run.
+os.makedirs(os.path.join(root, "sessions", TALK), exist_ok=True)
 srv = subprocess.Popen([PY, agent, "--model", "opus", "--voice-model", "sonnet", "serve"],
                        env=env, stderr=open(log, "w"))
 try:
@@ -170,12 +173,11 @@ try:
     check("a typed question in a live talk goes to its deep agent",
           ask("what is p99") == "MEETING ANSWER" and texts("meeting", TALK)[-1].startswith("[QUESTION]")
           and "stray words" not in texts("meeting", TALK)[-1], texts("meeting", TALK))
-    os.makedirs(os.path.join(root, "sessions", TALK), exist_ok=True)      # the call's own folder: its trace goes there
     check("spoken: the voice answers", ask("[VOICE] hello there") == "VOICE ANSWER"
           and texts("voice", TALK)[-1].rstrip().endswith("They said: hello there"), texts("voice", TALK))
     tpath = os.path.join(root, "sessions", TALK, "trace.jsonl")
     wait_for = time.time() + 5
-    while time.time() < wait_for and not (os.path.exists(tpath) and '"model"' in open(tpath).read()):
+    while time.time() < wait_for and not (os.path.exists(tpath) and '"ev": "model"' in open(tpath).read()):
         time.sleep(0.1)
     tr = [json.loads(x) for x in open(tpath)] if os.path.exists(tpath) else []
     w = [r for r in tr if r["ev"] == "wait"]
