@@ -176,7 +176,7 @@ class FakeMeetingAudio(object):
     was before: the recorder must cope with that too."""
     apps_now, calls, fail_with, first_after, fail_as = [], [], None, 0.6, {}
     starts = []                          # every start() it was asked for, kept: target goes back to None at stop()
-    first_block = []                     # the wall time of the first block's own timestamp
+    first_block = {}                     # target -> wall time of its first buffer's own timestamp
 
     def __init__(self):
         self.ok, self.error, self.name, self.target, self.stalled, self._run = False, None, "", None, False, False
@@ -206,7 +206,7 @@ class FakeMeetingAudio(object):
                 if self._run and self.target == target and not self.stalled:
                     t = first + k * 0.32                   # t: the buffer's first sample, not now
                     if not k:                                  # the same instant, in wall time
-                        FakeMeetingAudio.first_block.append(time.time() - (time.monotonic() - t))
+                        FakeMeetingAudio.first_block.setdefault(target, time.time() - (time.monotonic() - t))
                     feed(np.full(5120, MARK, "float32"), t)
                     k += 1
         threading.Thread(target=go, daemon=True).start()
@@ -293,10 +293,19 @@ others = [r for r in rows() if r["speaker"] == "Others"][0]
 start0 = json.loads((sdir / "runs.jsonl").read_text().splitlines()[0])["start"]
 check("  its time is when it was said, not counted from 0", abs(others["end"] - (time.time() - start0)) < 1.2
       and others["t"] > 1.5, (others, round(time.time() - start0, 2)))
-joined = float((sdir / "others.wav.offset").read_text())
-want = FakeMeetingAudio.first_block[0] - start0        # when its first sample was really heard
+# Zoom and Music have separate capture threads: Music's first row is not proof
+# that Zoom's first buffer arrived, or that its initial offset was replaced yet.
+def zoom_placed():
+    try:
+        want = FakeMeetingAudio.first_block["us.zoom.xos"] - start0
+        return abs(float((sdir / "others.wav.offset").read_text()) - want) < 0.1
+    except (KeyError, OSError, ValueError):
+        return False
+
+
 check("  placed by its first buffer's own time, not by when capture was asked for or when the block arrived",
-      abs(joined - want) < 0.1, (joined, round(want, 2)))
+      wait(zoom_placed), ((sdir / "others.wav.offset").read_text().strip(),
+                          FakeMeetingAudio.first_block.get("us.zoom.xos"), start0))
 Script.say["mic"].append("my reply")
 check("  the mic's words now: Me", wait(lambda: [r["speaker"] for r in rows()][-1:] == ["Me"]), rows())
 check("  its own recording, with where it starts on the session clock",
