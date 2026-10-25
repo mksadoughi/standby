@@ -248,8 +248,8 @@ class UtteranceTranscriber:
               voiced_s=round(voiced, 2), noise=sum(ch.isalnum() for ch in text) < 2, text=text)
         if sum(ch.isalnum() for ch in text) < 2:
             self.dropped += 1
-            log("utterance %.1f-%.1fs dropped as noise (%r, decode %.2fs)"
-                % (start / float(SAMPLE_RATE), end_pos / float(SAMPLE_RATE), text, took))
+            log("utterance %.1f-%.1fs dropped as noise (decode %.2fs)"
+                % (start / float(SAMPLE_RATE), end_pos / float(SAMPLE_RATE), took))
             return
         self.decoded += 1
         log("utterance %.1f-%.1fs (%.1fs voiced) decoded in %.2fs"
@@ -599,7 +599,7 @@ class SpeakerID(object):
         self.names, self.names_seen = {}, None       # the user's names, as the app last wrote them
         self.voices = load_voices() if remember else {}
         if self.voices:
-            log("speakers: %d remembered voice(s): %s" % (len(self.voices), ", ".join(sorted(self.voices))))
+            log("speakers: %d remembered voice(s)" % len(self.voices))
         try:
             if state_path.exists():
                 self.diar = OnlineDiarizer.from_json(json.loads(state_path.read_text()))
@@ -705,7 +705,7 @@ class SpeakerID(object):
         second = sims[1][0] if len(sims) > 1 else -1.0
         if best >= self.KNOWN and best - second >= self.MARGIN:
             self.known[sid] = name
-            log("speakers: Speaker %d sounds like %s (%.2f, next %.2f)" % (sid, name, best, second))
+            log("speakers: Speaker %d matched a remembered voice (%.2f, next %.2f)" % (sid, best, second))
             known = {str(k): v for k, v in self.known.items()}
             if self.me_name:
                 known["me"] = self.me_name
@@ -2519,7 +2519,7 @@ class CaptureAsks(object):
             if current is not None and answer.get("id") == current["id"] \
                     and answer.get("value") in [a["value"] for a in current["actions"]]:
                 self.remember(current["id"], answer["value"])
-                log("asked: %s -> %s (kept for next time)" % (current["text"], answer["value"]))
+                log("asked: capture choice kept for next time")
                 try:
                     self.ask_path.unlink()
                 except OSError:
@@ -2530,21 +2530,21 @@ class CaptureAsks(object):
                 self.on_answer()
                 return                             # the next question, if any, after those looks
             else:
-                log("asked: an answer to a question no longer asked, ignored: %r" % answer)
+                log("asked: an answer to a question no longer asked, ignored")
         wanted = self.candidates()
         if current is not None and current["id"] not in [a["id"] for a in wanted]:
             try:
                 self.ask_path.unlink()
             except OSError:
                 pass
-            log("asked: withdrawn, no longer the case: %s" % current["text"])
+            log("asked: withdrawn, no longer the case")
             self.current = current = None
         if current is None and wanted:
             self.current = wanted[0]               # one at a time: the next waits for this one
             tmp = self.ask_path.with_suffix(".tmp")
             tmp.write_text(json.dumps(dict(wanted[0], at=time.time()), ensure_ascii=False))
             tmp.replace(self.ask_path)
-            log("asking: %s" % wanted[0]["text"])
+            log("asking: capture choice")
 
 
 class Events(object):
@@ -2721,7 +2721,7 @@ class EchoGate(object):
             # stopped is different: its last words were flushed when it closed.)
             while self.pending:
                 _q, speaker, start, end, text, spk, audio, ctx, src = self.pending.popleft()
-                log("echo: kept, the call's audio is paused, nothing to compare with: %r" % text)
+                log("echo: kept, the call's audio is paused, nothing to compare with")
                 emit(speaker, start, end, text, spk, audio, ctx=ctx, src=src)
             return
         heard = min([ch.heard_until() for ch in live] or [float("inf")])
@@ -2737,10 +2737,8 @@ class EchoGate(object):
                     near.append((max(0.0, ch.heard_until() - 10.0), ch.heard_until(), ch.partial))
             drop, match, overlap = _echo.judge((start, end, text), near)
             if drop or match >= _echo.NEAR:
-                said = " / ".join(o[2] for o in near if o[1] >= start - _echo.SLACK and o[0] <= end + _echo.SLACK)
-                log("echo: %s %r (match %.2f, overlap %.2f) ~ the call: %r" % (
-                    "DROPPED from the mic, the laptop's sound:" if drop else "kept, near:", text, match, overlap,
-                    said[:300]))
+                log("echo: %s (match %.2f, overlap %.2f)" % (
+                    "DROPPED from the mic, the laptop's sound" if drop else "kept, near", match, overlap))
             if not drop:
                 emit(speaker, start, end, text, spk, audio, ctx=ctx, src=src)
 
@@ -3070,7 +3068,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         if mode and speaker in MIC_ROLES:
             over = mode == "hold" and dictation["floor"] and floor_heard()
             if mode == "hold" and not over:
-                log("voice: dropped while Claude has the floor: %s" % text)
+                log("voice: dropped while Claude has the floor")
                 trace(TRACE["sid"], "heard", turn, text=text, a=round(start, 2), b=round(end, 2), fate="floor")
                 if dictation["floor"]:                # the user's words, lost: the window can say so
                     speech_lost(start, end, "floor")
@@ -3078,11 +3076,11 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
             if over:                                  # said over Claude, its voice taken out: words like any
                 mode = "voice"
             if mode == "voice" and kind == "talk" and ident.someone_else(audio, speaker):
-                log("voice: someone else heard, ignored: %s" % text)
+                log("voice: someone else heard, ignored")
                 trace(TRACE["sid"], "heard", turn, text=text, a=round(start, 2), b=round(end, 2), fate="someone_else")
                 return
             if mode == "voice" and kind == "talk" and echoes_voice(text) and ident.not_the_user(audio):
-                log("voice: its own words heard back, not a turn: %s" % text)
+                log("voice: its own words heard back, not a turn")
                 trace(TRACE["sid"], "heard", turn, text=text, a=round(start, 2), b=round(end, 2), fate="echo")
                 return
             row = {"t": round(start, 2), "end": round(end, 2), "text": text}
@@ -3095,7 +3093,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
                 else:
                     ident.learn(audio, end - start, speaker)
             dictation_row(row, seq)
-            log("%s: %s" % ("voice" if mode == "voice" else "dictation", text))
+            log("%s: speech transcribed" % ("voice" if mode == "voice" else "dictation"))
             if mode == "voice" and voice.get("overlap") is not None:
                 voice["overlap"]["said"].append(text)     # said over Claude: what the duck becomes
             if mode == "voice" and seq == dictation["seq"] and voice["turns"] is not None:
@@ -3111,7 +3109,11 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         with lock:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
         who = ("Speaker %d" % spk) if spk is not None else ("You" if speaker == "Me" else "")
-        print("%s %s%s" % (fmt_offset(start), (who + ": ") if who else "", text), flush=True)
+        # The CLI can show live words at a terminal; background stdout is daemon.log.
+        if sys.stdout.isatty():
+            print("%s %s%s" % (fmt_offset(start), (who + ": ") if who else "", text), flush=True)
+        else:
+            log("transcript: %.1f-%.1fs transcribed" % (start, end))
 
     meta = {"session": session, "label": prior.get("label") or label or "meeting",
             "kind": kind, "started": started, "started_iso": iso(started),
@@ -3197,7 +3199,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
             data = json.dumps({"known": known})
             path.write_text(data)
             publish_known(data)
-            log("speakers: the user's own voice is %s's" % name if name else "speakers: the user is You")
+            log("speakers: the user's own voice is known" if name else "speakers: the user is You")
 
     try:
         publish_me()
@@ -3632,8 +3634,8 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         voice["overlap"] = None
         for c in mics():
             c.overlap_mode(False)
-        log("voice %s: talked over for %.2fs, %.2fs of speech, %r: %s (%s)" % (
-            dictation["seq"], since, ov["voiced"], text, "it stops" if act == overlap.COMMIT else "it goes on", why))
+        log("voice %s: talked over for %.2fs, %.2fs of speech: %s (%s)" % (
+            dictation["seq"], since, ov["voiced"], "it stops" if act == overlap.COMMIT else "it goes on", why))
         if act == overlap.COMMIT:
             return give_way(vio, why, ov["turn"], since)
         vio.unduck()

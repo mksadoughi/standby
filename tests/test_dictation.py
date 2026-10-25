@@ -1278,7 +1278,7 @@ else:
             da.can_post = real_post
         check("text delivered while input is private: pasted, and left on the clipboard, and said so",
               c.inserter.got[-1][0] == "kept" and c.inserter.got[-1][1].startswith("what I said")
-              and "Also copied: press Command-V if it didn't paste" in said, c.inserter.got[-1:])
+              and c.hud.shown[-1] == "Also copied: press Command-V if it didn't paste", c.inserter.got[-1:])
         holder["on"] = False
         c.check_secure_input()
         check("  and when it ends, that is logged too", c.secure["on"] is False
@@ -1452,9 +1452,16 @@ else:
     check("  Fix Last Dictation… is there once something was dictated",
           item(c.build_menu(), "Fix Last Dictation…") is not None and item(c.build_menu(), "Fix Last Dictation…").isEnabled())
     c.hud.shown.clear()
-    c.learn_from("Tell or ion the plan.", "Tell Orion the plan.")
+    private_logs, real_log = [], d.log
+    d.log = private_logs.append
+    try:
+        c.learn_from("Tell or ion the plan.", "Tell Orion the plan.")
+    finally:
+        d.log = real_log
     check("  Learn: the changed words become a learned rule, and the panel says so",
           ("or ion", "Orion") in vocabulary.rules_in(d.WORDS) and c.hud.shown[-1:] == ["Learned: or ion → Orion"], c.hud.shown)
+    check("  its private word-fix notification isn't copied into dictation.log",
+          private_logs and not any("or ion" in m or "Orion" in m for m in private_logs), private_logs)
     check("  the user's own lines stay first, as they were", d.WORDS.read_text().startswith(d.WORDS_TEMPLATE.rstrip("\n")))
     check("  the next dictation is fixed by it", c.fixes.apply("ask or ion") == "ask Orion")
     check("  and Copy Last Dictation copies the corrected text", c.last_text == "Tell Orion the plan. ")

@@ -45,9 +45,14 @@
     way. Standby has no servers and collects nothing about you. The first install downloads the models from the places
     listed below, and that's all.</p>
   <p>Standby learns the voices you name, and your own voice from your calls, to tell people apart. These voice prints
-    stay on your Mac; you can turn this off or forget them in Settings &gt; Recording. Dictation isn't saved: its audio
-    is only processed on your Mac. Deleting a meeting or a call in Standby removes Standby's copies on your Mac, not what
-    was already sent to Claude Code or exported.</p>
+    stay on your Mac; you can turn this off or forget them in Settings &gt; Recording. Standalone dictation isn't kept as
+    a session; when it uses a running recorder, temporary audio and text files can remain after an interruption.
+    Dictated questions within a meeting or call stay in that session.</p>
+  <p>Routine logs omit conversation text. Optional debug call traces contain words and replies in the session's folder.
+    Older logs can still contain conversation text; review logs and traces before sharing them, since diagnostics can
+    also include local paths, device names and error details. Deleting a meeting or call removes its session files,
+    Standby's delivered copies and its debug trace. It doesn't erase global diagnostic logs, what was already sent
+    to Claude Code, or exports.</p>
 
   <h2>Recording people is your responsibility</h2>
   <p>When you transcribe a meeting or a call, tell the people in it, and follow the rules that apply where you and they

@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -22,7 +23,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15, macos-26]    # Apple Silicon: Sonoma, Sequoia, Tahoe
+        # macos-14 retires on 2026-11-02; test Sonoma on a physical Mac.
+        os: [macos-15, macos-26]             # Apple Silicon: Sequoia, Tahoe
     steps:
       - uses: actions/checkout@v4
 

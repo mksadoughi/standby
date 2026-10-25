@@ -13,7 +13,9 @@ arrives without one will most likely be closed, however good it is.
 Use the **Bug report** form. It asks for what helps most: your macOS version, the chip, Standby's version (the
 commit, `git -C <your standby folder> rev-parse --short HEAD`), your Claude Code version (`claude --version`), the
 steps, and what you expected. The logs are in `~/.standby`: `ui.log` (the app), `daemon.log` (the recorder) and
-`dictation.log`. Read them before attaching: they hold no audio, but can hold words from your meetings.
+`dictation.log`. Routine logs omit conversation text, but older logs can contain meeting words, and diagnostics can
+include local paths, device names and error details. Opt-in debug call traces contain words and replies. Read and
+redact logs and traces before attaching them.
 
 Security issues go privately, never in an issue: see [SECURITY.md](SECURITY.md).
 
@@ -48,6 +50,11 @@ PY=~/.standby/venv/bin/python STANDBY_TESTS=full bash tests/run_all.sh     # als
 - Nothing in a test may play sound or open the microphone. Tests that need the real world (a window, the
   speaker models) are `full` and run one at a time.
 - Run the suites your change touches before you open a pull request, and say which in it.
+
+GitHub Actions runs the fast suites on Apple Silicon macOS 15 and 26, on pushes and pull requests, or through
+Actions > CI > Run workflow. Jobs are skipped while the repository is private. GitHub's macOS 14 runner retires on
+November 2, 2026; test Sonoma on a physical Mac. CI doesn't exercise actual microphones, speakers, permission prompts,
+model inference or different Mac hardware.
 
 ## Commits
 

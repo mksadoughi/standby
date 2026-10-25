@@ -208,8 +208,8 @@ check("  and the mic's copy is dropped: not twice (doubling)",
       wait(lambda: any("DROPPED from the mic" in m for m in logged))
       and not [r for r in rows() if r["speaker"] in ("Me", "Room")], rows())
 drop_log = [m for m in logged if "DROPPED from the mic" in m]
-check("  the drop is logged with both texts and the scores, to tune from",
-      drop_log and ECHOED in drop_log[-1] and THEIRS in drop_log[-1] and "match" in drop_log[-1], drop_log)
+check("  the drop logs scores without either side's words",
+      drop_log and ECHOED not in drop_log[-1] and THEIRS not in drop_log[-1] and "match" in drop_log[-1], drop_log)
 
 Script.say["mic"].append(MINE)
 check("the user's own words during the call: kept, as Me",

@@ -1909,7 +1909,7 @@ class Controller(NSObject):
 
     @python_method
     def flash(self, text, seconds=1.8):
-        core.log(text.replace("⌘", "Cmd-").replace("→", "->").encode("ascii", "replace").decode())     # logs stay ASCII
+        core.log("panel: status shown")             # a word-fix notification can contain private words
         if self.listening:
             return                         # the next dictation already has the panel
         self.hud.show(text)

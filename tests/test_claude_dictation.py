@@ -35,7 +35,11 @@ sys.modules["sounddevice"] = types.SimpleNamespace(
     InputStream=FakeInput, query_devices=lambda i=None: DEV if i is None else DEV[i],
     default=types.SimpleNamespace(device=[0, 0]))
 sb = SourceFileLoader("sb", "mac/standby.py").load_module()
-sb.log = lambda m: None
+logged, output = [], []
+sb.log = logged.append
+# The launcher's background stdout is daemon.log; collect those writes too.
+sb.print = lambda *args, **kw: output.append(" ".join(str(a) for a in args))
+sb.sys = types.SimpleNamespace(platform=sys.platform, stdout=types.SimpleNamespace(isatty=lambda: False))
 sb.ROOT, sb.SESSIONS, sb.CONFIG = root, root / "sessions", root / "config.json"
 # No mic_device: "System default microphone" in Settings, and a fresh install.
 sb.CONFIG.write_text(json.dumps({"agent": {"mode": "local"}, "mode": "mic", "speakers": False}))
@@ -158,6 +162,10 @@ th.join(timeout=15)
 check("session ends cleanly and clears the dictation switch",
       not th.is_alive() and not (sdir / "dictate").exists())
 check("  and its listening status", not (sdir / "live.json").exists())
+private_words = texts(local) + [r["text"] for r in dict_rows() if r.get("text")]
+check("background diagnostics contain neither meeting speech nor dictated questions",
+      private_words and not any(text in line for text in private_words for line in logged + output),
+      logged + output)
 runs = [json.loads(l) for l in (sdir / "runs.jsonl").read_text().splitlines()]
 check("the recording run is logged with wall-clock start and end",
       len(runs) == 2 and "start" in runs[0] and runs[0]["t"] == 0 and "end" in runs[1]

@@ -208,8 +208,9 @@ check("  an answer that is not one of its own: refused",
 check("Switch: accepted", ui.capture_answer({"id": q["id"], "value": "use"}) == {"ok": True})
 check("  the recorder switches to the AirPods at once", wait(lambda: cur() == ["AirPods Pro"]), cur())
 check("  and keeps the answer for that device", wait(lambda: choices().get("mic", {}).get(POD.uid) == "use"), choices())
-check("  the log says what was asked and answered",
-      wait(lambda: any("asked: AirPods Pro connected" in m and "-> use" in m for m in logged)))
+check("  the log records the answer without copying the question",
+      wait(lambda: "asked: capture choice kept for next time" in logged)
+      and not any(q["text"] in m for m in logged))
 
 check("Whereby, playing all along: joined as Others with no question (whatever the Mac plays is the meeting's)",
       wait(lambda: any("Whereby joins as Others" in m for m in logged)), [m for m in logged if "meeting:" in m][-2:])
@@ -240,8 +241,7 @@ check("  and it is never asked about again", asked() is None
       and len([m for m in logged if m.startswith("asking:")]) == was,
       (asked(), [m for m in logged if m.startswith("asking:")][was:]))
 check("an answered question never comes back, not even for a moment after the answer",
-      sum("asking: AirPods Pro connected" in m for m in logged) == 1
-      and sum("asking: Bose QC Headphones connected" in m for m in logged) == 2,      # once withdrawn, once kept
+      sum(m.startswith("asking:") for m in logged) == 3,    # AirPods, Bose withdrawn, Bose kept
       [m for m in logged if m.startswith("asking:")])
 end_session(th)
 check("the session ends: no question left behind", not (sdir / "capture.ask.json").exists()

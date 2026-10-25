@@ -62,6 +62,6 @@ body:
       label: Logs
       description: |
         From `~/.standby`: `ui.log` (the app), `daemon.log` (the recorder), `dictation.log` (dictation).
-        The lines around the problem are enough. They hold no audio, but can hold words from your meetings:
-        read them before pasting, and remove anything private.
+        The lines around the problem are enough. Older logs and opt-in debug traces can contain conversation text;
+        diagnostics can include local paths, device names and error details. Read before pasting and remove anything private.
       render: text
