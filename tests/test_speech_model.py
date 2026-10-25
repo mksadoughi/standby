@@ -207,13 +207,14 @@ check("a failed download: said, and the row says why", st["download"]["state"] =
 # The app at start: a stored size that is no longer offered, moved once, and said.
 ui.transport.save_config({"speech_model": "large", "english_only": True})
 said_moved = ui.speech_migrate()
+expected_model = sm.MODELS[sm.chosen(ui.transport.load_config())].words
 check("the app moves a stored Large at start, and says why in plain words",
-      said_moved and "no capitals or full stops" in said_moved and "Standard, English now." in said_moved, said_moved)
+      said_moved and "no capitals or full stops" in said_moved and expected_model + " now." in said_moved, said_moved)
 check("  the config is written, so it is moved once",
       ui.transport.load_config()["speech_model"] == sm.default_size() and ui.speech_migrate() is None,
       ui.transport.load_config().get("speech_model"))
 check("  and Settings says it, with what it is now",
-      ui.speech_status()["moved"] == said_moved and ui.speech_status()["model"] == "Standard, English",
+      ui.speech_status()["moved"] == said_moved and ui.speech_status()["model"] == expected_model,
       ui.speech_status())
 ui.SPEECH_MOVED[0] = None
 ui.transport.save_config({"speech_model": "small", "english_only": True})

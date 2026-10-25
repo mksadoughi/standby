@@ -19,7 +19,17 @@ source tests/suite_lock.sh
 suite_lock_take || exit $?        # 3: it left the queue, as it was told to (STANDBY_SUITE_WAIT_MAX, _IF_HEAD)
 OUT="$(mktemp -d -t sbsuite)"
 export STANDBY_NO_DEVICES=1
-trap 'rm -rf "$OUT"; suite_lock_release' EXIT
+# CI keeps text logs only, including partial output if a run is interrupted.
+# Session folders, audio and other scratch data stay in OUT and are removed.
+keep_logs() {
+  [[ -n "${STANDBY_TEST_LOG_DIR:-}" ]] || return 0
+  mkdir -p "$STANDBY_TEST_LOG_DIR" || return
+  local f
+  for f in "$OUT"/*.out; do
+    [[ -f "$f" ]] && cp "$f" "$STANDBY_TEST_LOG_DIR/$(basename "${f%.out}").log"
+  done
+}
+trap 'keep_logs; rm -rf "$OUT"; suite_lock_release' EXIT
 trap 'kill $(jobs -p) 2>/dev/null; exit 130' INT; trap 'kill $(jobs -p) 2>/dev/null; exit 143' TERM; trap 'exit 129' HUP
 DIAR_PY="${SB_DIAR_PY:-/tmp/sbdiar/venv/bin/python}"; [[ -x "$DIAR_PY" ]] || DIAR_PY="$PY"
 JOBS="${STANDBY_TESTS_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}"

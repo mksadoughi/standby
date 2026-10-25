@@ -188,10 +188,17 @@ def check(label, ok, d=""):
 
 
 try:
-    wait(lambda: call("/api/state")[0] == 200)
+    # Cold PyObjC imports can take over 30 seconds on a busy hosted Mac. A
+    # request constructed before ui.token exists carries an empty token even if
+    # the server starts before it is accepted; never continue after that wait fails.
+    ready = wait(lambda: (root / "ui.token").exists() and call("/api/state")[0] == 200, secs=90)
     ours()
-    _, page, _ = call("/")
-    check("page served", "Settings" in page and "agents.js" in page and "New meeting" not in page)
+    if not ready:
+        raise RuntimeError("the test server was not ready after 90s:\n%s" % (root / "ui.err").read_text())
+    code, page, hdr = call("/")
+    check("page served", code == 200 and "Settings" in page and "agents.js" in page and "New meeting" not in page,
+          {"status": code, "content_type": hdr.get("Content-Type"),
+           "settings": "Settings" in page, "agents_script": "agents.js" in page, "old_new_meeting": "New meeting" in page})
     _, st, _ = call("/api/state")
     check("agent shown as this Mac", st["agent"]["mode"] == "local", st["agent"])
     t0 = time.time()
