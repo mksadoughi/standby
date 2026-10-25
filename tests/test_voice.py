@@ -287,9 +287,13 @@ recorder = {"on": True, "partial": "", "level": 0.2}
 
 def fake_recorder():
     while recorder["on"]:
-        (sdir / "live.json").write_text(json.dumps({"at": time.time(), "level": recorder["level"],
-                                                    "partial": recorder["partial"],
-                                                    "speaking": recorder.get("speaking", False)}))
+        # Match run_session's atomic status publication. An in-place write can
+        # expose an empty file and invent a moment when the user is silent.
+        status = sdir / ("live-%d.tmp" % threading.get_ident())
+        status.write_text(json.dumps({"at": time.time(), "level": recorder["level"],
+                                      "partial": recorder["partial"],
+                                      "speaking": recorder.get("speaking", False)}))
+        status.replace(sdir / "live.json")
         time.sleep(0.05)
 
 
@@ -915,7 +919,9 @@ check("  the turn ends on those words: the early one is taken, nothing asked aga
 check("  (and it is listening again before the user goes on)",
       wait(lambda: f.status()["state"] == "listening", 10), f.status())
 frow(turn=4, likely_turn=True, text="One more thing.")
-check("  (the new turn's words are asked early)", wait(lambda: len(asked) == 6, 5), asked)
+check("  (the new turn's words are asked early)",
+      wait(lambda: len(asked) == 6 and f._early is not None
+           and f._early.got["qid"] == "q6" and f.early_asks == 4, 5), asked)
 f.mute(True)
 check("  muting drops an early question", wait(lambda: "q6" in cancelled, 2) and f.early_dropped == 2, cancelled)
 check("  and says why, in a line of its own (a drop outside any timed turn counts too)",

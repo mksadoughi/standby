@@ -131,7 +131,11 @@ class Recorder(object):
                 st["voice"]["heard"] = self.heard
             if not self.old:
                 st["voice"]["you_speaking"] = self.you
-            (self.sdir / "live.json").write_text(json.dumps(st))
+            # The real recorder publishes via rename. Readers must never see a
+            # truncated JSON file and mistake a speaking user for silence.
+            status = self.sdir / "live.tmp"
+            status.write_text(json.dumps(st))
+            status.replace(self.sdir / "live.json")
             time.sleep(0.03)
     def mode(self):
         try:

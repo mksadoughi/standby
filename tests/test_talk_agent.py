@@ -52,7 +52,13 @@ while True:
         if kind == "voice" and "start the timer" in text.split("They said:")[-1]:    # its words, [DEEP], then the task, slowly
             d = lambda t: emit({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
                                                                    "delta": {"type": "text_delta", "text": t}}})
-            d("Sure, I'm starting it. [DEEP] "); time.sleep(1.5); d("Run sleep 15 in the background.")
+            d("Sure, I'm starting it. [DEEP] ")
+            gate = os.path.join(os.environ["STANDBY_ROOT"], "timer-release")
+            deadline = time.monotonic() + 30
+            while not os.path.exists(gate) and time.monotonic() < deadline:
+                time.sleep(0.02)
+            if not os.path.exists(gate): raise RuntimeError("the test did not release the timer task")
+            d("Run sleep 15 in the background.")
             emit({"type": "result", "is_error": False,
                   "result": "Sure, I'm starting it. [DEEP] Run sleep 15 in the background."}); continue
         if kind == "voice" and "the changelog instead" in text.split("They said:")[-1]:     # replace: stop #2, new work
@@ -234,14 +240,31 @@ try:
     import threading
     spool = os.path.join(root, "agent", "spool")
     for how, want in (("keep\n", "[HANDOFF] Run sleep 15 in the background."), ("", None)):
+        gate = os.path.join(root, "timer-release")
+        if os.path.exists(gate):
+            os.remove(gate)
         before = set(os.listdir(spool))
         got = []
         t = threading.Thread(target=lambda: got.append(ask("[VOICE] start the timer please")))
         t.start()
-        wait(lambda: any(n.endswith(".p") and n not in before for n in os.listdir(spool)), 20)
+        if not wait(lambda: any(n.endswith(".p") and n not in before for n in os.listdir(spool)), 20):
+            raise RuntimeError("the timer question did not create its progress file")
         ident = [n for n in os.listdir(spool) if n.endswith(".p") and n not in before][0][:-2]
-        time.sleep(0.6)                                  # its words are out, [DEEP] streamed, the task not yet
+
+        def handoff_begun():
+            try:
+                with open(os.path.join(spool, ident + ".p")) as fh:
+                    return any(r.get("kind") == "delta" and "Sure, I'm starting it." in r.get("text", "")
+                               for r in (json.loads(line) for line in fh if line.strip()))
+            except (OSError, ValueError):
+                return False
+
+        # A progress file can exist while the model is still starting. This delta
+        # is written only after DeepMarker consumed [DEEP]; keep the fake task
+        # blocked until the cancellation has been written, on any speed of Mac.
+        check("  the hand-off prefix streamed before cancellation", wait(handoff_begun))
         open(os.path.join(spool, ident + ".c"), "w").write(how)
+        open(gate, "w").close()
         t.join(30)
         if want:
             check("cut off after its hand-off began: the task streams to its end and the work still goes",

@@ -609,7 +609,8 @@ try:
     check("idle on the real run loop: one tick, never more (a decode waits at most that)",
           0.09 <= wall <= 0.13, wall)
     check("  without spinning the CPU", cpu < 0.05, cpu)
-    check("  and main-thread work handed over meanwhile runs in it", len(ran) == 1 and ran[0] - w0 < 0.1, ran)
+    check("  and main-thread work handed over meanwhile runs in it", len(ran) == 1 and w0 <= ran[0] <= w0 + wall,
+          {"ran": ran, "start": w0, "wall": wall})
 except ImportError:
     print("  (real run loop part skipped: needs pyobjc Foundation)")
 b.stop_mic()
