@@ -103,7 +103,9 @@ This deletes your meetings and calls too; copy `~/.standby/sessions` first to ke
 <details>
 <summary><b>Privacy</b></summary>
 
-- **Audio** stays on your Mac and is transcribed there. Dictation isn't saved: its audio is only processed on your Mac.
+- **Audio** stays on your Mac and is transcribed there. Standalone dictation isn't kept as a session; when it uses a
+  running recorder, temporary audio and text files can remain after an interruption. Dictated questions within a
+  meeting or call are part of that session.
 - **Transcripts, calls and summaries** are saved in `~/.standby/sessions/`. `standby purge <session>` deletes one.
 - **Text to Claude**: a meeting's transcript and what you say on a call go to your own Claude Code, which talks to
   its model provider as it always does.
@@ -111,8 +113,11 @@ This deletes your meetings and calls too; copy `~/.standby/sessions` first to ke
   tell you apart. Turn this off or forget them in Settings > Recording.
 - **What you send:** your words go to your Claude Code as text, along with anything you paste or attach. Claude Code
   and its tools handle data their own way.
-- **Deleting** a meeting or call in Standby removes Standby's copies on your Mac, not what was already sent to Claude
-  Code or exported.
+- **Logs** keep operational diagnostics without routinely copying conversation text. Optional debug call traces
+  contain words and replies in the session's folder. Older logs can still contain conversation text; review logs
+  and traces before sharing them, since diagnostics can also include local paths, device names and error details.
+- **Deleting** a meeting or call in Standby removes its session files and Standby's delivered copies, including its
+  debug trace. It doesn't erase global diagnostic logs, what was already sent to Claude Code, or exports.
 - Standby has no account and no telemetry. It only downloads its models, from Hugging Face and GitHub.
 </details>
 

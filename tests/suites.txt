@@ -129,3 +129,4 @@ test_native_imports        py    par
 test_relaunch              py    par  
 test_native_service        py    par
 test_api_auth              py    par  
+test_log_privacy           py    par

@@ -250,6 +250,10 @@ Then, if the user wants everything gone:
 - `~/.standby/config.json` settings; `~/.standby/agent/usage.jsonl` usage counts (no meeting text).
 - Voice prints, on the Mac only: the voices the user names, and the user's own voice, which Standby learns from calls
   to tell them apart (setting `remember_voices`; Settings > Recording has Forget for the user's voice and for all).
-- Dictation isn't saved; its audio is only processed on the Mac.
-- Deleting a meeting or call removes Standby's local copies, not what was already sent to Claude Code or exported.
+- Standalone dictation isn't kept as a session. When it uses a running recorder, temporary audio and text files
+  can remain after an interruption. Dictated questions within a meeting or call stay in that session.
+- Routine logs omit conversation text. Opt-in debug call traces contain words and replies in the session's folder.
+  Older logs can contain conversation text; diagnostics can include local paths, device names and error details.
+- Deleting a meeting or call removes its session files, delivered copies and debug trace, not global diagnostic
+  logs, what was already sent to Claude Code, or exports.
 - Standby has no account and no telemetry. It downloads only its models, from Hugging Face and GitHub.

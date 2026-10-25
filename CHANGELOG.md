@@ -8,6 +8,9 @@ All notable changes to Standby are listed here. The format follows
 
 ### Changed
 
+- **Privacy in logs.** Routine diagnostics omit conversation text, generated titles, task instructions and learned
+  word fixes. Opt-in debug call traces keep their detail in the session's own folder. Existing logs aren't erased.
+- **Mac checks.** GitHub Actions tests macOS 15 and 26 and can be started manually once the repository is public.
 - **The mini window.** A call put away waits in the mini window (it was called the orb). Point at it for its
   buttons, in words: Pause (Resume, with a bell when something is waiting for you), End, Full window, and Mini
   window, the one you're in. Standby's window is an ordinary window now: other apps can go in front of it.

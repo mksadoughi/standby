@@ -2066,7 +2066,7 @@ def _run_ask(sid, question, voice=False, on_event=None, on_queued=None, heard=No
     elif voice:
         import voice as voice_mod
         answer = voice_mod.spoken_error(answer)   # an error is never read out as it is
-    log("ask %.1fs%s: %r" % (time.time() - t0, " (voice)" if voice else "", question[:60]))
+    log("ask %.1fs%s" % (time.time() - t0, " (voice)" if voice else ""))
     with _lock:
         pending = PENDING.get(sid, {})
         steps = [e["text"] for e in pending.get("progress", []) if e.get("kind") == "tool"]
@@ -2623,7 +2623,7 @@ def title_talk(sid):
             title = (r.stdout or "").strip().splitlines()
             if title and title[0] and not (SESSIONS / sid / "title.txt").exists():
                 (SESSIONS / sid / "title.auto.txt").write_text(title[0][:80] + "\n")
-                log("titled %s: %r" % (sid, title[0]))
+                log("titled %s" % sid)
         except Exception as exc:
             log("title failed: %r" % exc)
     threading.Thread(target=run, daemon=True).start()
@@ -3397,7 +3397,7 @@ def _lite_hand(sid, c, work):
     _lite_set(sid, c, t, "sent", result="")
     c.update(doing="", said="")
     _lite_out(c["cc"], {"call": "handoff", "session": sid, "id": "%s-%s" % (sid, t["id"]), "text": LITE_FROM_CALL + work})
-    log("lite: %s: handed to the session (#%s): %r" % (sid, t["id"], work[:120]))
+    log("lite: %s: handed to the session (#%s)" % (sid, t["id"]))
     trace(sid, "handoff", id=t["id"], step="handed", work=work, session_busy=busy)
     late = threading.Timer(LITE_DELIVER_WAIT, _lite_lost, args=(sid, t["id"], LITE_NO_WORD))
     late.daemon = True
@@ -3439,7 +3439,7 @@ def _lite_lost(sid, hid, why):
     t = _lite_of(c, hid)
     if t is None or t["state"] != "sent" and not (t["state"] == "queued" and why != LITE_NO_WORD):
         return                                     # it arrived, waits its turn (word came), or was already told
-    log("lite: %s: a hand-off never reached the session (%s): %r" % (sid, why, t["what"][:120]))
+    log("lite: %s: a hand-off never reached the session (#%s)" % (sid, t["id"]))
     trace(sid, "handoff", id=t["id"], step="lost", why=why)
     t["lost"] = True
     _lite_set(sid, c, t, "failed", result="never reached the session, so none of it was done")
@@ -3485,7 +3485,7 @@ def lite_progress(b):
         return {"ok": True}
     if kind == "queued":                           # the session is busy: Claude Code starts it once that's done
         if t is not None and t["state"] == "sent":
-            log("lite: %s: a hand-off waits its turn in the session: %r" % (sid, t["what"][:120]))
+            log("lite: %s: a hand-off waits its turn in the session (#%s)" % (sid, t["id"]))
             _lite_set(sid, c, t, "queued")
         return {"ok": True}
     if kind == "typed":                            # they typed (or pasted) in the session's chat during the call
@@ -4531,7 +4531,7 @@ def capture_answer(b):
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps({"id": ask["id"], "value": b["value"]}))
     tmp.replace(path)
-    log("capture: answered %r with %s" % (ask.get("text"), b["value"]))
+    log("capture: answered")
     return {"ok": True}
 
 
@@ -4631,7 +4631,7 @@ def maybe_title(sid, listener=False):
             title = (r.stdout or "").strip().splitlines()
             if title and title[0] and not (SESSIONS / sid / "title.txt").exists():
                 (SESSIONS / sid / "title.auto.txt").write_text(title[0][:80] + "\n")
-                log("titled %s: %r" % (sid, title[0]))
+                log("titled %s" % sid)
         except Exception as exc:
             log("title failed: %r" % exc)
     threading.Thread(target=run, daemon=True).start()
@@ -4833,7 +4833,7 @@ def remember_voice(sid, spk, name):
         tmp.write_text(json.dumps(lib))
         os.chmod(str(tmp), 0o600)
         tmp.replace(VOICES)
-    log("voices: remembered %s (%d utterances)" % (name, n))
+    log("voices: remembered a voice (%d utterances)" % n)
 
 
 def voices_lock():

@@ -692,7 +692,7 @@ class VoiceSession(object):
         """The news still worth saying now: what waited past ANNOUNCE_STALE is dropped (its teller told)."""
         while self._told and time.time() - self._told[0][1] > self.ANNOUNCE_STALE:
             text, _at, dropped = self._told.popleft()
-            self.log("voice %d: news not said in time, dropped: %r" % (self.seq, text[:80]))
+            self.log("voice %d: news not said in time, dropped" % self.seq)
             if dropped is not None:
                 try:
                     dropped()

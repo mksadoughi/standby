@@ -785,6 +785,6 @@ class Learner(object):
     def learn(self, rules):
         """Rules into the words file's learned section (add_learned)."""
         written = add_learned(self.words, rules)
-        for h, m in written:
-            log("learned: %s -> %s" % (h, m))
+        if written:
+            log("learned: %d word fix(es)" % len(written))
         return written
