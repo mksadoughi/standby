@@ -89,12 +89,16 @@ class Agent(object):
     """Answers with `pieces`, each after `gap` seconds; stops when cancelled."""
     def __init__(self):
         self.asked, self.heards, self.cancelled, self.pieces, self.gap = [], [], [], [], 0.05
+        self.release = None     # an optional test gate: controls when the reply may begin
         self.quieted = []        # cancelled because the user went on: the chat keeps none of it
         self.said = {}           # ...but what the voice had said of its answer, if any
     def ask(self, question, on_event, on_queued, heard=None):
+        release = self.release
         self.asked.append(question); self.heards.append(heard)
         qid = "q%d" % len(self.asked)
         on_queued(qid)
+        if release is not None and not release.wait(10):
+            raise RuntimeError("the test did not release the fake reply")
         for p in list(self.pieces):
             end = time.time() + self.gap
             while time.time() < end:
@@ -272,6 +276,8 @@ done(vs, rec)
 vs, rec, agent, spk, logged = session()
 agent.pieces, agent.gap = ANSWER, 0.05
 rec.you = True                       # still saying something when the turn was called over
+check("  the recorder has published the user's speech before the reply",
+      wait(vs.user_speaking, 5))
 rec.row(vs, turn=0, end_turn=True, text="What is Orion?")
 wait(lambda: agent.asked, 2)
 time.sleep(0.6)
@@ -286,13 +292,16 @@ done(vs, rec)
 vs, rec, agent, spk, logged = session()
 agent.pieces, agent.gap = ANSWER, 0.05
 rec.you = True
+check("  the user is speaking before the answer is written", wait(vs.user_speaking, 5))
 rec.row(vs, turn=0, end_turn=True, text="What is Orion?")
 wait(lambda: agent.asked, 2)
-time.sleep(0.4)                      # all written, nothing said: they are still talking
+check("  the answer is fully written while they are still talking",
+      wait(lambda: vs._q is not None and not vs._q.worker.is_alive(), 5))
 rec.row(vs, turn=1, t=5, end=6, text="For the EU region.")
-rec.you = False
 check("more to the question after the answer was written: dropped, unheard",
-      wait(lambda: vs.status()["state"] == "listening", 2) and spk.said == [], (vs.status(), spk.said))
+      wait(lambda: agent.quieted == ["q1"] and vs.status()["state"] == "listening", 5)
+      and spk.said == [], (vs.status(), spk.said))
+rec.you = False
 rec.row(vs, turn=1, end_turn=True, text="For the EU region.")
 check("  and Claude is told the user heard none of it",
       wait(lambda: len(agent.asked) == 2, 3) and agent.asked[1] == "What is Orion? For the EU region."
@@ -302,11 +311,16 @@ done(vs, rec)
 
 vs, rec, agent, spk, logged = session()
 agent.pieces, agent.gap = ANSWER, 0.05
+agent.release = threading.Event()
 rec.row(vs, turn=0, end_turn=True, text="What is Orion?")
 wait(lambda: agent.asked, 2)
 rec.row(vs, turn=1, t=5, end=6, text="Hold on.")
 rec.row(vs, turn=1, end_turn=True, text="Hold on.")
-time.sleep(0.8)
+check("  hold on reaches the thinking voice before the fake reply",
+      wait(lambda: vs.status().get("holding") and vs.status()["state"] == "listening", 5))
+agent.release.set()
+check("  the held answer has finished arriving",
+      wait(lambda: vs._q is not None and not vs._q.worker.is_alive(), 5))
 check("\"hold on\" while Claude thinks: the answer waits, the screen says so",
       spk.said == [] and vs.status().get("holding") and vs.status()["state"] == "listening", (spk.said, vs.status()))
 rec.row(vs, turn=2, t=8, end=9, text="Okay, go on.")
