@@ -367,7 +367,9 @@ check("the fake reports apps as copies, so a test cannot corrupt it",
       f.apps()[0]["bundle"] == "us.zoom.xos" and f.apps()[0] is not f.apps_now[0])
 got = []
 f.start("us.zoom.xos", feed=lambda b, t: got.append((t, b)))
-time.sleep(0.25)
+deadline = time.monotonic() + 5
+while len(got) < 4 and time.monotonic() < deadline:
+    time.sleep(0.01)
 f.stop()
 check("it feeds mono float32 blocks and names the app", len(got) > 3 and got[0][1].dtype == np.float32
       and len(got[0][1]) == 320 and f.name == "Zoom", (len(got), f.name))
