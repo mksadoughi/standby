@@ -154,6 +154,8 @@ check "dictation app built in alias mode from its entry point, with icon" \
 check "dictation entry point: venv packages, repo code, runs it, own log" \
   "$REALPY -m py_compile $DE && grep -q 'site.addsitedir(\"/' $DE && grep -q 'sys.path.insert(0, \"$REPO/mac\")' $DE && grep -qF 'dictation.main([\"run\"])' $DE && grep -q 'dictation.log' $DE"
 check "installer says how to turn dictation on" "grep -q 'standby dictation on' $T/out.1"
+check "  and what macOS will ask, when, and that Standby takes only the sound" \
+  "grep -q 'macOS will ask, the first time each is needed; choose Allow' $T/out.1 && grep -q 'Screen & System Audio Recording' $T/out.1 && grep -q 'takes only the sound, never the screen' $T/out.1 && grep -q 'Input Monitoring' $T/out.1 && grep -q 'Changed your mind: System Settings > Privacy & Security' $T/out.1"
 mkdir -p "$T/fakewebview"
 cat > "$T/fakewebview/webview.py" <<'EOF'
 import json, os, urllib.request
