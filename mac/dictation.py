@@ -680,6 +680,9 @@ class Capture(object):
         self._stream = None
         self.room = None                  # roomonly.RoomOnly while dictating, or None
         self.room_failed = False          # it raised on the audio thread: the mic as it is, stopped at stop()
+        # During a call: the call's own mic, lent by the recorder (borrow), read instead of the device
+        self.lent, self.lent_blocks, self.lending, self._lent_stop = None, [], False, None
+        self.in_call = self.from_call = False   # the last dictation: during a call, and from its mic
 
     def start(self, room=True):
         """room: take the Mac's own sound out (a dictation); not for the moment the
@@ -719,6 +722,46 @@ class Capture(object):
             self.blocks.append(block)
             self.level = max(self.level, float(self.np.sqrt(self.np.mean(block * block))))
 
+    LENT_SETTLE = 0.15    # s with nothing more in the lent mic: its last words are in
+    LENT_WAIT = 0.6       # s at most for them, at stop
+
+    def borrow(self, path):
+        """A call has the mic (path: its dictating.f32, or None): macOS gives a second reader
+        of it near silence, so the call's own (echo cancelled) is read from path once the
+        recorder writes it, and the device's audio is set aside. It starts with the call's
+        last second, so nothing said since the key is lost. An older recorder never writes
+        it, and the device's audio stands."""
+        self.lent, self.lent_blocks, self.lending = (Path(path) if path else None), [], False
+        if self.lent is None:
+            return
+        stop = self._lent_stop = threading.Event()
+        threading.Thread(target=self._read_lent, args=(self.lent, stop), name="dictation-lent", daemon=True).start()
+
+    def _read_lent(self, path, stop):
+        import numpy as np
+        fh, carry = None, b""
+        while not stop.is_set():
+            if fh is None:
+                try:
+                    fh = open(path, "rb")
+                except OSError:
+                    stop.wait(0.03)
+                    continue
+                self.lending = True
+            data = fh.read()
+            if data:
+                data, carry = carry + data, b""
+                whole = len(data) - len(data) % 4      # whole samples only: the rest waits for its bytes
+                data, carry = data[:whole], data[whole:]
+                block = np.frombuffer(data, dtype="float32").copy()
+                self.lent_blocks.append(block)
+                self.level = max(self.level, float(np.sqrt(np.mean(block * block))))
+                self._lent_at = time.time()
+            else:
+                stop.wait(0.03)
+        if fh is not None:
+            fh.close()
+
     def take_level(self):
         level, self.level = self.level, 0.0
         return level
@@ -748,7 +791,25 @@ class Capture(object):
             except Exception as exc:
                 log("room only: not stopped: %r" % exc)
         blocks, self.blocks = self.blocks, []
+        lent, self.lent = self.lent, None
+        self.in_call, self.from_call = lent is not None, bool(lent is not None and self.lending)   # for what the user is told
+        if lent is not None:
+            if self.lending:                  # its last words: until nothing more comes, briefly
+                end = time.time() + self.LENT_WAIT
+                while time.time() < end and time.time() - getattr(self, "_lent_at", 0.0) < self.LENT_SETTLE:
+                    time.sleep(0.02)
+            self._lent_stop.set()
+            try:
+                lent.unlink()                 # the user's words, on disk only while dictating
+            except OSError:
+                pass
+            if self.lending:
+                blocks, self.lent_blocks = self.lent_blocks, []
+                log("dictation: from the call's own mic (%.1fs)" % (sum(len(b) for b in blocks) / float(SAMPLE_RATE)))
         return np.concatenate(blocks) if blocks else np.zeros(0, dtype="float32")
+
+
+CALL_HAS_MIC = "A call has the mic, so dictation couldn't hear you"
 
 
 def heard_something(audio):
@@ -815,6 +876,10 @@ class MeetingGuard(object):
             self.path = path
         except OSError:
             pass
+
+    def lent(self):
+        """Where the call's own mic is lent while voice mode is told we dictate, or None."""
+        return self.told.with_name(self.told.name + ".f32") if self.told is not None else None
 
     def end(self):
         if self.told is not None:

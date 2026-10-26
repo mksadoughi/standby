@@ -444,6 +444,51 @@ for held in ("voice 43\n", "hold 43\n", "floor 43\n"):          # floor: Claude 
     check("guard: leaves voice mode's switch alone (%s)" % held.split()[0], (sdir / "dictate").read_text() == held)
     check("  but tells it we are dictating, so it holds, until done",
           told == [str(os.getpid())] and not (sdir / "dictating").exists(), told)
+check("  where the call's mic is lent, while voice mode is told: beside the told file",
+      (lambda g: (g.begin(), g.lent(), g.end())[1])(d.MeetingGuard(root)) == sdir / "dictating.f32")
+(sdir / "dictate").write_text("on 99\n")
+g = d.MeetingGuard(root)
+g.begin()
+check("  and none when it isn't (the chat box's dictation, or no call)", g.lent() is None)
+g.end()
+
+# During a call the mic is the call's (macOS gives a second reader near silence): the call's own,
+# lent by the recorder in dictating.f32, is read instead, from its last second on.
+cap = d.Capture()
+lent = sdir / "dictating.f32"
+cap.blocks = [np.zeros(1600, "float32")]                 # what the device gave meanwhile: near silence
+cap.borrow(lent)
+said = (np.sin(np.arange(32000) / 8.0) * 0.2).astype("float32")
+raw = said.tobytes()
+
+
+def recorder_writes():
+    with open(lent, "wb") as fh:
+        for i in range(0, len(raw), 1601):               # odd sizes: a sample split across writes
+            fh.write(raw[i:i + 1601])
+            fh.flush()
+            time.sleep(0.005)
+
+
+w = threading.Thread(target=recorder_writes)
+w.start()
+time.sleep(0.2)
+w.join()
+got = cap.stop()
+check("dictation in a call: the call's own mic, every sample, the device's set aside",
+      len(got) == len(said) and np.array_equal(got, said) and cap.in_call and cap.from_call, (len(got), len(said)))
+check("  and the file is gone (the user's words on disk only while dictating)", not lent.exists())
+cap = d.Capture()
+cap.blocks = [np.zeros(1600, "float32")]
+cap.borrow(lent)
+got = cap.stop()
+check("  a recorder that lends nothing (from before this): the device's, and it can say why it heard nothing",
+      len(got) == 1600 and cap.in_call and not cap.from_call
+      and d.CALL_HAS_MIC == "A call has the mic, so dictation couldn't hear you")
+cap = d.Capture()
+cap.borrow(None)
+cap.stop()
+check("  no call: nothing borrowed, nothing said of one", not cap.in_call and not cap.from_call)
 (root / "daemon.ready").write_text("gone-session\n")
 mg.begin(); mg.end()
 check("guard: a stale session is harmless", True)
@@ -901,8 +946,9 @@ else:
     NSApplication.sharedApplication().setActivationPolicy_(2)
 
     class FakeCapture(object):
-        def __init__(self): self.on = False
+        def __init__(self): self.on, self.lent, self.in_call, self.from_call = False, None, False, False
         def start(self, room=True): self.on, self.room = True, room
+        def borrow(self, path): self.lent = path
         def stop(self):
             self.on = False
             return (np.random.RandomState(1).randn(16000) * 0.05).astype("float32")
@@ -933,6 +979,7 @@ else:
         def __init__(self): self.calls = []
         def begin(self): self.calls.append("begin")
         def end(self): self.calls.append("end")
+        def lent(self): return None
 
     d.save_setting("sounds", False)
     d.save_setting("shortcut", "control2")

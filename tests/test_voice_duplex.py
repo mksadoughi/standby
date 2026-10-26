@@ -308,6 +308,20 @@ Script.talking, Script.voiced = None, 0.0
 (sdir / "dictate").write_text("hold 7\n")
 wait(lambda: vlive().get("mode") == "hold")
 
+# Standby Dictation during the call: the engine has the mic, and a second reader of it gets near
+# silence, so the call's own mic (echo cancelled) is lent while it dictates, from its last second.
+lentf = sdir / "dictating.f32"
+(sdir / "dictating").write_text("4242\n")
+check("dictating during the call: the call's own mic lent, its last second first",
+      wait(lambda: lentf.exists() and lentf.stat().st_size >= int(0.9 * 16000) * 4),
+      lentf.stat().st_size if lentf.exists() else None)
+check("  the user's only (0600)", oct(lentf.stat().st_mode & 0o777) == "0o600", oct(lentf.stat().st_mode & 0o777))
+size = lentf.stat().st_size
+check("  and it goes on as the engine hears", wait(lambda: lentf.stat().st_size > size + 3200 * 4),
+      (size, lentf.stat().st_size))
+(sdir / "dictating").unlink()
+check("  done: no longer lent, and the file gone", wait(lambda: not lentf.exists()))
+
 # An engine that can duck (R-conversation, Q1/Q2): talked over, the voice goes quiet and
 # pauses, and the words decide: "mm-hm" and it goes on where it was, words and it stops.
 FakeEngine.ducks = FakeEngine.unducks = 0

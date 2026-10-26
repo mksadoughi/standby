@@ -7,7 +7,9 @@ app has a mic open come from Core Audio here, with a word when any of it changes
 Nothing here opens audio: these are property reads and listeners.
 """
 
+import atexit
 import struct
+import time
 
 from devices import BLUETOOTH, BUILT_IN, USB, VIRTUAL, Device, headset_mic  # noqa: F401  (the portable kinds)
 
@@ -106,9 +108,27 @@ class CoreAudio(object):
 
         def heard(_n, _addresses):
             on_change()
+        if not self._listeners:
+            # Gone before Python is: a listener left in place is called on Core Audio's
+            # thread into an interpreter shutting down, and the process dies in libdispatch
+            # ("Python quit unexpectedly" as a call's recorder exited, 2026-10-26).
+            atexit.register(self.unwatch)
         for sel in (CA.kAudioHardwarePropertyDefaultInputDevice, CA.kAudioHardwarePropertyDevices):
             st = CA.AudioObjectAddPropertyListenerBlock(CA.kAudioObjectSystemObject, self._addr(sel), None, heard)
             if st != 0:
                 return False
             self._listeners.append((sel, heard))
         return True
+
+    def unwatch(self):
+        """Every listener watch() added, removed; then a moment for one Core Audio had
+        already started, while Python can still take it (this runs at exit, before the
+        interpreter goes)."""
+        CA, listeners, self._listeners = self.CA, self._listeners, []
+        for sel, block in listeners:
+            try:
+                CA.AudioObjectRemovePropertyListenerBlock(CA.kAudioObjectSystemObject, self._addr(sel), None, block)
+            except Exception:
+                pass
+        if listeners:
+            time.sleep(0.1)

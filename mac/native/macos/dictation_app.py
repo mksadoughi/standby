@@ -1726,6 +1726,7 @@ class Controller(NSObject):
         core.log("listening (%s)%s" % (mode, ", in %s" % self.target.bundle if self.target else ""))
         self.engine.warm()                 # load the model while you talk
         self.guard.begin()
+        self.capture.borrow(self.guard.lent())      # a call has the mic: its own, lent by the recorder
         self.sound("Tink")
         self.hud.show("Listening", level=True)
         self.hud_hide_at = None
@@ -1767,7 +1768,9 @@ class Controller(NSObject):
             self.focus.release(self.target)
             self.target = None
             self.refresh_icon()
-            self.flash("Didn't hear anything")
+            # A call holding the mic, and its own not lent (a recorder from before this): say so,
+            # not a vague "didn't hear"
+            self.flash(core.CALL_HAS_MIC if self.capture.in_call and not self.capture.from_call else "Didn't hear anything")
             return
         self.pending += 1
         self.hud.show("Transcribing…", spin=True)
