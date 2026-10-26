@@ -1,0 +1,96 @@
+name: Fresh install
+
+# A stranger's first install and first use, on a Mac that has never had Standby: the installer from a
+# checkout of main, then the plugin on the oldest Claude Code it supports and the latest, the app's
+# server with its token, and the speech model hearing a sentence. Long (models are downloaded), so on
+# its own: on a push to main, and by hand.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: fresh-install-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  fresh:
+    if: ${{ !github.event.repository.private }}
+    name: Fresh install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]             # Apple Silicon: Sequoia, Tahoe
+    env:
+      CC_MIN: "2.1.299"                       # install.sh's minimum: the plugin doesn't load before it
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4          # Claude Code, from npm
+        with:
+          node-version: "22"
+
+      - name: Claude Code (latest)
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+
+      # As the README says: ./install.sh, with what the runner has (no Python set up for it first).
+      - name: install.sh
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          from=""; [[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || from="--from-here"
+          start=$(date +%s)
+          bash ./install.sh $from 2>&1 | tee "$RUNNER_TEMP/logs/install.log"
+          rc=${PIPESTATUS[0]}
+          {
+            echo "### install.sh on ${{ matrix.os }}: exit $rc, $(( $(date +%s) - start )) s"
+            echo; echo '```'
+            sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/logs/install.log" | grep -E '^ *(✓|!)|^xx ' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+
+      - name: First use (server, token, speech model)
+        if: ${{ !cancelled() }}
+        run: |
+          "$HOME/.standby/venv/bin/python" tools/first_use_check.py | tee "$RUNNER_TEMP/logs/first-use.log"
+          rc=${PIPESTATUS[0]}
+          { echo "### First use"; echo; echo '```'; cat "$RUNNER_TEMP/logs/first-use.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc
+
+      - name: The plugin on the latest Claude Code
+        if: ${{ !cancelled() }}
+        run: |
+          claude plugin list | grep -q 'standby@standby'
+          cd lite && claude plugin test .
+
+      - name: The plugin on Claude Code ${{ env.CC_MIN }}, the oldest it supports
+        if: ${{ !cancelled() }}
+        run: |
+          npm install -g "@anthropic-ai/claude-code@$CC_MIN"
+          claude --version
+          cd lite && claude plugin test .
+
+      - name: Older than that, install.sh says so plainly
+        if: ${{ !cancelled() }}
+        run: |
+          npm install -g @anthropic-ai/claude-code@2.1.250
+          from=""; [[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || from="--from-here"
+          bash ./install.sh $from > "$RUNNER_TEMP/logs/install-old-claude.log" 2>&1
+          grep -q "Claude Code 2.1.250 is too old for Standby: it needs $CC_MIN or later" "$RUNNER_TEMP/logs/install-old-claude.log"
+          ! grep -q 'type /standby in Claude Code' "$RUNNER_TEMP/logs/install-old-claude.log"
+
+      - name: Keep the logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-install-${{ matrix.os }}
+          path: ${{ runner.temp }}/logs/*.log
+          if-no-files-found: warn
+          retention-days: 14
