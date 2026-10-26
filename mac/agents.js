@@ -170,12 +170,16 @@ function mxNameSpk(el, sid, spk) {
 }
 // macOS hasn't allowed the mic: nothing of yours is recorded until it is. One amber line, Allow beside it.
 const mxMicNo = lv => (((lv && lv.sources) || []).find(x => x.kind === "mic" && x.cause === "permission")) || null;
-const mxMicNoHtml = x => `<div class="mx-micno" title="${esc(x.detail || "")}">Your mic isn't allowed<button class="lk" onclick="mxMicAllow()">Allow</button></div>`;
+const mxMicNoHtml = x => `<div class="mx-micno" title="${esc(x.detail || "")}">Standby can’t hear your mic<button class="lk" onclick="mxMicAllow()">Allow</button></div>`;
 // The meeting's own sound refused (Screen & System Audio Recording): the same line, Allow beside it;
 // switched on already but for an older copy of Standby (stale): Reset instead. It records by itself once allowed.
 const mxSoundNo = lv => (((lv && lv.sources) || []).find(x => x.kind === "meeting" && x.cause === "permission")) || null;
-const mxSoundNoHtml = x => x.stale ? `<div class="mx-micno" title="${esc(STALE_WHY)}">Meeting audio is on for an older copy of Standby<button class="lk" onclick="resetScreen()">Reset</button></div>`
-  : `<div class="mx-micno" title="${esc(x.detail || "")}">Meeting audio isn't allowed<button class="lk" onclick="allowScreen()">Allow</button><button class="lk" onclick="resetScreen()">It's on already</button></div>`;
+const mxSoundNoHtml = x => x.stale ? `<div class="mx-micno" title="${esc(STALE_WHY)}">Standby can’t hear the meeting’s sound · it’s on for an older copy of Standby<button class="lk" onclick="resetScreen()">Reset</button></div>`
+  : `<div class="mx-micno" title="${esc(x.detail || "")}">Standby can’t hear the meeting’s sound<button class="lk" onclick="allowScreen()">Allow</button><button class="lk" onclick="resetScreen()">It’s on already</button></div>`;
+// A meeting that will hear the Mac's sound, before macOS has ever asked: its prompt names Screen Recording,
+// which alarms; one dim line says what to choose and what Standby takes. The same words as the band in Claude Code.
+const mxSoundAsk = lv => !!(lv && lv.meeting_audio === "ask");
+const mxSoundAskHtml = () => `<div class="mx-micno ask"><span>macOS will ask for Screen &amp; System Audio Recording · choose Allow;</span><span>Standby takes only the sound</span></div>`;
 async function mxMicAllow() { const r = await mxGet("/api/mic/permission", {}); if (r && r.error) toast(r.error) }
 // What an ended one's summary shows: once its card exists (memory is set) the summary is final, even with
 // no points; before that it is on its way, for 3 minutes at most.
@@ -301,7 +305,8 @@ function mxExpanded(m) {
   const tx = mxRows(d, w.lv, live, paused, live && m.kind === "call");
   if (!live) tx.unshift({k: "psum:" + (m.points || []).length + (m.gist || "") + m.memory + !!m.failed + !!m.again, h: `<div class="mx-psum"><div class="k">Summary</div>${mxSummaryHtml(m, "card")}</div>`});
   return [{k: "full", h: `<div class="mx-lwfull${m.kind === "call" ? " call" : ""}"></div>`, kids: [
-    {k: "micno", h: live && !paused && (mxMicNo(w.lv) || mxSoundNo(w.lv)) ? `<div class="col">${mxMicNo(w.lv) ? mxMicNoHtml(mxMicNo(w.lv)) : ""}${mxSoundNo(w.lv) ? mxSoundNoHtml(mxSoundNo(w.lv)) : ""}</div>` : ""},
+    {k: "micno", h: live && !paused && (mxMicNo(w.lv) || mxSoundNo(w.lv)) ? `<div class="col">${mxMicNo(w.lv) ? mxMicNoHtml(mxMicNo(w.lv)) : ""}${mxSoundNo(w.lv) ? mxSoundNoHtml(mxSoundNo(w.lv)) : ""}</div>`
+      : live && !paused && m.kind === "meeting" && mxSoundAsk(w.lv) ? `<div class="col">${mxSoundAskHtml()}</div>` : ""},
     {k: "ask", h: mxAskHtml(live && !paused && d && d.info && d.info.ask)},
     {k: "tx", h: '<div class="col mx-tx"></div>', kids: d ? tx : [{k: "wait", h: '<div class="mx-empty">' + SPIN + "</div>"}]}]}];
 }

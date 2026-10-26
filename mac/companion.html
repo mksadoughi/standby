@@ -279,7 +279,7 @@ function size(el, g, c, r_, top) {
 let lastW = "";
 function words() {
   const l = C && C.live, box = $("says"), p = $("sp");
-  const text = l && l.mic_denied ? "Your mic isn't allowed" : "";
+  const text = l && l.mic_denied ? "Can’t hear your mic" : "";   // the band's and the window's words, short for the mini window
   if (!text) {
     box.style.display = "none"; p.textContent = "";
     if (lastW !== "0") { lastW = "0"; post({ type: "words", w: 0, h: 0, radius: null, ms: 180 }) }

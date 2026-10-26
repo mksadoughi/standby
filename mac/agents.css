@@ -80,6 +80,7 @@ box-shadow:var(--shadow),0 8px 24px rgba(0,0,0,.14);font:400 12.5px/1.45 ui-roun
 .mx-micno .lk{color:var(--warn);font-weight:600;text-decoration:underline;text-underline-offset:2px;background:none;font-size:13px}
 .vstate.mx-warn{color:var(--warn)}.vstate.mx-warn .mx-micno{justify-content:center}
 .mx-lwfull>.col{padding:0}.mx-lwfull>.col .mx-micno{padding:6px 0 2px}
+.mx-micno.ask{color:var(--muted);font-weight:400;font-size:13px;flex-direction:column;align-items:flex-start;gap:0}   /* a heads-up, not a problem: dim like a caption */
 /* a speaker's name: click to name them, in place */
 .mx-who.known{text-decoration:underline dotted;text-underline-offset:3px}
 .mx-sep2{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);margin:14px 0 4px}.mx-sep2:before,.mx-sep2:after{content:"";flex:1;height:1px;background:var(--line)}

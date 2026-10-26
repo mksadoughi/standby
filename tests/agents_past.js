@@ -61,10 +61,14 @@ var STALE_WHY = "older copy";
 eval(line(/const mxSoundNo = [^\n]*\n/));
 eval(src.match(/const mxSoundNoHtml = [\s\S]*?<\/div>`;\n/)[0].replace("const ", "var "));
 const refused = mxSoundNo({sources: [{kind: "mic", cause: "permission"}, {kind: "meeting", cause: "permission", detail: "Allow it"}]});
-check("meeting audio not allowed: its line, with Allow and It's on already", refused && /Meeting audio isn't allowed/.test(mxSoundNoHtml(refused))
+check("meeting audio not allowed: its line, with Allow and It's on already", refused && /Standby can’t hear the meeting’s sound/.test(mxSoundNoHtml(refused))
   && /allowScreen\(\)/.test(mxSoundNoHtml(refused)) && /resetScreen\(\)/.test(mxSoundNoHtml(refused)));
 check("  on for an older copy: Reset", /older copy of Standby[\s\S]*resetScreen\(\)/.test(mxSoundNoHtml({stale: true})) && !/allowScreen/.test(mxSoundNoHtml({stale: true})));
 check("  allowed: no line", mxSoundNo({sources: [{kind: "meeting", state: "recording"}]}) === null);
+// before macOS has ever asked for the meeting's sound: a dim heads-up, only while it's "ask"
+eval(line(/const mxSoundAsk = [^\n]*\n/)); eval(line(/const mxSoundAskHtml = [^\n]*\n/));
+check("  never asked: a heads-up saying to choose Allow", mxSoundAsk({meeting_audio: "ask"}) && /choose Allow;<\/span><span>Standby takes only the sound/.test(mxSoundAskHtml())
+  && !mxSoundAsk({meeting_audio: "allowed"}) && !mxSoundAsk({}));
 // the body carries .mx-past: no rule may style that class on its own (one capped the whole window at 680 px)
 const css = fs.readFileSync(path.join(__dirname, "..", "mac", "agents.css"), "utf8");
 check("the window's body is never styled as the list (full width, the navigator at the left edge)",

@@ -178,7 +178,7 @@ const WORDS_CHECKS = `
   await fresh();
   ok("  nor a working line while it thinks", els.sp.textContent === "" && last().w === 0, els.sp.textContent);
   STATE = LIVE({ voice: { state: "listening" } }); STATE.live.mic_denied = true; await fresh();
-  ok("  a mic macOS refuses: said, in amber, in a window hugging it", els.sp.textContent === "Your mic isn't allowed" && els.sp.className.includes("warn")
+  ok("  a mic macOS refuses: said, in amber, in a window hugging it", els.sp.textContent === "Can’t hear your mic" && els.sp.className.includes("warn")
      && (m => m.w === 184 && m.h === 44 && m.radius === 14 && m.material === "soft" && m.ms === 180)(last()), [els.sp, last()]);
   STATE = LIVE({ voice: { state: "listening" } }); await fresh();
   ok("    and gone once the mic is allowed", els.sp.textContent === "" && last().w === 0, els.sp.textContent);
