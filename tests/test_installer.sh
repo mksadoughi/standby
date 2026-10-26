@@ -113,7 +113,7 @@ echo x > "$H/.standby/models/nemotron-3-diarization/Nemotron3Diarizer_fast.mlmod
 echo x > "$H/.standby/models/nemotron-3-diarization/learnable_sil_emb.bin"
 echo '{"host": "devbox.example.com", "mic_device": 3, "loopback_device": "BlackHole 2ch", "speech_model": "small", "english_only": true}' > "$H/.standby/config.json"
 
-run() { HOME="$H" PATH="$B:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.$1" 2>&1; }
+run() { HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$B:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.$1" 2>&1; }
 run 1; rc=$?
 check "installer succeeds" "[[ $rc -eq 0 ]]" || tail -20 "$T/out.1"
 check "standby command linked to the repo" "[[ \"\$(readlink $H/.local/bin/standby)\" == $REPO/mac/standby ]]"
@@ -195,7 +195,7 @@ touch "$T/claude-fails"; run 6; rc=$?; rm -f "$T/claude-fails"
 check "  Claude Code refusing it: the install still succeeds, and says the two commands" \
   "[[ $rc -eq 0 ]] && grep -q \"couldn't add the plugin\" $T/out.6 && grep -q 'claude plugin install standby@standby --scope user' $T/out.6"
 NOC="$T/noclaude"; mkdir -p "$NOC"; cp "$B"/* "$NOC"/; rm -f "$NOC/claude"
-HOME="$H" PATH="$NOC:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.7" 2>&1; rc=$?
+HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$NOC:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.7" 2>&1; rc=$?
 check "  no Claude Code yet: the install still succeeds, and says how to add it later" \
   "[[ $rc -eq 0 ]] && grep -q \"Claude Code isn't on this Mac yet\" $T/out.7 && grep -q 'claude plugin marketplace add' $T/out.7"
 CC_VERSION=2.1.250 run 8; rc=$?
@@ -235,16 +235,22 @@ cp "$B/python3.12" "$T/brewprefix/bin/python3.12"
 printf '#!/bin/bash\necho "$*" >> "%s/brew.args"\n[[ "$1" == "--prefix" ]] && echo "%s/brewprefix"\nexit 0\n' "$T" "$T" > "$P/brew"
 chmod +x "$P"/* "$T/brewprefix/bin"/*
 mkdir -p "$T/onlybrewless"; cp "$P/uname" "$P/sw_vers" "$P/df" "$P/sysctl" "$P/python3" "$P/python3.11" "$T/onlybrewless/"
-HOME="$H" PATH="$T/onlybrewless:/usr/bin:/bin" bash "$REPO/install.sh" --from-here > "$T/out.py1" 2>&1; rc=$?
+HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$T/onlybrewless:/usr/bin:/bin" bash "$REPO/install.sh" --from-here > "$T/out.py1" 2>&1; rc=$?
 check "only Python 3.11, no Homebrew: refused, saying 3.12 is needed" \
   "[[ $rc -ne 0 ]] && grep -q 'Python 3.12 is needed' $T/out.py1"
-HOME="$H" PATH="$P:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.py2" 2>&1
+HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$P:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.py2" 2>&1
 check "  with Homebrew: it installs python@3.12, and does not use 3.10 or 3.11" \
   "grep -q 'install python@3.12' $T/brew.args && grep -q 'Installing Python 3.12 with Homebrew' $T/out.py2 && ! grep -q 'Python: Python 3.1[01]' $T/out.py2"
+# Homebrew just installed, but this Terminal not told yet (its printed "Next steps" not done): found in its
+# own place, not "install Homebrew" again (seen on a fresh macOS 14).
+mkdir -p "$T/hb/bin"; cp "$P/brew" "$T/hb/bin/brew"; : > "$T/brew.args"
+HOME="$H" STANDBY_HOMEBREW="$T/hb" PATH="$T/onlybrewless:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.py5" 2>&1
+check "  Homebrew installed but not on this Terminal's PATH yet: found, and used" \
+  "grep -q 'install python@3.12' $T/brew.args && ! grep -q 'Install Homebrew' $T/out.py5"
 # The closing lines name the standby command; a Terminal opened before the install has no PATH for it yet.
 check "the closing lines tell the user to open a new Terminal window first" \
   "grep -q 'standby help (open a new Terminal window first' $T/out.1"
-HOME="$H" PATH="$B:$H/.local/bin:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.py3" 2>&1
+HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$B:$H/.local/bin:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.py3" 2>&1
 check "  not when the command is already on this Terminal's PATH" \
   "grep -q 'Terminal:       standby help' $T/out.py3 && ! grep -q 'open a new Terminal window first' $T/out.py3"
 
@@ -271,7 +277,7 @@ check "  not on a 16 GB Mac" "! grep -q 'Small speech model' $T/out.1"
 Q="$T/py314"; mkdir -p "$Q"; cp "$B/uname" "$B/sw_vers" "$B/df" "$B/sysctl" "$Q/"
 printf '#!/bin/bash\n[[ "$1" == "-V" ]] && { echo "Python 3.14.0"; exit 0; }\n[[ "$1" == "-c" ]] && exit 1\nexit 0\n' > "$Q/python3"
 cp "$Q/python3" "$Q/python3.14"; chmod +x "$Q"/*
-HOME="$H" PATH="$Q:/usr/bin:/bin" bash "$REPO/install.sh" --from-here > "$T/out.p4" 2>&1; rc=$?
+HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$Q:/usr/bin:/bin" bash "$REPO/install.sh" --from-here > "$T/out.p4" 2>&1; rc=$?
 check "only Python 3.14, no Homebrew: refused, 3.12 needed and 3.14 not supported yet" \
   "[[ $rc -ne 0 ]] && grep -q \"3.14 or later isn't supported yet\" $T/out.p4 && ! grep -q 'Python: Python 3.14' $T/out.p4"
 # Python 3.13 whose packages don't install: said plainly, with the way to 3.12.
