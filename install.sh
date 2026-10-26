@@ -101,8 +101,20 @@ if [[ -z "$PY" ]]; then
 fi
 ok "Python: $("$PY" -V)"
 
+# Claude Code 2.1.299 or later: the plugin (lite/) is a hooks module, which older releases don't load or
+# run (measured on published releases), though `claude plugin install` says it worked on every one.
+CC_MIN="2.1.299"
+CC_OLD=no
 if command -v claude >/dev/null 2>&1; then
-  ok "Claude Code: $(claude --version 2>/dev/null | head -1)"
+  CC_VER="$(claude --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+  if [[ -n "$CC_VER" && "$(printf '%s\n%s\n' "$CC_MIN" "$CC_VER" | sort -V | head -1)" != "$CC_MIN" ]]; then
+    CC_OLD=yes
+    warn "Claude Code $CC_VER is too old for Standby: it needs $CC_MIN or later. Update it with
+     claude update
+   then start a new Claude Code session. Everything else installs now; /standby works once it's updated."
+  else
+    ok "Claude Code: $(claude --version 2>/dev/null | head -1)"
+  fi
 else
   warn "Claude Code CLI not found on PATH: Standby needs it on this Mac."
 fi
@@ -248,7 +260,11 @@ if ! command -v claude >/dev/null 2>&1; then
   warn "Claude Code isn't on this Mac yet: once it is, add Standby to it with"
   echo "     $PLUGIN_CMDS"
 elif claude plugin marketplace add "$REPO" >/dev/null 2>&1 && claude plugin install standby@standby --scope user >/dev/null 2>&1; then
-  ok "plugin standby@standby, in every folder: type /standby in Claude Code (a new session, or /reload-plugins)"
+  if [[ "$CC_OLD" == yes ]]; then           # added, but this Claude Code can't run it: never "type /standby"
+    warn "plugin standby@standby added, but Claude Code $CC_VER can't run it: update it with 'claude update' (needs $CC_MIN or later)"
+  else
+    ok "plugin standby@standby, in every folder: type /standby in Claude Code (a new session, or /reload-plugins)"
+  fi
 else
   warn "couldn't add the plugin to Claude Code; add it with"
   echo "     $PLUGIN_CMDS"

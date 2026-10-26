@@ -35,7 +35,7 @@ Ask the user before installing anything. Then check each requirement and tell th
 | macOS 14 (Sonoma) or later | `sw_vers -productVersion` |
 | 6 GB free disk (fresh install) | `df -h ~` |
 | Python 3.12 (3.13 also works) | `python3.12 --version`. If missing, the installer adds it with Homebrew (`brew`), or stops if Homebrew isn't there |
-| Claude Code installed and signed in | `claude --version`, and the user has run `claude` and signed in |
+| Claude Code 2.1.299 or later, signed in | `claude --version` shows 2.1.299 or later (older: `claude update`; the plugin doesn't load before it), and the user has run `claude` and signed in |
 | Memory | `sysctl -n hw.memsize`. With 8 GB, Standby uses its small English speech model; 16 GB is recommended for calls |
 
 ## 2. Install
