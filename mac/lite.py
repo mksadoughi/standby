@@ -136,8 +136,8 @@ class Lite(object):
                            "title": data.get("name") or self.ui.session_info(sid).get("title") or "",
                            "paused": bool(ev.get("paused")), "recorded_s": ev.get("recorded_s"),
                            "capture": self.ui.addmac.capture_mode(data.get("meeting_audio"), data.get("mic")),
-                           "mic_denied": bool(self.ui.session_info(sid).get("mic_denied")),
                            "pass": self.pass_of(self.ui.SESSIONS / sid)}
+            out["live"].update(self.ui.access(sid, out["live"]["capture"]))     # what macOS refuses it, or will ask
         return out
 
     def _state_event(self, cc, sid):

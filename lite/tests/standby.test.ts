@@ -1382,6 +1382,86 @@ test('a meeting: Pause, End | Full window; with no window, no divider left over'
   expect((await (await bandOf($)).findAll({ type: 'Text' })).some((t: any) => (t.text ?? t.props.children) === ' | ')).toBe(false)
 })
 
+// ---------------------------------------------------------------- what macOS refuses, or will ask for
+const MIC_NO = 'Standby can’t hear your mic · allow it in Privacy & Security > Microphone'
+const SOUND_NO = 'Standby can’t hear the meeting’s sound · allow it in Privacy & Security > Screen & System Audio Recording'
+const MIC_ASK = 'macOS will ask for your microphone · choose Allow'
+const SOUND_ASK = 'macOS will ask for Screen & System Audio Recording · choose Allow; Standby takes only the sound'
+const meetingWith = (more: any) => ({ kind: 'meeting', session: 'm1', started: 1, capture: 'auto', ...more })
+
+test('access · the mic refused: said in the warning colour in place of the words, s settings opens its pane', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], can: { listen: true, window: true },
+    live: meetingWith({ mic: 'denied', meeting_audio: 'denied' }) }
+  mock.clock(on)
+  fakeApp(on, [{ meet: 'line', i: 1, t: 1760700000, speaker: 1, name: 'Speaker 1', text: 'We ship Friday.' }], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  const band = await bandOf($)
+  expect(await textOn(band, MIC_NO)).toMatchObject({ props: { color: '#d29922', wrap: 'truncate-end' } })    // the mic before the sound
+  expect(await textOn(band, SOUND_NO)).toBeUndefined()
+  expect(await textOn(band, 'Speaker 1: We ship Friday.')).toBeUndefined()
+  const keys = (await band.findAll({ type: 'Button' })).map((b: any) => b.props.key ?? b.key)
+  expect(keys).toEqual(['pause', 'stop', 'window', 'settings'])
+  await typed($, 's')
+  expect(seen.posts.find((p: any) => p.path === '/api/lite/permission').body).toEqual({ session: 'm1' })
+  expect(seen.submitted.some((s: any) => s.text === 's')).toBe(false)
+  expect(seen.status).toEqual(['Standby is on for this session'])     // no toast for it: System Settings opens
+})
+
+test('access · the meeting’s sound refused, in VS Code: its line, and Open Settings after Full window', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], can: { listen: true, window: true },
+    live: meetingWith({ mic: 'allowed', meeting_audio: 'denied' }) }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  const panel = await bandOf($, 'vscode')
+  expect(await textOn(panel, SOUND_NO)).toMatchObject({ props: { color: '#d29922' } })
+  expect(await rowOf(panel)).toEqual(['Pause', 'End', 'Full window', 'Open Settings'])
+  expect((await panel.find({ key: 'settings' })).props.dimColor).toBe(true)
+  await panel.press({ key: 'settings', link: { href: 'https://standby.invalid/settings' } } as any)
+  expect(posted(seen, '/api/lite/permission')).toBe(true)
+})
+
+test('access · heads-ups: dim, the mic first, then the meeting’s sound; no Settings; gone once allowed', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], can: { listen: true, window: true },
+    live: meetingWith({ mic: 'ask', meeting_audio: 'ask' }) }
+  mock.clock(on)
+  fakeApp(on, [{ meet: 'line', i: 1, t: 1760700000, speaker: 1, name: 'Speaker 1', text: 'We ship Friday.' }], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  let band = await bandOf($)
+  expect(await textOn(band, MIC_ASK)).toMatchObject({ props: { dimColor: true } })
+  expect(await band.find({ key: 'settings' })).toBeUndefined()
+  seen.live = meetingWith({ mic: 'allowed', meeting_audio: 'ask' })
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  band = await bandOf($)
+  expect(await textOn(band, SOUND_ASK)).toMatchObject({ props: { dimColor: true } })
+  seen.live = meetingWith({ mic: 'allowed', meeting_audio: 'allowed' })
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  band = await bandOf($)
+  expect(await textOn(band, SOUND_ASK)).toBeUndefined()
+  expect(await textOn(band, 'Speaker 1: We ship Friday.')).toBeDefined()
+})
+
+test('access · a call: the mic only, never the meeting’s sound; the voice failing still comes first', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], can: { listen: true, window: true },
+    live: { kind: 'call', session: 'c1', started: 1, phase: 'listening', mic: 'allowed', meeting_audio: 'ask' } }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  expect(await textOn(await bandOf($), SOUND_ASK)).toBeUndefined()
+  seen.live = { kind: 'call', session: 'c1', started: 1, phase: 'listening', mic: 'denied' }
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  const band = await bandOf($)
+  expect(await textOn(band, MIC_NO)).toMatchObject({ props: { color: '#d29922' } })
+  expect((await band.findAll({ type: 'Button' })).map((b: any) => b.props.key ?? b.key)).toEqual(['mute', 'end', 'window', 'settings'])
+})
+
 test('every request to Standby carries this launch\'s token, from its file; the stream reads it from a file, never the command line', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [] }
   mock.clock(on)

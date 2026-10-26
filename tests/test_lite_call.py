@@ -475,6 +475,9 @@ check("  paused when work comes back: nothing said, the voice not asked, and the
       wait(lambda: ui.voice_status(sid).get("waiting")) and (time.sleep(0.4) or True) and len(told_model) == n_model and len(vs.told) == n
       and ui.LITE_GET["/api/lite/state"]({"cc": CC})["live"].get("waiting") is True, ui.voice_status(sid))
 check("  and the band hears it on the stream", wait(lambda: any(e.get("call") == "state" and e.get("waiting") for _c, e in out)))
+call_live = ui.LITE_GET["/api/lite/state"]({"cc": CC})["live"]
+check("a call's state: what macOS says of the mic, for the band, and never the meeting's sound",
+      call_live.get("mic") == "allowed" and "meeting_audio" not in call_live, call_live)
 replies.append("While you were away: the film and the cards are done.")
 ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": False})
 check("  Resume: one [RESUMED] turn with both, said once; the bell clears",

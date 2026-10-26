@@ -62,6 +62,31 @@ const S = {
 // Whether this Standby has its compact window
 function canWindow() { return !!(S.st && S.st.can && S.st.can.window) }
 
+// What macOS refuses the live meeting or call, or will ask for it (the app's "mic" and "meeting_audio"):
+// the line under the top one, in place of the words. The mic before the meeting's sound; a call has no
+// meeting sound. A refusal is in WARN, with Settings on the top line; a heads-up is dim, and goes once allowed.
+const ACCESS = {
+  mic: { denied: 'Standby can’t hear your mic · allow it in Privacy & Security > Microphone',
+    ask: 'macOS will ask for your microphone · choose Allow' },
+  meeting_audio: { denied: 'Standby can’t hear the meeting’s sound · allow it in Privacy & Security > Screen & System Audio Recording',
+    ask: 'macOS will ask for Screen & System Audio Recording · choose Allow; Standby takes only the sound' },
+}
+function access(live) {
+  for (const what of live.kind === 'call' ? ['mic'] : ['mic', 'meeting_audio']) {
+    const text = ACCESS[what][live[what]]
+    if (text) return { text, refused: live[what] === 'denied' }
+  }
+  return null
+}
+
+// System Settings at the pane macOS refuses (the app picks it), on the user's click
+async function openSettings($) {
+  const live = S.st && S.st.live
+  if (!live) return 'closed'
+  const r = await app($, '/api/lite/permission', { session: live.session })
+  return r.error || 'closed'
+}
+
 // Standby's compact window: the app opens it (or brings it to the front); nothing comes back here
 async function openWindow($) {
   if (!S.on) await turnOn($)
@@ -420,7 +445,7 @@ async function press($, what, sure) {
   const r = what === 'startListening' ? await startListening($) : what === 'startCall' ? await startCall($)
     : what === 'pause' ? await pause($) : what === 'stopListening' ? await stopListening($)
     : what === 'mute' ? await mute($) : what === 'openWindow' ? await openWindow($) : what === 'toOrb' ? await toOrb($)
-    : what === 'endCall' ? await endCall($)
+    : what === 'endCall' ? await endCall($) : what === 'openSettings' ? await openSettings($)
     : what === 'cancelStart' ? (S.starting && S.starting.voice ? (S.starting = null, void endCall($))     // the call is up: end it
       : S.starting && (S.starting.cancel = true, S.ending = { kind: S.starting.kind, since: Date.now() }),
       $.ui.invalidate('ui.render'), 'closed')
@@ -703,14 +728,19 @@ async function band($, e, next) {
   // the call's own actions first, then a quiet "|", then the windows
   const winKey = () => (win ? [['window', 'o', 'full window', 'openWindow']] : [])
   const winWord = win ? [['window', 'Full window', 'openWindow', true]] : []
+  // macOS refusing it something: the line says what, and Settings opens the pane, after the windows
+  const perm = access(live)
+  const setKey = perm && perm.refused ? [['settings', 's', 'settings', 'openSettings']] : []
+  const setWord = setKey.length ? [['settings', 'Open Settings', 'openSettings', true]] : []
+  const permLine = perm ? below(perm.text, perm.refused ? { dimColor: false, color: WARN } : {}) : null
   if (live.kind === 'meeting') {
     const title = live.title || 'the meeting'
-    const keys = keyset([['pause', 'p', live.paused ? 'resume' : 'pause', 'pause'], ['stop', 'e', 'end', 'stopListening'], DIV, ...winKey()],
-      [['pause', live.paused ? 'Resume' : 'Pause', 'pause', true], ['stop', 'End', 'stopListening', true], DIV, ...winWord])
+    const keys = keyset([['pause', 'p', live.paused ? 'resume' : 'pause', 'pause'], ['stop', 'e', 'end', 'stopListening'], DIV, ...winKey(), ...setKey],
+      [['pause', live.paused ? 'Resume' : 'Pause', 'pause', true], ['stop', 'End', 'stopListening', true], DIV, ...winWord, ...setWord])
     const top = live.paused
       ? line([...mark, fixed('‖'), fit('Paused · ' + title), time, ...keys])
       : line([...mark, fixed('●', { color: 'red' }), fit('Listening · ' + title), time, ...keys])
-    return Box({ flexDirection: 'column', children: [top, ...below(S.caption)] })
+    return Box({ flexDirection: 'column', children: [top, ...(permLine || below(S.caption))] })
   }
   // on a call: the top line says where the call is, the dim one under it what's happening now
   const cs = S.callState, failed = !!cs.notice, paused = !!live.muted || cs.phase === 'muted'
@@ -720,9 +750,9 @@ async function band($, e, next) {
   const orbKey = S.st && S.st.can && S.st.can.orb ? [['mini', 'm', 'mini window', 'toOrb']] : []
   const orbWord = orbKey.length ? [['mini', 'Mini window', 'toOrb', true]] : []
   const keys = failed
-    ? keyset([['end', 'e', 'end', 'endCall'], DIV, ...orbKey, ...winKey()], [['end', 'End', 'endCall', true], DIV, ...orbWord, ...winWord])
-    : keyset([['mute', 'p', paused ? 'resume' : 'pause', 'mute', held], ['end', 'e', 'end', 'endCall'], DIV, ...orbKey, ...winKey()],
-      [['mute', paused ? 'Resume' : 'Pause', 'mute', true, held], ['end', 'End', 'endCall', true], DIV, ...orbWord, ...winWord])
+    ? keyset([['end', 'e', 'end', 'endCall'], DIV, ...orbKey, ...winKey(), ...setKey], [['end', 'End', 'endCall', true], DIV, ...orbWord, ...winWord, ...setWord])
+    : keyset([['mute', 'p', paused ? 'resume' : 'pause', 'mute', held], ['end', 'e', 'end', 'endCall'], DIV, ...orbKey, ...winKey(), ...setKey],
+      [['mute', paused ? 'Resume' : 'Pause', 'mute', true, held], ['end', 'End', 'endCall', true], DIV, ...orbWord, ...winWord, ...setWord])
   const top = paused
     ? line([...mark, fixed('‖'), fit('Paused · on a call with Claude'), time, ...keys])
     : line([...mark, fixed('◉', { color: MARK }), fit('On a call with Claude'), time, ...keys])
@@ -730,6 +760,7 @@ async function band($, e, next) {
   const said = S.last ? (S.last.voice ? '✻ ' : '') + S.last.text : ''
   const sub = cs.retrying ? belowSlow('The voice isn’t answering. Trying again', cs.retrying, { dimColor: false, color: WARN })
     : failed ? below('The voice stopped. End the call and start it again', { dimColor: false, color: WARN })
+    : permLine ? permLine
     : held ? below('Paused. Something’s waiting: resume to hear it')
     : paused ? below('Paused. Resume when you’re ready to talk')
     : cs.phase === 'speaking' ? below(said || '✻')
