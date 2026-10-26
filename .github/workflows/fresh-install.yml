@@ -7,6 +7,7 @@ name: Fresh install
 on:
   push:
     branches: [main]
+    paths-ignore: ['docs/**']               # the website alone: no Mac runners needed
   workflow_dispatch:
 
 concurrency:
@@ -56,10 +57,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit $rc
 
-      - name: First use (server, token, speech model)
+      - name: First use (server, token, speech model; and the Standard model, a 16 GB Mac's)
         if: ${{ !cancelled() }}
         run: |
-          "$HOME/.standby/venv/bin/python" tools/first_use_check.py | tee "$RUNNER_TEMP/logs/first-use.log"
+          "$HOME/.standby/venv/bin/python" tools/first_use_check.py --standard | tee "$RUNNER_TEMP/logs/first-use.log"
           rc=${PIPESTATUS[0]}
           { echo "### First use"; echo; echo '```'; cat "$RUNNER_TEMP/logs/first-use.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit $rc
