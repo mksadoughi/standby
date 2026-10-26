@@ -31,6 +31,7 @@ import threading
 import time
 import urllib.parse
 import uuid
+import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -5484,12 +5485,22 @@ def port_owner(port, timeout=1.5):
     return "this" if got.get("root") == root_mark() else "standby"
 
 
+class LocalServer(ThreadingHTTPServer):
+    """The app's server on 127.0.0.1, bound without a name lookup: http.server asks the network for
+    127.0.0.1's full name (socket.getfqdn), which on a Mac offline, on a captive Wi-Fi or a VPN waited
+    about 35 s before the app could start (measured on GitHub's hosted Macs)."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 def _bind():
     """The server on PORT, or None when this same Standby already serves there. Another app,
     or another Standby, on PORT: the next free port instead, said in the log (PORT moves)."""
     global PORT
     try:
-        return ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+        return LocalServer(("127.0.0.1", PORT), Handler)
     except OSError:
         owner = port_owner(PORT)
         if owner == "this":
@@ -5497,7 +5508,7 @@ def _bind():
     first = PORT
     for port in list(range(first + 1, first + 50)) + [0]:
         try:
-            server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            server = LocalServer(("127.0.0.1", port), Handler)
         except OSError:
             continue
         PORT = server.server_address[1]

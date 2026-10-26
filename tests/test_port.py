@@ -3,7 +3,7 @@ same Standby answers on it (/api/whoami, with its folder's mark). Another app th
 (AnkiConnect uses 8765) or another Standby (its own folder): the next free port instead,
 and the plugin finds it in ui.port. Fake servers stand in for the others."""
 import agentpath  # noqa: F401  (first: never the real ~/.standby)
-import json, os, socket, sys, tempfile, threading, urllib.request
+import json, os, socket, sys, tempfile, threading, time, urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -86,6 +86,20 @@ got = json.loads(urllib.request.urlopen("http://127.0.0.1:%d/api/whoami" % ui.PO
 check("the real server answers /api/whoami", got == ui.whoami(), got)
 check("  and writes the port it serves on, for the plugin", (root / "ui.port").read_text().strip() == str(ui.PORT))
 srv.shutdown()
+
+# Starting asks the network for nothing: http.server's own bind looks up 127.0.0.1's full name
+# (socket.getfqdn), which waited about 35 s on a Mac whose name lookups go nowhere (GitHub's hosted Macs;
+# offline, a captive Wi-Fi, a VPN).
+real_fqdn, asked = socket.getfqdn, []
+socket.getfqdn = lambda *a: (asked.append(a), time.sleep(30), "slow.example")[2]
+free = socket.socket(); free.bind(("127.0.0.1", 0)); fport = free.getsockname()[1]; free.close()
+ui.PORT = fport
+t0 = time.time()
+srv = ui._bind()
+took = time.time() - t0
+socket.getfqdn = real_fqdn
+check("binding asks no name lookup (a Mac offline starts at once)", srv is not None and not asked and took < 2, (asked, took))
+srv.server_close()
 
 print()
 print("%d failed" % len(fails) if fails else "ALL PASS")
