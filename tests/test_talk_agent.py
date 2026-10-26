@@ -294,17 +294,18 @@ try:
     check("a call's voice: it IS the session, its mouth and ears, with its own deeper side; one self; its judgement; its folder",
           call.startswith("You are the user's Claude Code session in /Users/you/code/orion, on a voice call with them: its mouth and ears.")
           and "It's all you, so never speak of a separate agent or helper." in call
-          and "take it to your deeper side, which can do anything Claude Code can (search the web, run commands, change files): reply [DEEP]" in call
+          and "Anything that does something, like changing a file, running a command or searching the web, is your deeper side's: reply [DEEP]" in call
           and "answer them first, briefly, then take it deeper, so you're never silent while it runs." in call
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
           and "[QUIET]" in call and "[RESULT]" in call and len(call.split()) < 340, (len(call.split()), call[:300]))
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
-          "you handle small things yourself" in call and "You can read and search where your session works, and ~/.standby, yourself." in call
-          and "So anything they could ask Claude Code to do, you can do by taking it deeper, rather than saying you can't." in call
-          and "use every tool and connection the session has" in call
-          and "When they ask you to do something, it's yours to do: do it, or take it deeper." in call
+          "you handle small things yourself" in call and "Your own tools are for looking: you can read and search where your session works, and ~/.standby." in call
+          and "so anything they could ask Claude Code to do, you can do by taking it deeper." in call
+          and "if one of your tools refuses you, that only means it's your deeper side's to do, never that it can't be done." in call
+          and "every tool and connection it has" in call
+          and "When they ask you to do something, it's yours to do." in call
           and "Never say you will look into something" not in call and "SUGGEST" not in call)
     check("  honest hand-offs: nothing started until the session says it has it; never a guess at why not",
           "Nothing has started until a [SESSION] note says your session has it; till then, you're sending it." in call
