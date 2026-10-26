@@ -86,6 +86,11 @@ fi
 # Python 3.12, or 3.13 if the pinned packages install on it (checked after the install below).
 # Not 3.11 or earlier: the pinned numpy, scipy and onnxruntime have no builds for those. Not 3.14
 # or later yet: nothing pinned has been tried on it.
+# Homebrew installed, but this Terminal not told yet (the "Next steps" its installer prints): found in its
+# own place, so the Python it installs, or will, is found too. Without this, a Mac that had just installed
+# Homebrew was told to install Homebrew.
+HOMEBREW="${STANDBY_HOMEBREW:-/opt/homebrew}"       # its place on Apple Silicon (tests point elsewhere)
+[[ -x "$HOMEBREW/bin/brew" && ":$PATH:" != *":$HOMEBREW/bin:"* ]] && PATH="$PATH:$HOMEBREW/bin"     # last: a Python on PATH still wins
 PY=""
 for c in python3.12 python3.13 python3; do
   if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info[:2] not in ((3, 12), (3, 13)))'; then
