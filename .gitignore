@@ -3,6 +3,11 @@ __pycache__/
 .DS_Store
 *.log
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
 node_modules/
 # Local only: Claude Code's worktrees and settings, the plugin's editor types
 .claude/
