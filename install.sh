@@ -377,6 +377,7 @@ else
   rm -rf "$APP"
   warn "could not build Standby.app (log: $BUILD/build.log)."
   warn "Everything else works: open the app window from Terminal with: standby app"
+  warn "(macOS then asks for its permissions as Terminal, not Standby)"
   OPEN="standby app"
 fi
 
@@ -434,7 +435,8 @@ if (cd "$DBUILD" && "$VENV/bin/python" setup.py py2app -A >>"$BUILD/build.log" 2
 else
   rm -rf "$DAPP"
   warn "could not build Standby Dictation.app (log: $BUILD/build.log)."
-  warn "'standby dictation on' still works: it runs the script instead of the app."
+  warn "'standby dictation on' still works: it runs the script instead of the app (macOS then asks for its"
+  warn "permissions as Python, not Standby Dictation)."
 fi
 
 
@@ -457,4 +459,12 @@ cat <<EOF
    First run:      start a meeting or a call from Claude Code, in the folder you work in
    Dictation:      standby dictation on     (speak into any app, instead of macOS Dictation)
    Terminal:       standby help$NEWTERM
+
+   macOS will ask, the first time each is needed; choose Allow:
+     Microphone                             your first meeting or call
+     Screen & System Audio Recording        the first time an app plays sound in a meeting: Standby
+                                            takes only the sound, never the screen; macOS then reopens it
+     Microphone, Input Monitoring and       when you turn dictation on (Standby Dictation: to hear you,
+     Accessibility                          notice the F5 key, and paste the text)
+   Changed your mind: System Settings > Privacy & Security.
 EOF

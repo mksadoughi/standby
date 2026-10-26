@@ -426,7 +426,7 @@ CAUSES = {
     "permission": ("error", "allow Standby to hear it",
                    "Allow Standby in System Settings, Privacy & Security, Screen & System Audio "
                    "Recording, to hear {app}'s side of the call. No screen is recorded: only the sound. "
-                   "It starts by itself once allowed.",
+                   "Once allowed, macOS reopens Standby (or quit and reopen it), and it hears it from then on.",
                    "Standby was not allowed to hear it"),
     "failed": ("error", "the capture failed",
                "Standby could not capture {app}'s audio: {why}.",

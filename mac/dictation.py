@@ -923,7 +923,7 @@ def app_name():
 
 
 def stale_steps():
-    return ("In System Settings > Accessibility, select %s, remove it with the minus button, "
+    return ("In System Settings > Privacy & Security > Accessibility, select %s, remove it with the minus button, "
             "then click Open Settings… and turn it on again." % app_name())
 
 
