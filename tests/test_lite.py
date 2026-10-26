@@ -112,8 +112,12 @@ def access_now():
     return {k: live[k] for k in ("mic", "meeting_audio") if k in live}
 
 
+heard(sound="none")
+check("access: meeting audio only, never asked, no app playing: \"not_asked\" (a meeting in the room: no heads-up)",
+      access_now() == {"meeting_audio": "not_asked"}, access_now())
 heard()
-check("access: meeting audio only, never asked: \"ask\" (no mic in it, so no word of the mic)", access_now() == {"meeting_audio": "ask"}, access_now())
+check("  an app plays (the recorder opens its source, macOS asks now): \"ask\"; no mic in it, so no word of the mic",
+      access_now() == {"meeting_audio": "ask"}, access_now())
 check("  and the same in /api/live/<sid>, for the window", ui.access(SID, ui.live_capture(SID)) == {"meeting_audio": "ask"})
 heard(sound="permission")
 check("  the recorder refused it (cause permission): \"denied\"", access_now() == {"meeting_audio": "denied"}, access_now())

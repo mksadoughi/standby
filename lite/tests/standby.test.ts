@@ -1438,6 +1438,10 @@ test('access · heads-ups: dim, the mic first, then the meeting’s sound; no Se
   await settle()
   band = await bandOf($)
   expect(await textOn(band, SOUND_ASK)).toMatchObject({ props: { dimColor: true } })
+  seen.live = meetingWith({ mic: 'allowed', meeting_audio: 'not_asked' })     // no app playing: macOS won't ask yet
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  expect(await textOn(await bandOf($), SOUND_ASK)).toBeUndefined()
   seen.live = meetingWith({ mic: 'allowed', meeting_audio: 'allowed' })
   await $.command.run({ command: 'standby', args: '' })
   await settle()

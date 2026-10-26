@@ -2232,10 +2232,13 @@ def access(sid, capture):
     """What macOS lets a live meeting or call hear, for the band in Claude Code: "mic" when it
     records the mic, and "meeting_audio" when it records the Mac's sound (capture auto or
     meeting; a call never does). Each is "allowed"; "denied", refused (the band says where to
-    allow it); or "ask", macOS hasn't asked yet (the band says it will). The recorder's own
-    finding (a source with cause "permission") comes first."""
+    allow it); or "ask", macOS is about to ask (the band says so). The meeting's sound is
+    "not_asked" while no app plays: macOS asks only once one does (the recorder then opens its
+    source), so a meeting in the room says nothing of it. The recorder's own finding (a source
+    with cause "permission") comes first."""
     sources = (live_status(sid) or {}).get("sources") or []
     refused = {src.get("kind") for src in sources if src.get("cause") == "permission"}
+    playing = any(src.get("kind") == "meeting" for src in sources)
     out = {}
     if capture in ("auto", "mic"):
         status = mic_access()
@@ -2243,7 +2246,7 @@ def access(sid, capture):
                       else "ask" if status == "undetermined" else "allowed")
     if capture in ("auto", "meeting"):
         out["meeting_audio"] = ("denied" if "meeting" in refused else "allowed" if _snap_permitted()
-                                else "denied" if SNAP_ASKED.exists() else "ask")
+                                else "denied" if SNAP_ASKED.exists() else "ask" if playing else "not_asked")
     return out
 
 
