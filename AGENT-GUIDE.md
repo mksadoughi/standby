@@ -174,7 +174,8 @@ is a letter, typed alone followed by Enter. In VS Code and the desktop app they 
   Right Option twice, Hold to Talk, or a custom key, all in Settings > Dictation or the menu-bar icon.
 - Press, speak, press again: the text is pasted where the cursor is (or typed, if the user prefers).
 - **Word fixes** (`~/.standby/dictation-words.txt`) correct names and terms; "Fix Last Dictation…" in the menu-bar
-  menu learns a correction. Standby also learns words from the user's Claude Code projects.
+  menu learns a correction, and on calls Claude also lists the names it got wrong. The fixes apply to dictation and to
+  the transcripts Standby shows and sends to Claude Code. Standby also learns words from the user's Claude Code projects.
 - `standby dictation` shows its state and which permissions are missing; `standby dictation off` turns it off.
 
 ### Settings
