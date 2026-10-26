@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 STATES = ["settings", "settings-help", "settings-call", "settings-recording", "usage", "usage-today", "usage-empty", "dictation", "dictation-shortcut", "dictation-recording", "settings-voice-prep", "settings-try-start", "settings-try-mid", "settings-try-failed", "settings-try-playing", "dictation-words", "settings-talkover", "settings-speech-dl", "settings-speech-8gb", "settings-speech-8gb-standard",
-          "mx-past", "mx-row-menu", "mx-delete-ask", "mx-past-session", "mx-past-open", "mx-past-open-menu", "mx-past-empty", "mx-live", "mx-hear", "mx-hear-open", "mx-hear-off", "mx-hear-new", "mx-ask", "mx-pausing", "mx-ending", "mx-live-menu", "mx-paused", "mx-micno", "mx-soundno", "mx-spkname", "cc-live", "cc-livemenu", "cc-call", "cc-call-tasks", "cc-call-thinking", "cc-call-pausing", "cc-call-paused", "cc-call-waiting", "cc-call-working", "cc-callmenu", "cc-callcopy", "cc-callend", "cc-ended", "cc-long", "cc-past", "cc-past-menu"]
+          "mx-past", "mx-row-menu", "mx-delete-ask", "mx-past-session", "mx-past-open", "mx-past-open-menu", "mx-past-empty", "mx-live", "mx-hear", "mx-hear-open", "mx-hear-off", "mx-hear-new", "mx-ask", "mx-pausing", "mx-ending", "mx-live-menu", "mx-paused", "mx-micno", "mx-soundno", "mx-soundask", "mx-spkname", "cc-live", "cc-livemenu", "cc-call", "cc-call-tasks", "cc-call-thinking", "cc-call-pausing", "cc-call-paused", "cc-call-waiting", "cc-call-working", "cc-callmenu", "cc-callcopy", "cc-callend", "cc-ended", "cc-long", "cc-past", "cc-past-menu"]
 
 FAKE = r"""
 const NOW = Date.now() / 1000, SCENE = location.hash.slice(1);
@@ -278,6 +278,7 @@ const MXFAKE = (() => {
       return {partial: c.live ? "Ines: if the fares endpoint gets the same cache" : "",
         sources: this.micNo ? [{kind: "mic", ok: false, cause: "permission", reason: "not allowed", detail: "Allow Standby in System Settings > Privacy & Security > Microphone. It records by itself once allowed."}]
           : this.soundNo ? [{kind: "meeting", ok: false, cause: "permission", reason: "not allowed", detail: "Allow Standby in System Settings > Privacy & Security > Screen & System Audio Recording."}] : [],
+        meeting_audio: this.soundAsk ? "ask" : undefined,
         hearing: c.live && this.hearing ? this.hearing : undefined} },
     // something live in a session, as Claude Code would start it (the previews' stand-in for /standby listen and call)
     startMeeting(agent, title) { const c = {id: "c-live-m", kind: "meeting", from: agent, to: "you", at: now(), session: "sample-meet", title: title || "Meeting", live: true, duration_s: 0, points: [], names: ["Nadia", "Theo", "Ines"]};
@@ -375,6 +376,7 @@ SCENES = r"""
     if (SCENE === "mx-ask") MXFAKE.ask = {id: "mic:airpods", text: "AirPods Pro connected: record from their mic? Their sound drops to call quality while it records.",
       actions: [{label: "Switch", value: "use"}, {label: "Keep this mic", value: "keep"}]};
     if (SCENE === "mx-soundno") MXFAKE.soundNo = true;
+    if (SCENE === "mx-soundask") MXFAKE.soundAsk = true;
     await mxGo(); await wait(200);
     // deleting one: its row's menu (the ⋯ shown as a pointer would), then the question
     if (SCENE === "mx-row-menu" || SCENE === "mx-delete-ask") { const row = [...document.querySelectorAll(".mx-prow[data-sid]")].find(r => !r.classList.contains("live"));
@@ -384,7 +386,7 @@ SCENES = r"""
     if (SCENE === "mx-past-open" || SCENE === "mx-past-open-menu") { mxNavPick("a-planner"); await mxPastOpen(MX.items.find(x => x.title === "Guest TTL review").session); for (let k = 0; k < 3; k++) await mxPoll() }
     if (SCENE === "mx-past-open-menu") { const it = MX.items.find(x => x.title === "Guest TTL review"), b = document.querySelector('#mview header button[title="More"]');
       mxWinMenu({ stopPropagation() {}, currentTarget: b }, it.id); await wait(100) }
-    if (["mx-live", "mx-hear", "mx-hear-open", "mx-hear-off", "mx-hear-new", "mx-ask", "mx-pausing", "mx-ending", "mx-paused", "mx-micno", "mx-soundno", "mx-spkname", "mx-live-menu"].includes(SCENE)) {
+    if (["mx-live", "mx-hear", "mx-hear-open", "mx-hear-off", "mx-hear-new", "mx-ask", "mx-pausing", "mx-ending", "mx-paused", "mx-micno", "mx-soundno", "mx-soundask", "mx-spkname", "mx-live-menu"].includes(SCENE)) {
       await mxOpenWin("sample-meet"); for (let k = 0; k < 6; k++) await mxPoll();
       if (SCENE === "mx-paused") await mxPause("sample-meet", true);
       if (SCENE.startsWith("mx-hear") && SCENE !== "mx-hear") { MXHEAR.open = true; mxPaint() }
