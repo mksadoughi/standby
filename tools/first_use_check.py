@@ -61,8 +61,11 @@ def server():
     env = dict(os.environ, STANDBY_UI_PORT=str(port), STANDBY_NO_DEVICES="1")
     t0 = time.time()
     log = os.path.join(tempfile.gettempdir(), "standby-first-use-ui.log")
-    proc = subprocess.Popen([sys.executable, os.path.join(MAC, "ui.py")], env=env, stdout=subprocess.DEVNULL,
-                            stderr=open(log, "w"))
+    # every thread's stack each 5 s into its log while it starts: where a slow first start goes
+    start = ("import faulthandler, runpy, sys; faulthandler.dump_traceback_later(5, repeat=True); "
+             "sys.argv = [%r]; sys.path.insert(0, %r); runpy.run_path(%r, run_name='__main__')"
+             % (os.path.join(MAC, "ui.py"), MAC, os.path.join(MAC, "ui.py")))
+    proc = subprocess.Popen([sys.executable, "-c", start], env=env, stdout=subprocess.DEVNULL, stderr=open(log, "w"))
     tok, answer, refused = os.path.join(ROOT, "ui.token"), None, None
     try:
         while time.time() - t0 < 120 and answer is None:
@@ -86,7 +89,7 @@ def server():
     if out["server_s"] > 5:                       # slow to answer: where its start went, by its own log's clock
         print("  the server's log, from its start (%s):" % time.strftime("%H:%M:%S", time.localtime(t0)))
         try:
-            for line in open(log).read().splitlines()[:40]:
+            for line in open(log).read().splitlines()[:200]:
                 print("    " + line)
         except OSError:
             pass
@@ -114,7 +117,8 @@ def speech():
         cfg = {}
     name = speechmodel.for_load(cfg)              # the model the installer chose for this Mac, as the recorder loads it
     out["model"] = name
-    hear(speechmodel, native_speech, name, audio, "")
+    # --standard: a 16 GB Mac's model, run first, so its first run is this Mac's first run of any (as there). Fetched
+    # before anything is loaded: loading a model turns the download library's offline mode on, for the process
     if "--standard" in sys.argv and speechmodel.chosen(cfg) != "standard_en":
         t0 = time.time()
         path = speechmodel.fetch("standard_en")
@@ -122,6 +126,7 @@ def speech():
         step("the Standard model is there (a 16 GB Mac's; %.0fs to fetch)" % out["standard_fetch_s"], bool(path), path)
         if path:
             hear(speechmodel, native_speech, path, audio, "standard ")
+    hear(speechmodel, native_speech, name, audio, "")
 
 
 def hear(speechmodel, native_speech, name, audio, label):
