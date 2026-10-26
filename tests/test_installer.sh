@@ -226,27 +226,50 @@ check "  and points to 'standby app' instead" "grep -q 'Open Standby:   standby 
 check "  and dictation still works without its app" \
   "grep -q 'still works' $T/out.4 && [[ ! -e \"$H/Applications/Standby Dictation.app\" ]]"
 # Python 3.12 or later only: the pinned numpy, scipy and onnxruntime have no wheels for 3.10 or
-# 3.11. A Mac that has only 3.11 is told so (no Homebrew), or gets 3.12 from Homebrew.
-P="$T/py311"; mkdir -p "$P" "$T/brewprefix/bin"
+# 3.11. A Mac without 3.12 or 3.13 gets a prebuilt 3.12 of Standby's own, from uv (pinned, checksum
+# checked): never Homebrew. A stand-in uv, from a local file, notes what it was asked.
+U="$T/uvpkg/uv-aarch64-apple-darwin"; mkdir -p "$U"
+cat > "$U/uv" <<EOF
+#!/bin/bash
+echo "\$*" >> "$T/uv.args"
+case "\$1 \$2" in
+  "--version "*) echo "uv 0.12.24 (stand-in)" ;;
+  "python install") mkdir -p "\$UV_PYTHON_INSTALL_DIR/cpython-3.12.15/bin" && cp "$B/python3.12" "\$UV_PYTHON_INSTALL_DIR/cpython-3.12.15/bin/python3.12" ;;
+  "python find") echo "\$UV_PYTHON_INSTALL_DIR/cpython-3.12.15/bin/python3.12" ;;
+esac
+EOF
+chmod +x "$U/uv"; tar czf "$T/uv.tar.gz" -C "$T/uvpkg" uv-aarch64-apple-darwin
+UVSUM="$(shasum -a 256 "$T/uv.tar.gz" | cut -d' ' -f1)"
+uvrun() { local out="$1" path="$2"; shift 2
+  HOME="$H" STANDBY_HOMEBREW="${HB:-$T/no-homebrew}" STANDBY_UV_URL="file://$T/uv.tar.gz" STANDBY_UV_SUM="${SUM:-$UVSUM}" \
+    PATH="$path:/usr/bin:/bin" SHELL=/bin/bash "$@" bash "$REPO/install.sh" --from-here > "$T/out.$out" 2>&1; }
+P="$T/py311"; mkdir -p "$P"
 cp "$B/uname" "$B/sw_vers" "$B/df" "$B/sysctl" "$P/"
 printf '#!/bin/bash\n[[ "$1" == "-V" ]] && { echo "Python 3.11.9"; exit 0; }\n[[ "$1" == "-c" ]] && exit 1\nexit 0\n' > "$P/python3"
 cp "$P/python3" "$P/python3.11"; cp "$P/python3" "$P/python3.10"
-cp "$B/python3.12" "$T/brewprefix/bin/python3.12"
-printf '#!/bin/bash\necho "$*" >> "%s/brew.args"\n[[ "$1" == "--prefix" ]] && echo "%s/brewprefix"\nexit 0\n' "$T" "$T" > "$P/brew"
-chmod +x "$P"/* "$T/brewprefix/bin"/*
-mkdir -p "$T/onlybrewless"; cp "$P/uname" "$P/sw_vers" "$P/df" "$P/sysctl" "$P/python3" "$P/python3.11" "$T/onlybrewless/"
-HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$T/onlybrewless:/usr/bin:/bin" bash "$REPO/install.sh" --from-here > "$T/out.py1" 2>&1; rc=$?
-check "only Python 3.11, no Homebrew: refused, saying 3.12 is needed" \
-  "[[ $rc -ne 0 ]] && grep -q 'Python 3.12 is needed' $T/out.py1"
-HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$P:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.py2" 2>&1
-check "  with Homebrew: it installs python@3.12, and does not use 3.10 or 3.11" \
-  "grep -q 'install python@3.12' $T/brew.args && grep -q 'Installing Python 3.12 with Homebrew' $T/out.py2 && ! grep -q 'Python: Python 3.1[01]' $T/out.py2"
-# Homebrew just installed, but this Terminal not told yet (its printed "Next steps" not done): found in its
-# own place, not "install Homebrew" again (seen on a fresh macOS 14).
-mkdir -p "$T/hb/bin"; cp "$P/brew" "$T/hb/bin/brew"; : > "$T/brew.args"
-HOME="$H" STANDBY_HOMEBREW="$T/hb" PATH="$T/onlybrewless:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.py5" 2>&1
-check "  Homebrew installed but not on this Terminal's PATH yet: found, and used" \
-  "grep -q 'install python@3.12' $T/brew.args && ! grep -q 'Install Homebrew' $T/out.py5"
+printf '#!/bin/bash\necho "$*" >> "%s/brew.args"\nexit 0\n' "$T" > "$P/brew"
+chmod +x "$P"/*
+: > "$T/uv.args"; : > "$T/brew.args"
+uvrun py1 "$P"; rc=$?
+check "only Python 3.11 (Homebrew there too): a prebuilt Python 3.12 of Standby's own, from uv" \
+  "[[ $rc -eq 0 ]] && grep -q 'Python 3.12 for Standby (prebuilt' $T/out.py1 && grep -q 'Python: Python 3.12' $T/out.py1 && ! grep -q 'Python: Python 3.1[01]' $T/out.py1"
+check "  uv pinned and checked, kept in ~/.standby; its Python there too, nothing in ~/.local/bin" \
+  "[[ -x $H/.standby/bin/uv && -x $H/.standby/python/cpython-3.12.15/bin/python3.12 ]] && grep -qx 'python install 3.12 --no-bin --no-registry' $T/uv.args"
+check "  never Homebrew, never an admin password" "[[ ! -s $T/brew.args ]] && ! grep -qi 'homebrew\\|sudo' $T/out.py1"
+: > "$T/uv.args"; uvrun py2 "$P"
+check "  run again: uv already there, not fetched again" "grep -q 'python install 3.12' $T/uv.args && grep -q 'Python: Python 3.12' $T/out.py2"
+rm -f "$H/.standby/bin/uv"; SUM=0000 uvrun py6 "$P"; rc=$?
+check "  a uv download that doesn't match its checksum: refused, and not kept" \
+  "[[ $rc -ne 0 ]] && grep -q \"uv's download didn't match its checksum\" $T/out.py6 && [[ ! -e $H/.standby/bin/uv ]]"
+: > "$T/uv.args"; uvrun py7 "$B" env STANDBY_PREBUILT_PYTHON=1
+check "  STANDBY_PREBUILT_PYTHON=1 (after 3.13 failed): the prebuilt one even with 3.12 on PATH" \
+  "grep -q 'python install 3.12' $T/uv.args && grep -q 'Python 3.12 for Standby (prebuilt' $T/out.py7"
+# A Python 3.12 already here is used as before: on PATH, or Homebrew's in its place though this Terminal
+# hasn't been told about Homebrew yet (the "Next steps" its installer prints).
+mkdir -p "$T/hb/bin"; cp "$P/brew" "$T/hb/bin/brew"; cp "$B/python3.12" "$T/hb/bin/python3.12"; chmod +x "$T/hb/bin"/*
+: > "$T/uv.args"; HB="$T/hb" uvrun py5 "$P"
+check "Homebrew's Python 3.12, its bin not on this Terminal's PATH yet: found and used, nothing fetched" \
+  "grep -q 'Python: Python 3.12' $T/out.py5 && ! grep -q 'prebuilt' $T/out.py5 && [[ ! -s $T/uv.args ]]"
 # The closing lines name the standby command; a Terminal opened before the install has no PATH for it yet.
 check "the closing lines tell the user to open a new Terminal window first" \
   "grep -q 'standby help (open a new Terminal window first' $T/out.1"
@@ -277,9 +300,9 @@ check "  not on a 16 GB Mac" "! grep -q 'Small speech model' $T/out.1"
 Q="$T/py314"; mkdir -p "$Q"; cp "$B/uname" "$B/sw_vers" "$B/df" "$B/sysctl" "$Q/"
 printf '#!/bin/bash\n[[ "$1" == "-V" ]] && { echo "Python 3.14.0"; exit 0; }\n[[ "$1" == "-c" ]] && exit 1\nexit 0\n' > "$Q/python3"
 cp "$Q/python3" "$Q/python3.14"; chmod +x "$Q"/*
-HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$Q:/usr/bin:/bin" bash "$REPO/install.sh" --from-here > "$T/out.p4" 2>&1; rc=$?
-check "only Python 3.14, no Homebrew: refused, 3.12 needed and 3.14 not supported yet" \
-  "[[ $rc -ne 0 ]] && grep -q \"3.14 or later isn't supported yet\" $T/out.p4 && ! grep -q 'Python: Python 3.14' $T/out.p4"
+uvrun p4 "$Q"; rc=$?
+check "only Python 3.14 (not supported yet): not used, the prebuilt 3.12 instead" \
+  "[[ $rc -eq 0 ]] && grep -q 'Python: Python 3.12' $T/out.p4 && ! grep -q 'Python: Python 3.14' $T/out.p4"
 # Python 3.13 whose packages don't install: said plainly, with the way to 3.12.
 H13="$T/home313"; V13="$H13/.standby/venv/bin"; mkdir -p "$V13"; cp -R "$H/.standby/models" "$H13/.standby/"
 printf '#!/bin/bash\nexit 0\n' > "$V13/pip"
@@ -287,7 +310,7 @@ printf '#!/bin/bash\n[[ "$*" == *"import numpy, sounddevice"* ]] && exit 1\nexit
 chmod +x "$V13"/*
 HOME="$H13" PATH="$B:/usr/bin:/bin" bash "$REPO/install.sh" --from-here > "$T/out.p3" 2>&1; rc=$?
 check "Python 3.13 whose packages don't install: refused, saying to use 3.12, and how" \
-  "[[ $rc -ne 0 ]] && grep -q \"don't install on Python 3.13 on this Mac. Use Python 3.12\" $T/out.p3 && grep -q 'brew install python@3.12' $T/out.p3"
+  "[[ $rc -ne 0 ]] && grep -q \"don't install on Python 3.13 on this Mac. Use a Python 3.12 of Standby's own\" $T/out.p3 && grep -q 'STANDBY_PREBUILT_PYTHON=1 ./install.sh' $T/out.p3"
 
 # Stub uname rather than trusting the host's: on macOS the real one says Darwin,
 # so install.sh would get past the OS gate and fail later for another reason.
