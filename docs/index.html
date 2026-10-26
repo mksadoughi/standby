@@ -180,13 +180,13 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   .draw{width:100%;max-width:240px;justify-self:center}
   .howto-slot{height:auto;min-height:48px;margin-top:24px}
   .howto{position:relative;--pw:100%;max-width:100%}
-  .howto .steps{display:none;width:100%;padding:0 14px 14px}
+  .howto .steps{display:none;width:100%;padding:6px 14px 14px}
   .howto:focus-within{width:128px;height:48px}
   .howto:focus-within .steps{display:none}
   .howto.open,.howto.open:focus-within{width:100%;height:auto}
   .howto.open .steps{display:block}
   .howto .tabs{left:auto;right:10px;top:8px}
-  .howto .tabs button{padding:5px 10px;min-height:30px}
+  .howto .tabs button{padding:0 10px;min-height:30px;line-height:30px}   /* 36 px with its frame: clear of the first step's Copy button */
   .howto .steps p{gap:8px;flex-wrap:nowrap;align-items:flex-start}   /* a step's words beside its number, never under it */
   .howto .n{margin-top:1px}
   .howto .cp{min-height:36px;flex:none}
@@ -207,11 +207,22 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   #what{padding-top:48px}
   .head h2{font-size:28px}.head p{font-size:16px}
   .thread{--x:7px;--gap:28px;padding:24px 0}
-  .thread .card,.thread .card:nth-of-type(odd),.thread .card:nth-of-type(even){width:calc(100% - 28px);margin:0 0 24px 28px;filter:none;opacity:1;transform:none}
+  .thread .card,.thread .card:nth-of-type(odd),.thread .card:nth-of-type(even){width:calc(100% - 28px);margin:0 0 0 28px;filter:none;opacity:1;transform:none}
   .thread .card:last-of-type{margin-bottom:0}
-  .thread .card{padding:10px 10px 18px;border-radius:14px}
-  .card h3{font-size:18px;margin:12px 4px 6px}
-  .card p{margin:0 4px;font-size:14.5px;line-height:1.55}
+  /* one frame per feature: the film is the picture, the words sit under it, a hairline between features */
+  .thread .card,.thread .card.focus{padding:0 0 20px;border:0;border-radius:0;background:none;box-shadow:none}
+  .thread .card+.card{padding-top:20px;border-top:1px solid var(--line)}
+  .card h3{font-size:18px;margin:14px 0 6px}
+  .card p{margin:0;font-size:14.5px;line-height:1.55}
+  /* each film cropped to where its story happens, so the picture is only as big as what's in it */
+  .loop{position:relative;border-radius:12px;aspect-ratio:calc(16 * var(--cw,1)) / calc(9 * var(--ch,1))}
+  .loop video{position:absolute;height:auto;width:calc(100% / var(--cw,1));left:calc(-100% * var(--x0,0) / var(--cw,1));top:calc(-100% * var(--y0,0) / var(--ch,1))}
+  .loop:has(video[src*="card-plugin-slides"]){--x0:.08;--y0:.02;--cw:.84;--ch:.9}
+  .loop:has(video[src*="card-orb-story"]){--x0:.04;--y0:.08;--cw:.94;--ch:.84}
+  .loop:has(video[src*="card-hear-sources"]){--x0:.06;--y0:.04;--cw:.82;--ch:.88}
+  .loop:has(video[src*="card-who-naming"]){--x0:0;--y0:0;--cw:.72;--ch:1}
+  .loop:has(video[src*="card-learn"]){--x0:.05;--y0:.06;--cw:.81;--ch:.56}
+  .loop:has(video[src*="card-plan"]){--x0:.1;--y0:.16;--cw:.8;--ch:.7}
   .joint{height:48px}.joint.tall{height:56px}
   .faq{margin-top:24px}
   .faq summary{gap:16px;line-height:1.5}
@@ -226,7 +237,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 @media (max-width:560px){
   .why{grid-template-columns:1fr 1fr}
   .thread{padding:16px 0}.thread:before,.thread .knot,.thread .glow{display:none}
-  .thread .card,.thread .card:nth-of-type(odd),.thread .card:nth-of-type(even){width:100%;margin:0 0 14px}
+  .thread .card,.thread .card:nth-of-type(odd),.thread .card:nth-of-type(even){width:100%;margin:0}
 }
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.thread .card{transition:none}.thread .glow{display:none}.thread .knot.on:before,.thread .knot.on:after{animation:none}}
 
