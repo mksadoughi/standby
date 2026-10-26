@@ -34,7 +34,7 @@ Ask the user before installing anything. Then check each requirement and tell th
 | Apple Silicon | `uname -m` prints `arm64` |
 | macOS 14 (Sonoma) or later | `sw_vers -productVersion` |
 | 6 GB free disk (fresh install) | `df -h ~` |
-| Python 3.12 (3.13 also works) | `python3.12 --version`. If missing, the installer adds it with Homebrew (`brew`), or stops if Homebrew isn't there |
+| Python 3.12 (3.13 also works): nothing to do | `python3.12 --version`. If there's none, the installer puts a prebuilt Python 3.12 of Standby's own in `~/.standby/python` (with uv, a few seconds; no Homebrew, no admin password) |
 | Claude Code 2.1.299 or later, signed in | `claude --version` shows 2.1.299 or later (older: `claude update`; the plugin doesn't load before it), and the user has run `claude` and signed in |
 | Memory | `sysctl -n hw.memsize`. With 8 GB, Standby uses its small English speech model; 16 GB is recommended for calls |
 

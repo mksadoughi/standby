@@ -65,6 +65,23 @@ jobs:
           { echo "### First use"; echo; echo '```'; cat "$RUNNER_TEMP/logs/first-use.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit $rc
 
+      # A Mac with no Python 3.12 or 3.13 gets a prebuilt 3.12 of Standby's own (uv, pinned): these runners
+      # have one, so it's asked for here, on a fresh venv, then used for first use again.
+      - name: The prebuilt Python (a Mac with none of its own)
+        if: ${{ !cancelled() }}
+        run: |
+          rm -rf "$HOME/.standby/venv"
+          from=""; [[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || from="--from-here"
+          start=$(date +%s)
+          STANDBY_PREBUILT_PYTHON=1 bash ./install.sh $from 2>&1 | tee "$RUNNER_TEMP/logs/install-prebuilt-python.log"
+          rc=${PIPESTATUS[0]}
+          "$HOME/.standby/venv/bin/python" -c 'import os, sys; print(os.path.realpath(sys.executable))' | tee -a "$RUNNER_TEMP/logs/install-prebuilt-python.log"
+          "$HOME/.standby/venv/bin/python" -c 'import os, sys; sys.exit("/.standby/python/" not in os.path.realpath(sys.executable))'
+          "$HOME/.standby/venv/bin/python" tools/first_use_check.py | tee -a "$RUNNER_TEMP/logs/install-prebuilt-python.log"
+          rc2=${PIPESTATUS[0]}
+          echo "### The prebuilt Python: install exit $rc, $(( $(date +%s) - start )) s; first use exit $rc2" >> "$GITHUB_STEP_SUMMARY"
+          exit $(( rc || rc2 ))
+
       - name: The plugin on the latest Claude Code
         if: ${{ !cancelled() }}
         run: |

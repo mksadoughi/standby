@@ -85,24 +85,40 @@ fi
 
 # Python 3.12, or 3.13 if the pinned packages install on it (checked after the install below).
 # Not 3.11 or earlier: the pinned numpy, scipy and onnxruntime have no builds for those. Not 3.14
-# or later yet: nothing pinned has been tried on it.
-# Homebrew installed, but this Terminal not told yet (the "Next steps" its installer prints): found in its
-# own place, so the Python it installs, or will, is found too. Without this, a Mac that had just installed
-# Homebrew was told to install Homebrew.
+# or later yet: nothing pinned has been tried on it. None on this Mac: a prebuilt Python 3.12 of
+# Standby's own, in ~/.standby/python, put there by uv (Astral's tool; its release pinned and checked
+# here, like the models): a few seconds, no Homebrew and no admin password. (Homebrew builds Python
+# from source on macOS 14: about 11 minutes, measured.)
+UV_VERSION="0.12.24"
+UV_URL="${STANDBY_UV_URL:-https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-aarch64-apple-darwin.tar.gz}"
+UV_SUM="${STANDBY_UV_SUM:-0c4346de7abdb49495b393b9ec809fe387aa43e586be20fecb972216c1e71732}"
+# Homebrew's Python, where there is one, found even when this Terminal hasn't been told about Homebrew
+# yet (the "Next steps" its installer prints), so it is used rather than a second Python fetched.
 HOMEBREW="${STANDBY_HOMEBREW:-/opt/homebrew}"       # its place on Apple Silicon (tests point elsewhere)
 [[ -x "$HOMEBREW/bin/brew" && ":$PATH:" != *":$HOMEBREW/bin:"* ]] && PATH="$PATH:$HOMEBREW/bin"     # last: a Python on PATH still wins
 PY=""
-for c in python3.12 python3.13 python3; do
+[[ "${STANDBY_PREBUILT_PYTHON:-}" == 1 ]] || for c in python3.12 python3.13 python3; do
   if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info[:2] not in ((3, 12), (3, 13)))'; then
     PY="$(command -v "$c")"; break
   fi
 done
 if [[ -z "$PY" ]]; then
-  command -v brew >/dev/null 2>&1 || die "Python 3.12 is needed (3.13 works too; 3.14 or later isn't supported yet).
-   Install Homebrew (https://brew.sh) or Python 3.12, then run this again."
-  say "Installing Python 3.12 with Homebrew"
-  brew install python@3.12
-  PY="$(brew --prefix)/bin/python3.12"
+  say "Python 3.12 for Standby (prebuilt, in ${ROOT/#$HOME/~}/python)"
+  export UV_CACHE_DIR="$ROOT/cache/uv" UV_PYTHON_INSTALL_DIR="$ROOT/python" UV_NO_CONFIG=1
+  mkdir -p "$ROOT/bin" "$UV_PYTHON_INSTALL_DIR"
+  if ! "$ROOT/bin/uv" --version 2>/dev/null | grep -q "^uv $UV_VERSION "; then
+    UVTMP="$(mktemp -d)"
+    curl -fsSL -o "$UVTMP/uv.tar.gz" "$UV_URL" \
+      || { rm -rf "$UVTMP"; die "couldn't download uv, which brings Python 3.12: check the internet connection, then run this again"; }
+    echo "$UV_SUM  $UVTMP/uv.tar.gz" | shasum -a 256 -c >/dev/null 2>&1 \
+      || { rm -rf "$UVTMP"; die "uv's download didn't match its checksum: run this again"; }
+    tar xzf "$UVTMP/uv.tar.gz" -C "$UVTMP" && mv "$UVTMP/uv-aarch64-apple-darwin/uv" "$ROOT/bin/uv"
+    rm -rf "$UVTMP"
+  fi
+  "$ROOT/bin/uv" python install 3.12 --no-bin --no-registry >/dev/null 2>&1 \
+    || die "couldn't install Python 3.12 (with uv): check the internet connection, then run this again"
+  PY="$("$ROOT/bin/uv" python find 3.12 --managed-python --no-project 2>/dev/null || true)"
+  [[ -x "$PY" ]] || die "Python 3.12 didn't install in ${ROOT/#$HOME/~}/python: run this again"
 fi
 ok "Python: $("$PY" -V)"
 
@@ -139,8 +155,8 @@ PINS=(-c "$REPO/constraints.txt")
   pyobjc-framework-AVFoundation pyobjc-framework-ScreenCaptureKit pyobjc-framework-CoreML | grep -E "^(Successfully|ERROR)" || true
 if ! "$VENV/bin/python" -c "import numpy, sounddevice, parakeet_mlx, sherpa_onnx, webview" 2>/dev/null; then
   if "$VENV/bin/python" -c 'import sys; sys.exit(sys.version_info[:2] != (3, 13))' 2>/dev/null; then
-    die "The packages Standby uses don't install on Python 3.13 on this Mac. Use Python 3.12:
-     brew install python@3.12 && rm -rf ${VENV/#$HOME/~} && ./install.sh"
+    die "The packages Standby uses don't install on Python 3.13 on this Mac. Use a Python 3.12 of Standby's own:
+     rm -rf ${VENV/#$HOME/~} && STANDBY_PREBUILT_PYTHON=1 ./install.sh"
   fi
   die "package install failed. Re-run with: $VENV/bin/pip install -c $REPO/constraints.txt numpy sounddevice parakeet-mlx mlx-whisper sherpa-onnx pywebview"
 fi
