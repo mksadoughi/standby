@@ -1147,6 +1147,9 @@ class Channel(object):
         # the Mac's own sound taken out of this mic while dictating or in voice mode
         # (roomonly.RoomOnly), or None. Its lock keeps what it hands back in order.
         self.room, self._room_lock = None, threading.Lock()
+        # While the engine has the mic (borrowed), its last second, and where Standby Dictation
+        # takes it from during a call (tap_to): a second reader of the mic gets near silence then.
+        self._ring, self._ring_n, self._tap, self._tap_lock = deque(), 0, None, threading.Lock()
         # diarizer() is the diarization model once loaded (None meanwhile, or never:
         # macOS 13, not installed); voices, this channel's speakers from it; held, lines
         # waiting for theirs; label_wait(), whether a line now is a transcript line (not
@@ -1167,6 +1170,8 @@ class Channel(object):
         if self.cause is not None:             # audio again: a stall is over only now, not at reopening
             self.cause, self.backoff = None, BACKOFF[0]
         self.last_audio = time.time()
+        if self.borrowed is not None:
+            self._tap_feed(block)
         if self.capture is None:               # a call's capture sends zeros whenever the app is quiet
             self.zeros = 0.0 if block.any() else self.zeros + len(block) / float(SAMPLE_RATE)
         if self.room is None:
@@ -1177,6 +1182,28 @@ class Channel(object):
                 block = self.room.clean(block)
             if len(block):
                 self.audio.put(block)
+
+    def _tap_feed(self, block):
+        """The engine's audio thread: its last second kept, and handed on while tapped."""
+        with self._tap_lock:
+            self._ring.append(block)
+            self._ring_n += len(block)
+            while self._ring and self._ring_n - len(self._ring[0]) >= SAMPLE_RATE:
+                self._ring_n -= len(self._ring.popleft())
+            if self._tap is not None:
+                try:
+                    self._tap.write(block.astype("float32", copy=False).tobytes())
+                except Exception:
+                    self._tap = None             # never at the cost of the call's own audio
+
+    def tap_to(self, fh):
+        """This mic, as the call's engine hears it (echo cancelled), from its last second on,
+        written to fh (an open binary file), or no more (None)."""
+        with self._tap_lock:
+            if fh is not None:
+                for block in self._ring:
+                    fh.write(block.astype("float32", copy=False).tobytes())
+            self._tap = fh
 
     def room_on(self, room):
         """From the next block, this mic with the Mac's own sound taken out."""
@@ -3666,6 +3693,47 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         dictation["mode"] = "voice"
         log("voice %s: talked over Claude: it stops, and this is the next turn" % dictation["seq"])
 
+    lent = {"ch": None, "fh": None}           # the call's mic, lent to Standby Dictation (follow_dictating)
+    lent_path = sdir / "dictating.f32"
+
+    def follow_dictating():
+        """Standby Dictation during a call: while voice mode's engine has the mic, a second
+        reader of it gets near silence (6 of 6 dictations in a call heard nothing, the mic
+        "3ch"; 316 of 324 heard fine at "1ch"). So while it says it dictates (the session's
+        `dictating` file, MeetingGuard's), the call's own mic, echo cancelled, from its
+        last second on, goes to dictating.f32, which it reads instead. This user's only;
+        gone when it is done."""
+        want = dictation["mode"] in ("voice", "hold") and (sdir / "dictating").exists()
+        src = next((c for c in mics() if c.borrowed is not None), None) if want else None
+        if src is not None and lent["ch"] is None:
+            try:
+                fh = os.fdopen(os.open(str(lent_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "wb", buffering=0)
+            except OSError as exc:
+                log("dictation: the call's mic not lent (%r): it opens the mic itself" % exc)
+                return
+            src.tap_to(fh)
+            lent.update(ch=src, fh=fh)
+            log("dictation: during voice mode, from the call's own mic (echo cancelled)")
+        elif src is None and lent["ch"] is not None:
+            end_lending()
+
+    def end_lending():
+        ch, fh = lent["ch"], lent["fh"]
+        lent.update(ch=None, fh=None)
+        if ch is not None:
+            ch.tap_to(None)
+        if fh is not None:
+            try:
+                fh.close()
+            except OSError:
+                pass
+        try:
+            lent_path.unlink()
+        except OSError:
+            pass
+
+    end_lending()                             # one a crash left behind
+
     def poll_dictation():
         try:
             ctl = dict_ctl.read_text().split()
@@ -3772,6 +3840,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
             sync_off_echo()
             retire_voice_io()
             poll_dictation()
+            follow_dictating()
             serve_decodes(decode_dir, model)
             # Voice mode's orb and captions follow the mic closely.
             if time.time() - last_status[0] >= (0.1 if dictation["mode"] in ("voice", "hold") else 0.5):
@@ -3826,6 +3895,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         except OSError:
             pass
         try:
+            end_lending()
             events.close_all()                    # a pause, voice mode or a mute: its span ends with the session
             for ref in off_echo["refs"].values():
                 if ref is not None:
@@ -4139,5 +4209,40 @@ def main():
     return 0
 
 
+def exit_now(code):
+    """Exit as Python would, its threads waited for and its exit hooks run (the captures
+    stopped, Core Audio's listeners removed), but without tearing the interpreter down:
+    Core Audio and ScreenCaptureKit call in on threads of their own, and one that came
+    in while Python was being torn down killed the recorder inside libdispatch, with
+    macOS's "Python quit unexpectedly" on the user's screen as a call ended (2026-10-26)."""
+    import atexit
+    import threading
+    if isinstance(code, str):
+        print(code, file=sys.stderr)
+        code = 1
+    try:
+        threading._shutdown()
+    except Exception:
+        pass
+    try:
+        atexit._run_exitfuncs()
+    except Exception:
+        pass
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
+    os._exit(code if isinstance(code, int) else 0 if code is None else 1)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        result = main()
+    except SystemExit as exc:
+        result = exc.code
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        result = 1
+    exit_now(result)
