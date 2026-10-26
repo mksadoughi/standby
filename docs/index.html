@@ -233,6 +233,9 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   footer .wrap{gap:16px;padding-top:32px;padding-bottom:32px}
   footer .links{width:100%;margin-left:0;flex-wrap:wrap;gap:10px 18px}
 }
+/* each feature has a long text for desktop and a short one for phones, the same breakpoint as the phone layout */
+.say-short{display:none}
+@media (max-width:700px){.say-long{display:none}.say-short{display:inline}}
 /* a small phone: the promises two by two; the features' thread steps aside so the cards use the whole width */
 @media (max-width:560px){
   .why{grid-template-columns:1fr 1fr}
@@ -307,17 +310,17 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
   <div class="head"><h2>What it does</h2></div>
   <div class="thread">
     <div class="card"><figure class="loop"><video data-rate=".833" src="video/card-plugin-slides.mp4" poster="video/card-plugin-slides.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Built on Claude Code's plugins</h3><p>Standby is a Claude Code plugin, not a separate app. It runs inside your own session, in the terminal, VS Code or the Claude app, with your CLAUDE.md, skills and tools.</p></div>
+      <h3>Built on Claude Code's plugins</h3><p><span class="say-long">Standby is a Claude Code plugin, not a separate app. It runs inside your own session, in the terminal, VS Code or the Claude app, with your CLAUDE.md, skills and tools.</span><span class="say-short">A plugin, not a separate app: it runs in your own session, in the terminal, VS Code or the Claude app.</span></p></div>
     <div class="card"><figure class="loop"><video data-rate=".833" src="video/card-orb-story.mp4" poster="video/card-orb-story.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Stays out of your way</h3><p>Put a call away and it shrinks into the mini window in the corner of your screen, above every app. Click it to pause or resume; point at it for Full window, Settings and End. It never takes the keyboard from whatever you're typing in.</p></div>
+      <h3>Stays out of your way</h3><p><span class="say-long">Put a call away and it shrinks into the mini window in the corner of your screen, above every app. Click it to pause or resume; point at it for Full window, Settings and End. It never takes the keyboard from whatever you're typing in.</span><span class="say-short">Put a call away and it waits as a mini window in the corner, above every app. Click it to pause or resume.</span></p></div>
     <div class="card"><figure class="loop"><video data-rate=".833" src="video/card-hear-sources.mp4" poster="video/card-hear-sources.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Hears what you want it to</h3><p>Your mic, any meeting app, a video, a phone on speaker, the people in the room: Standby hears them straight from your Mac, with no bot in the call. The meeting window shows each one, and you untick what you'd rather it didn't hear.</p></div>
+      <h3>Hears what you want it to</h3><p><span class="say-long">Your mic, any meeting app, a video, a phone on speaker, the people in the room: Standby hears them straight from your Mac, with no bot in the call. The meeting window shows each one, and you untick what you'd rather it didn't hear.</span><span class="say-short">Your mic, any meeting app, a video or the room, straight from your Mac, with no bot in the call. Untick any source you'd rather it didn't hear.</span></p></div>
     <div class="card"><figure class="loop"><video data-rate=".833" src="video/card-who-naming.mp4" poster="video/card-who-naming.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Knows who's who</h3><p>It tells the voices apart and labels each line. Click a label to put a name on it; the name applies to the whole meeting, and Standby recognizes that voice in later meetings. It also learns your own voice from your calls, to tell you apart. Voice prints stay on your Mac; turn this off or forget them in Settings &gt; Recording.</p></div>
+      <h3>Knows who's who</h3><p><span class="say-long">It tells the voices apart and labels each line. Click a label to put a name on it; the name applies to the whole meeting, and Standby recognizes that voice in later meetings. It also learns your own voice from your calls, to tell you apart. Voice prints stay on your Mac; turn this off or forget them in Settings &gt; Recording.</span><span class="say-short">It labels each speaker; name a voice once and it's known next time. Voice prints, yours too, stay on your Mac, and you can turn them off.</span></p></div>
     <div class="card"><figure class="loop"><video src="video/card-learn.mp4" poster="video/card-learn.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Learns your words</h3><p>After a meeting, Claude lists the names and terms the speech model got wrong, and they join your word fixes. From then on, dictation and your transcripts get them right, with nothing for you to set up.</p></div>
+      <h3>Learns your words</h3><p><span class="say-long">After a meeting, Claude lists the names and terms the speech model got wrong, and they join your word fixes. From then on, dictation and your transcripts get them right, with nothing for you to set up.</span><span class="say-short">Names and terms from your Claude Code projects, and your own corrections, become word fixes, so dictation gets them right.</span></p></div>
     <div class="card"><figure class="loop"><video src="video/card-plan.mp4" poster="video/card-plan.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Light on your plan</h3><p>Standby is free, with nothing to pay per use: it runs through your own Claude subscription. Speech, speakers and the voice run on your Mac, and the call's quick replies use Haiku, the lightest model. A full day of calls took 1 to 2% of a Pro plan's week. Settings shows exactly what it used.</p></div>
+      <h3>Light on your plan</h3><p><span class="say-long">Standby is free, with nothing to pay per use: it runs through your own Claude subscription. Speech, speakers and the voice run on your Mac, and the call's quick replies use Haiku, the lightest model. A full day of calls took 1 to 2% of a Pro plan's week. Settings shows exactly what it used.</span><span class="say-short">Free, with nothing to pay per use: it runs on your own Claude subscription. A full day of calls took 1 to 2% of a Pro plan's week.</span></p></div>
   </div>
 </section>
 
