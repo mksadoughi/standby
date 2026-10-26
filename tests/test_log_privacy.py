@@ -73,13 +73,28 @@ with contextlib.redirect_stderr(diagnostics):
     vs._told = deque([(news, time.time() - 100, None)])
     assert not vs._fresh_told()
 
+    # What came back from a hand-off, as the voice words it: said and kept in the call, not in the log.
+    told = "Private Zephyr budget result, told"
+    task = {"id": "1", "state": "done", "seen": False}
+    ui.LITE_CALLS[sid] = {"cc": c["cc"], "tasks": {"1": task}}
+    with mock.patch.object(agentctl, "ask", return_value=told), \
+            mock.patch.object(ui, "call_muted", return_value=False), \
+            mock.patch.object(ui, "_lite_user_busy", return_value=False), \
+            mock.patch.object(ui, "_lite_typed_words", return_value=""), \
+            mock.patch.object(ui, "_lite_task_line", return_value="task 1: done"), \
+            mock.patch.object(ui, "_lite_came_back"), \
+            mock.patch.object(ui, "LITE_QUIET_GAP", 0.0):
+        ui._lite_tell(sid)
+    assert told in (sdir / "chat.jsonl").read_text(), "what the voice said is kept in the call's chat"
+    assert "what came back" in diagnostics.getvalue()
+
     learner = vocabulary.Learner(root / "words.txt", folders=lambda: [],
                                  vocab=root / "vocab.json", store=root / "suggestions.json")
     assert learner.learn([("privatezephir", "PrivateZephyr")])
 
 sbtrace.flush()
 assert not (sdir / "trace.jsonl").exists(), "production tracing must default to off"
-for private in (question, reply, work, title, news, "privatezephir", "PrivateZephyr"):
+for private in (question, reply, work, title, news, told, "privatezephir", "PrivateZephyr"):
     assert private not in diagnostics.getvalue(), "private text reached a routine log"
 assert "ask " in diagnostics.getvalue() and "handed to the session" in diagnostics.getvalue()
 
