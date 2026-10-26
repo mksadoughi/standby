@@ -52,7 +52,7 @@ cat > "$B/claude" <<EOF
 #!/bin/bash
 echo "\$*" >> "$T/claude.args"
 [[ "\$1" == "plugin" && -e "$T/claude-fails" ]] && exit 1
-echo "2.1.0 (Claude Code)"
+echo "\${CC_VERSION:-2.1.310} (Claude Code)"
 EOF
 cat > "$B/iconutil" <<'EOF'
 #!/bin/bash
@@ -198,6 +198,13 @@ NOC="$T/noclaude"; mkdir -p "$NOC"; cp "$B"/* "$NOC"/; rm -f "$NOC/claude"
 HOME="$H" PATH="$NOC:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.7" 2>&1; rc=$?
 check "  no Claude Code yet: the install still succeeds, and says how to add it later" \
   "[[ $rc -eq 0 ]] && grep -q \"Claude Code isn't on this Mac yet\" $T/out.7 && grep -q 'claude plugin marketplace add' $T/out.7"
+CC_VERSION=2.1.250 run 8; rc=$?
+check "  Claude Code too old for the plugin (before 2.1.299): says so, and how to update" \
+  "[[ $rc -eq 0 ]] && grep -q 'Claude Code 2.1.250 is too old for Standby: it needs 2.1.299 or later' $T/out.8 && grep -q 'claude update' $T/out.8"
+check "    and never says /standby is there to type" \
+  "! grep -q 'type /standby in Claude Code' $T/out.8 && grep -q \"plugin standby@standby added, but Claude Code 2.1.250 can't run it\" $T/out.8"
+CC_VERSION=2.1.299 run 9
+check "  2.1.299 itself: fine" "grep -q 'Claude Code: 2.1.299' $T/out.9 && grep -q 'type /standby in Claude Code' $T/out.9"
 check "re-run does not duplicate the PATH line" "[[ \$(grep -c '.local/bin' $H/.zshrc) -eq 1 ]]"
 check "re-run: the speech model is here, not fetched again" \
   "! grep -q 'fetching the speech model' $T/out.2 && grep -q 'speech model: Small, English' $T/out.2 && [[ \$(wc -l < $H/hf.args) -eq 2 ]]"

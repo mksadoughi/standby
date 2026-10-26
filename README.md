@@ -28,8 +28,8 @@ The installer sets everything up and downloads the models once. After that, its 
 
 ## What it needs
 
-- **A Mac**: Apple Silicon, macOS 14 or later, and [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-  signed in. 16 GB of memory is best for calls.
+- **A Mac**: Apple Silicon, macOS 14 or later, and [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 2.1.299 or later,
+  signed in (`claude update` gets the latest). 16 GB of memory is best for calls.
 - **A one-time download** of about 4.5 GB (2.5 GB on an 8 GB Mac), so leave 5 GB free. Standby's voice, 240 MB of
   it, comes with your first call.
 - **Three permissions**, each asked the first time it's needed:
@@ -126,7 +126,7 @@ This deletes your meetings and calls too; copy `~/.standby/sessions` first to ke
 
 | Problem | Fix |
 |---|---|
-| `/standby` isn't there | Start a new Claude Code session, or run `/reload-plugins`. Still missing: run `./install.sh` again |
+| `/standby` isn't there | Start a new Claude Code session, or run `/reload-plugins`. Check `claude --version` is 2.1.299 or later (`claude update`). Still missing: run `./install.sh` again |
 | The transcript stays empty | Allow Standby in System Settings > Privacy & Security > Microphone |
 | The other side of a call is missing | Allow Standby in System Settings > Privacy & Security > Screen & System Audio Recording, then reopen it |
 | "Claude can't sign in" | Run `claude`, then `/login` |
