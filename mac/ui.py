@@ -2211,6 +2211,71 @@ def mic_permission():
     return {"ok": True}
 
 
+SCREEN_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+_MIC_CHECK = {}                   # what macOS says of the mic, kept 2 s (the band asks every few seconds)
+
+
+def mic_access():
+    """What macOS says of Standby and the mic: "authorized", "denied", "restricted",
+    "undetermined", or None. Asks nothing. A test (no devices) is "authorized"; tests of
+    the band put a stand-in here."""
+    if os.environ.get("STANDBY_NO_DEVICES"):
+        return "authorized"
+    at, status = _MIC_CHECK.get("status", (0.0, None))
+    if time.time() - at > 2.0:
+        status = permissions.mic_status()
+        _MIC_CHECK["status"] = (time.time(), status)
+    return status
+
+
+def access(sid, capture):
+    """What macOS lets a live meeting or call hear, for the band in Claude Code: "mic" when it
+    records the mic, and "meeting_audio" when it records the Mac's sound (capture auto or
+    meeting; a call never does). Each is "allowed"; "denied", refused (the band says where to
+    allow it); or "ask", macOS hasn't asked yet (the band says it will). The recorder's own
+    finding (a source with cause "permission") comes first."""
+    sources = (live_status(sid) or {}).get("sources") or []
+    refused = {src.get("kind") for src in sources if src.get("cause") == "permission"}
+    out = {}
+    if capture in ("auto", "mic"):
+        status = mic_access()
+        out["mic"] = ("denied" if "mic" in refused or status in ("denied", "restricted")
+                      else "ask" if status == "undetermined" else "allowed")
+    if capture in ("auto", "meeting"):
+        out["meeting_audio"] = ("denied" if "meeting" in refused else "allowed" if _snap_permitted()
+                                else "denied" if SNAP_ASKED.exists() else "ask")
+    return out
+
+
+def live_capture(sid):
+    """What a live session records, as access() takes it: a call the mic; a meeting as it was
+    started (agent.json), else the Settings' recording mode."""
+    if session_info(sid).get("kind") == "call":
+        return "mic"
+    data = addmac.bound(SESSIONS / sid)
+    if data is not None:
+        return addmac.capture_mode(data.get("meeting_audio"), data.get("mic"))
+    return get_settings().get("capture") or DEFAULTS["capture"]
+
+
+def lite_permission(b):
+    """POST /api/lite/permission {session}: the band's Open Settings, on the user's click, while
+    macOS refuses the live session something: System Settings at that pane (the mic first)."""
+    sid = str(b.get("session") or "")
+    if not valid_id(sid) or sid != live_session():
+        return {"error": "Nothing is live"}
+    now = access(sid, live_capture(sid))
+    pane = MIC_PANE if now.get("mic") == "denied" else SCREEN_PANE if now.get("meeting_audio") == "denied" else None
+    if pane is None:
+        return {"ok": True, "allowed": True}
+    try:
+        subprocess.run(OPEN + [pane], stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"error": "Couldn't open System Settings (%s)" % exc.__class__.__name__}
+    log("lite permission: System Settings opened at %s" % ("Microphone" if pane == MIC_PANE else "Screen Recording"))
+    return {"ok": True}
+
+
 def screen_why():
     """Why this build can't record the screen: "audio_only", "stale" or "never" (SCREEN_WHY)."""
     from native import appaudio
@@ -2678,6 +2743,7 @@ LITE_POST = {
     "/api/lite/pause": lambda b: lite().pause(b),
     "/api/lite/resume": lambda b: lite().resume(b),
     "/api/lite/stop": lambda b: lite().stop(b),
+    "/api/lite/permission": lambda b: lite_permission(b),
     "/api/lite/pass": lambda b: lite().set_pass(b),
 }
 
@@ -3781,7 +3847,7 @@ def lite_call_live(cc):
         if c["cc"] == cc and sid == live_session():
             st = voice_status(sid)
             return dict({"kind": "call", "session": sid, "started": session_info(sid).get("started"),
-                         "muted": bool(st.get("muted")), "phase": st.get("state") or "off"},
+                         "muted": bool(st.get("muted")), "phase": st.get("state") or "off"}, **access(sid, "mic"),
                         **({"waiting": True} if st.get("waiting") else {}))
     return None
 
@@ -5259,7 +5325,7 @@ class Handler(BaseHTTPRequestHandler):
             sid = path.rsplit("/", 1)[1]
             if not valid_id(sid):
                 return self._json({"error": "no such session"}, 404)
-            return self._json(live_status(sid) if sid == live_session() else {})
+            return self._json(dict(live_status(sid) or {}, **access(sid, live_capture(sid))) if sid == live_session() else {})
         if path.startswith("/api/voice/"):
             sid = path.rsplit("/", 1)[1]
             if not valid_id(sid):
