@@ -3607,7 +3607,7 @@ def _lite_tell(sid):
             for t in news:
                 t["seen"] = False
         log("lite: %s: what came back (%s, %.1fs): the voice %s" % (sid, how, time.time() - t0,
-            "says %r" % line[:120] if line else "says nothing now"))
+            "says it (%d words)" % len(line.split()) if line else "says nothing now"))
         if not failed:                             # the call's record: told, and what of it the voice said
             sbledger.append(sid, "asked", asked)
             sbledger.append(sid, "you", line, unsaid=not line)
