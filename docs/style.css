@@ -105,6 +105,11 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer .links a{text-decora
   .steps{grid-template-columns:1fr}.top nav{display:none}
 }
 @media (max-width:700px){
+  /* a phone: plain paper (the ruled lines cut through the words at this size), headings a step smaller */
+  body{background-image:none}
+  h1{font-size:clamp(30px,9vw,38px);line-height:1.05;margin:8px 0 16px}
+  h2{font-size:22px;margin:6px 0 10px}
+  .lede{font-size:17px;line-height:1.6}
   .wrap{padding:0 20px}
   .top .wrap{height:64px;gap:12px}
   .brand{flex-shrink:0;font-size:20px;gap:8px}
