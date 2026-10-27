@@ -3881,7 +3881,8 @@ def lite_call_live(cc):
     for sid, c in list(LITE_CALLS.items()):
         if c["cc"] == cc and sid == live_session():
             st = voice_status(sid)
-            return dict({"kind": "call", "session": sid, "started": session_info(sid).get("started"),
+            # name: the session's own (its /rename, else its title), so the band says which session the call is with
+            return dict({"kind": "call", "session": sid, "name": cc_title(cc), "started": session_info(sid).get("started"),
                          "muted": bool(st.get("muted")), "phase": st.get("state") or "off"}, **access(sid, "mic"),
                         **({"waiting": True} if st.get("waiting") else {}))
     return None
