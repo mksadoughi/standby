@@ -341,7 +341,8 @@ async function startListening($, how) {
   if (!S.on) await turnOn($)
   else if (!(await ensureApp($))) return startFailed($, 'listen', 'Standby isn\u2019t running, and it didn\u2019t open.')
   void listen($)
-  const r = await app($, '/api/lite/listen', { cc: S.cc, cwd: await $.session.cwd(), ...(how ? { pass: how } : {}) })
+  let r = await app($, '/api/lite/listen', { cc: S.cc, cwd: await $.session.cwd(), ...(how ? { pass: how } : {}) })
+  if (r.error === DOWN) { const live = await stillStarting($, 'listen'); if (live) r = { session: live.session, pass: live.pass } }
   if (r.error) return startFailed($, 'listen', r.error)
   const cancelled = S.starting && S.starting.cancel
   S.starting = null
@@ -469,7 +470,8 @@ async function startCall($) {
   if (!S.on) await turnOn($)
   else if (!(await ensureApp($))) return startFailed($, 'call', 'Standby isn\u2019t running, and it didn\u2019t open.')
   void listen($)
-  const r = await app($, '/api/lite/call', { cc: S.cc, cwd: await $.session.cwd() })
+  let r = await app($, '/api/lite/call', { cc: S.cc, cwd: await $.session.cwd() })
+  if (r.error === DOWN) { const live = await stillStarting($, 'call'); if (live) r = { session: live.session } }
   if (r.error) return startFailed($, 'call', r.error)
   const cancelled = S.starting && S.starting.cancel
   const since = (S.starting && S.starting.since) || Date.now()
@@ -483,6 +485,23 @@ async function startCall($) {
   await refresh($)
   if (cancelled) { await endCall($); return 'Call ended.' }            // End pressed while it was connecting
   return 'On a call. Talk; real work comes here.'
+}
+
+// A start can take longer than a request waits: on a Mac's first call or meeting macOS asks for the
+// microphone, and the app waits for the answer (72 s on a fresh Mac, 2026-10-27), so the request fails
+// though nothing is wrong. The app still answering means it's starting, not down: Connecting goes on
+// until it's live (or the user ends it, or a while passes).
+const DOWN = 'Standby isn\u2019t running'
+async function stillStarting($, kind) {
+  for (let i = 0; i < 240; i++) {                // up to about 2 minutes
+    await refresh($)
+    if (!(S.st && S.st.app) || !S.starting || S.starting.cancel) return null
+    const live = S.st.live
+    if (live && live.kind === (kind === 'call' ? 'call' : 'meeting')) return live
+    // waited in a $ call: a hook's own time (10 s) would run out on clock sleeps
+    await $.process.run(['/bin/sleep', '0.5']).catch(() => {})
+  }
+  return null
 }
 
 const VOICE_READY_MS = 45000            // the most Connecting waits for the voice's greeting before showing the call

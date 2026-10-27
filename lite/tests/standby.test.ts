@@ -34,6 +34,8 @@ function fakeApp(on: any, events: any[], seen: any) {
       return new Promise(res => { seen.held = (ans: string) => res({ value: { status: 200, ok: true, headers: {},
         text: JSON.stringify({ answer: ans === 'decline' ? 'decline' : 'accept' }) } }) })
     if (seen.down) throw new Error('connection refused')      // Standby not running
+    // a start the app takes longer over than the request waits (macOS asking for the mic): the request fails
+    if (seen.slowStart && /\/api\/lite\/(call|listen)$/.test(url.split('?')[0]) && e.init && e.init.body) { seen.slowStart(); throw new Error('timed out') }
     const body = e.init && e.init.body ? JSON.parse(e.init.body) : null
     if (body) seen.posts.push({ path: url.replace(/^http:\/\/127\.0\.0\.1:\d+/, ''), body })
     const answer = url.includes('/api/lite/state') ? { app: '1.0', can: seen.can ?? { listen: true }, live: seen.idle || (seen.liveFor !== undefined && seen.liveFor-- <= 0) ? null : seen.live ?? { kind: 'meeting', session: 'm1', recorded_s: 64 } }
@@ -1497,6 +1499,26 @@ test('access · a folder macOS refuses the call’s Claude: said plainly, with S
     .toMatchObject({ props: { color: '#d29922' } })
   await typed($, 's')
   expect(posted(seen, '/api/lite/permission')).toBe(true)
+})
+
+test('a first call the app takes long to start (macOS asking for the mic): Connecting goes on, never "Standby isn’t running"', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  seen.slowStart = () => { seen.idle = false; seen.live = { kind: 'call', session: 'c9', started: 1, phase: 'listening' } }   // it comes up meanwhile
+  const r = await $.command.run({ command: 'standby', args: 'call' })
+  expect(r.text).toBe('On a call. Talk; real work comes here.')
+  expect(seen.status.some((t: string) => t.includes('isn’t running'))).toBe(false)
+})
+
+test('a start that fails while the app really is down still says so', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  seen.slowStart = () => { seen.down = true }
+  const r = await $.command.run({ command: 'standby', args: 'call' })
+  expect(r.text).toContain('isn’t running')
 })
 
 test('every request to Standby carries this launch\'s token, from its file; the stream reads it from a file, never the command line', async ($, on) => {
