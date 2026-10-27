@@ -2050,9 +2050,12 @@ class VoiceIO(object):
     BARGE_MIN = 0.3       # seconds of the user's speech over Claude's that stop it
     # The echo cancelling learns the call's sound from Claude's first seconds of voice, and a
     # faint echo gets through meanwhile: it ducked on its own greeting, a second's gap mid-
-    # sentence (talk-20261026-212951, 203402, 195509, all 1.6 to 2.3 s in). Then it ducks once
-    # the voice is told to be the user's (open_whose), or on BARGE_LEARNING of speech.
-    LEARNING = 4.0        # seconds of Claude's voice played before the echo cancelling has it
+    # sentence (talk-20261026-212951, 203402, 195509, all 1.6 to 2.3 s in), and on the first
+    # 13 s of voice of talk-20261026-232015, where its own words cut it twice. Then it ducks
+    # once the voice is told to be the user's (open_whose), or on BARGE_LEARNING of speech.
+    # Counted in voice played (played), never the clock: a silence before the first answer
+    # isn't learnt from.
+    LEARNING = 12.0       # seconds of Claude's voice played before the echo cancelling has it
     BARGE_LEARNING = 0.8
     # A sentence still "playing" after this long is an engine that stopped (a route
     # change, a voice that hung): about twice as slow as any voice speaks, plus a start.
@@ -2088,7 +2091,8 @@ class VoiceIO(object):
         self.failed = None    # why the engine stopped working: the app's own voice speaks then
         self._warm = False    # a sentence has played in full: Standby's voice is warm
         self.ducked = None    # since when it is paused under the user's voice (duck), or None
-        self.first_sound = None   # when its first sentence began to play (learning)
+        self.played = 0.0         # seconds of its voice played in this voice mode (learning)
+        self._played_at = None    # the last step's time, while a sentence played
         self._turn_of = {}    # a sentence's turn, as the app wrote it (the trace's)
 
     def start(self, seq, mics):
@@ -2156,7 +2160,7 @@ class VoiceIO(object):
     def learning(self):
         """Its first seconds of voice: the echo cancelling still learns it (LEARNING). On
         headphones there's no echo to learn."""
-        return self.aec and (self.first_sound is None or time.time() - self.first_sound < self.LEARNING)
+        return self.aec and self.played < self.LEARNING
 
     @property
     def can_duck(self):
@@ -2288,10 +2292,13 @@ class VoiceIO(object):
         loading = bool(getattr(self.backend, "loading", False))     # Standby's voice still getting ready
         with self._lock:
             stuck = None
+            now = time.time()
             if self.current is not None and loading:
-                self.since = time.time()             # it waits for the voice: its time starts once it can play
-            elif self.current is not None and self.first_sound is None:
-                self.first_sound = time.time()
+                self.since = now                     # it waits for the voice: its time starts once it can play
+            sounding = self.current is not None and playing and not loading and self.ducked is None
+            if sounding and self._played_at is not None:
+                self.played += now - self._played_at
+            self._played_at = now if sounding else None
             if self.current is not None and not playing:
                 b = self.backend
                 trace(TRACE["sid"], "said", self._turn_of.pop(self.current[0], None), id=self.current[0],
@@ -2337,7 +2344,8 @@ class VoiceIO(object):
         if self.failed:
             return {"speaks": False, "failed": self.failed, "done": self.done}
         with self._lock:
-            st = {"speaks": True, "aec": self.aec, "duplex": self.duplex, "saying": self.current[1] if self.current else "",
+            st = {"speaks": True, "aec": self.aec, "duplex": self.duplex, "played": round(self.played, 1),
+                  "saying": self.current[1] if self.current else "",
                   "since": self.since if self.current else None, "done": self.done,
                   "ducked": self.ducked is not None}
         tts = getattr(self.backend, "tts_status", None)

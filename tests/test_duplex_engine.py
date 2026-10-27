@@ -367,8 +367,12 @@ bn.begin()
 bn.say("Orion is the cache.")
 check("  the next answer: Standby's voice", fp.said[-1] == (2, "Orion is the cache.") and bn.playing
       and bn.synth.asked == [] and not bn.loading)
+volumes = []
+pn.setVolume_ = lambda v: (volumes.append(v), setattr(pn, "volume", v))
 for _ in range(3):                            # 0.24 s: held until 0.2 s is there, then it goes (tts.Speech.PREROLL)
     fp.on_audio(2, np.full(1920, 0.25, "float32"))
+check("  its very first sound comes in from quiet, so the echo cancelling converges on it (Apple's advice)",
+      volumes[:1] == [bn.LOW] and wait(lambda: volumes[-1:] == [1.0], 2) and bn._ramped, volumes)
 buf, _h = pn.scheduled[-1]
 check("  its sound through the same player (cancelled from the mic), as 24 kHz float buffers",
       pn.playing and buf.n == 1920 and buf.fmt.rate == 24000 and abs(float(buf.a[0]) - 0.25) < 1e-6

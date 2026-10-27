@@ -136,6 +136,7 @@ class AVFBackend(object):
         self._logged = False     # this answer's voice, logged at its first sentence
         self._halts = 0          # halt()s so far
         self._ducked = False     # turned down and paused while the user talks over it (duck)
+        self._ramped = False     # its first sound came in from quiet (ramp_in): once per engine
         self._fades = 0          # duck()s, unduck()s and halt()s so far: a newer one ends a fade
         import threading
         self._lock = threading.Lock()
@@ -172,7 +173,7 @@ class AVFBackend(object):
             inp.removeTapOnBus_(0)
             inp.setVoiceProcessingEnabled_error_(False, None)
             raise RuntimeError("the audio engine did not start (%s): %s" % (self._where(engine, fmt, default), err))
-        self.engine, self.inp = engine, inp
+        self.engine, self.inp, self._ramped = engine, inp, False
         self._voices()
 
     def start_output(self):
@@ -448,6 +449,20 @@ class AVFBackend(object):
         except Exception as exc:
             self.log("voice: halt: %r" % exc)
 
+    # Its very first sound through voice processing comes in from quiet over RAMP: the echo
+    # cancelling converges on it meanwhile instead of on its loudest (Apple's advice: "ramp up
+    # your playback audio volume at the start ... over the first ~200 ms").
+    RAMP = 0.25
+
+    def ramp_in(self):
+        """The first sound of this engine: faded in (RAMP). Once; never after a duck or halt began."""
+        with self._lock:
+            if self._ramped or not self.aec or self.player is None:
+                return
+            self._ramped, self._fades = True, self._fades + 1
+            fade = self._fades
+        self._fade(fade, self.LOW, 1.0, self.RAMP)
+
     FADE = 0.25          # seconds the voice takes to go quiet when talked over, and FADE / 2 to come back
     LOW = 0.1            # the volume it fades to before it pauses (-20 dB)
 
@@ -534,6 +549,7 @@ class _PlayerOut(object):
             self.fmt = self.tts.pcm_format(b.avf)
         b._schedule(self.tts.pcm_buffer(b.avf, self.fmt, samples), self.fmt, done)
         if not b.player.isPlaying() and not b._ducked:
+            b.ramp_in()
             b.player.play()
 
     def halt(self):
