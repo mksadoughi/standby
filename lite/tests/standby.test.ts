@@ -630,7 +630,7 @@ test('a call: the second line is the latest words as they come, one speaker, no 
   expect(await band.find({ type: 'Text', text: /You:|Claude:/ })).toBeUndefined()
 })
 
-test('Standby closed after the session started: listening opens it in the background, then listens', async ($, on) => {
+test('Standby closed after the session started: listening opens it in the background, its window closed, then listens', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true }
   mock.clock(on)
   fakeApp(on, [], seen)
@@ -639,7 +639,7 @@ test('Standby closed after the session started: listening opens it in the backgr
   seen.down = true                                   // the app is quit later
   const r = await $.command.run({ command: 'standby', args: 'listen' })
   await settle()
-  expect(seen.launched).toEqual(['open -g -a Standby'])
+  expect(seen.launched).toEqual(['open -g -a Standby --args --background'])     // no window until asked for
   expect(seen.posts.some((p: any) => p.path === '/api/lite/listen')).toBe(true)
 })
 

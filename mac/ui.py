@@ -5784,8 +5784,13 @@ def main():
         threading.Thread(target=server.serve_forever, daemon=True).start()
     import webview
     api = Api()
+    # Opened by Claude Code for a call or a meeting (`open -g ... --args --background`): no window until the
+    # user asks for it (the band's Full window, the Dock icon); the band shows the call (the user, 2026-10-27)
+    background = "--background" in sys.argv
+    if background:
+        log("started in the background, by Claude Code: the window opens when asked for")
     win = webview.create_window("Standby", "http://127.0.0.1:%d/?token=%s" % (PORT, TOKEN), js_api=api,
-                                width=WINDOW[0], height=WINDOW[1], min_size=WINDOW_MIN)
+                                width=WINDOW[0], height=WINDOW[1], min_size=WINDOW_MIN, hidden=background)
     api.window = win
     APP_WINDOW["win"], APP_WINDOW["api"] = win, api
 
