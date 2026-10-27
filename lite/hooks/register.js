@@ -2,7 +2,7 @@
 // (127.0.0.1, its own port); this module is what the person sees here, and the one way
 // in and out of this session: a meeting's transcript with the person's prompts (or, set to live, as
 // quiet notes as it goes), a call's hand-offs as turns. A summary stays in Standby: never sent here.
-import { said, jsonLines, minutes, noteLine, toolWords, joined, helpText, nameArgs, startNote, settingsText, setArgs } from './words.js'
+import { said, jsonLines, minutes, noteLine, toolWords, joined, helpText, nameArgs, startNote, endNote, settingsText, setArgs } from './words.js'
 
 // A key drawn as a link (VS Code, the desktop): an address nothing opens, answered by the mod
 const KEY_LINK = 'https://standby.invalid/'
@@ -137,6 +137,7 @@ async function refresh($) {
     // it ended (the voice's goodbye, End in the window, a quiet while): Ending, until its summary's row is up
     S.lastLive.carded = true
     S.ending = { kind: S.lastLive.kind === 'call' ? 'call' : 'listen', since: Date.now() }
+    if (S.lastLive.kind !== 'call') void note($, endNote(S.lastLive.title)).catch(() => {})   // so Claude knows
     void cardOf($, S.lastLive.session)
   }
   $.ui.invalidate('ui.render')

@@ -956,6 +956,25 @@ test('listening, the same stages: Starting to listen, then Listening; Ending, th
   seen.release()
 })
 
+test('a meeting ended outside this session (Standby\u2019s window): Claude is told once, so it never says it\u2019s still recording', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'meeting', session: 'm1', recorded_s: 64, pass: 'ask', title: 'Planning' } }
+  mock.clock(on)
+  const session = mock.session(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  expect(session.appended().length).toBe(0)
+  seen.idle = true                                   // End in Standby's window
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  const notes = session.appended().map((n: any) => n.message.content[0].text)
+  expect(notes.length).toBe(1)
+  expect(notes[0]).toMatch(/^\[Standby · meeting ended · \d\d:\d\d\]\nThe meeting Standby was recording \(Planning\) has ended, outside this session/)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  expect(session.appended().length).toBe(1)          // once
+})
+
 test('a meeting or call deleted in Standby: its summary card goes from the band', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, cardKind: 'call', waitMore: true }
   mock.clock(on)

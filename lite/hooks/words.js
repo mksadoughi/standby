@@ -43,6 +43,15 @@ export function startNote(title, now) {
     'the user\u2019s prompts while it runs; afterwards, the standby meeting tool reads it. Nothing to answer now.'
 }
 
+// A meeting that ended outside this session (Standby's window, a long silence): said once, so Claude never
+// answers from memory that it's still recording (the user's VM run, 2026-10-27)
+export function endNote(title, now) {
+  return '[Standby · meeting ended · ' + hhmm(now || Date.now() / 1000) + ']\n' +
+    'The meeting Standby was recording' + (title ? ' (' + title + ')' : '') + ' has ended, outside this session ' +
+    '(in Standby\u2019s window, or by itself). Nothing is recording now; the standby meeting tool reads its transcript. ' +
+    'Nothing to answer now.'
+}
+
 // Split a stream's text into whole JSON lines, keeping a partial tail for the next chunk
 export function jsonLines(buffer, chunk) {
   const text = buffer + chunk, parts = text.split('\n'), rest = parts.pop()
