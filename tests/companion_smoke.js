@@ -19,7 +19,9 @@ const mk = id => (els[id] = { id, textContent: "", innerHTML: "", hidden: false,
   // the orb's window keeps its orb and the pill's rail: each its own element here
   querySelector(sel) { return { ".talk": els.talk, ".rail": els.rail, ".ctls": els.ctls }[sel] || els.orb } });
 ["cmp", "says", "sp", "orb", "talk", "rail", "ctls"].forEach(mk);
-global.document = { getElementById: id => els[id] || mk(id), addEventListener() {},
+// the document's own listeners, kept so a check can fire them (a press, its release)
+global.docOn = {};
+global.document = { getElementById: id => els[id] || mk(id), addEventListener(kind, fn) { (docOn[kind] = docOn[kind] || []).push(fn) },
   documentElement: { classList: { add() {}, remove() {}, toggle() {} }, style: { setProperty() {} } },
   body: { classList: { add() {}, remove() {}, toggle() {}, contains: c => c === "r" }, dataset: {} } };
 global.location = { hash: "", search: "" };
@@ -118,6 +120,13 @@ const ORB_CHECKS = `
   await fresh();
   ok("paused with finished work waiting: the bell on the mini window, and the tip says a click hears it", els.cmp.className.includes("waiting")
      && els.talk.title === "Paused. Something's waiting: click to resume and hear it", [els.cmp.className, els.talk.title]);
+  // A press that moved: the panel dragged the window and said so; its release is no click.
+  const fire = kind => { const e = { stopped: false, stopPropagation() { this.stopped = true }, preventDefault() {} };
+    (docOn[kind] || []).forEach(fn => fn(e)); return e.stopped };
+  fire("mousedown"); dragged();
+  ok("a drag of the mini window: its release is no click, so it never pauses or ends the call", fire("click") && fire("dblclick"));
+  fire("mousedown");
+  ok("  the next press that doesn't move: a click again", !fire("click"));
   calls = []; await orb();
   ok("  the click goes on with the call", calls.some(c => c[0] === "/api/voice" && c[1].includes('"unmute"')), calls);
   STATE = LIVE({ voice: { state: "muted", muted: true } });

@@ -11,7 +11,7 @@
   orb by transform from its corner (26 at rest, 40 pointed at, 72 talking) and slides its
   buttons in beside it. Clicks outside the hit areas pass to the app beneath.
   Opened anywhere else (ui_preview), it draws a stand-in for the glass.
-  Native → page: edge("left"|"right", "top"|"bottom"), hover(bool).
+  Native → page: edge("left"|"right", "top"|"bottom"), hover(bool), dragged() (the press is a drag).
   Page → native, through messageHandlers.sb:
     {type:"orb", w, h, glyph, inset, glass:{x, y, w, h, radius}|null}  x from the inner side
     {type:"hit", areas:[{x, y, r} | {x, y, w, h, radius}]}           page px from the top left
@@ -352,7 +352,16 @@ let want = false;
 function hover(on) { on = !!on; if (on === want) return; want = on; clearTimeout(hoverT);
   hoverT = setTimeout(() => { if (open !== want) { open = want; render() } }, on ? 120 : 150) }
 window.hover = hover;
+// A press that moved is a drag (the panel moves the window and says so): its release is no click,
+// so a drag never pauses the call or ends it (the user, 2026-10-26). The next press starts afresh.
+let drag = false;
+function dragged() { drag = true }
+window.dragged = dragged;
+function notClick(e) { if (drag) { e.stopPropagation(); e.preventDefault() } }
 if (!WORDS) {
+  document.addEventListener("mousedown", () => { drag = false }, true);
+  document.addEventListener("click", notClick, true);
+  document.addEventListener("dblclick", notClick, true);
   const pill = $("cmp");
   if (!SB) {
     pill.addEventListener("mouseover", e => { if (e.target.closest && e.target.closest(".orbs,.ctls")) hover(true) });

@@ -259,5 +259,29 @@ check("  not: a window filling the visible frame (zoomed), the Dock's own, Stand
 check("  the second display's own full screen", cp.full_screen([win(0, 41, (1512.0, -98.0, 1920.0, 1080.0))],
                                                                (1512, -98, 1920, 1080), me=7))
 
+# Two displays: a laptop's, and a wide one above it, further left (the user's, 2026-10-26).
+LAPTOP, WIDE = (0, 0, 1470, 956), (-1029, 956, 3440, 1440)
+two = [("Built-in", LAPTOP, (0, 77, 1470, 846)), ("Wide", WIDE, WIDE)]
+check("the orb's display: the one under its centre", cp.display_at((1300, 990), two)[0] == "Wide"
+      and cp.display_at((1300, 900), two)[0] == "Built-in")
+check("  off every display (past the laptop's right, below the wide one): the nearest", cp.display_at((1600, 500), two)[0] == "Built-in")
+# Dragged up across the line, its glyph at the window's top (laid out for a top side): the orb is
+# over the wide display, most of its 360 x 112 window (see-through) still over the laptop.
+orb = (1058.0, 891.0, 360.0, 112.0)    # 65 of its 112 over the laptop, its centre 9 over the line
+centre = cp.orb_point(orb, cp.hit_on_screen([("circle", 322.0, 38.0, 26.0)], orb))
+check("  the orb's centre: its circle, not the window's", centre == (1380.0, 965.0), centre)
+on = cp.display_at(centre, two)
+dropped, corner = cp.snap(orb, on[2], margin=cp.orb_margin(112, 52, inset=12))
+check("dropped over the line: on the display it's over, not clamped back to the first one's edge",
+      on[0] == "Wide" and dropped[1] >= WIDE[1] and corner is None, (on[0], dropped, corner))
+old_way, _c = cp.snap(orb, two[0][2], margin=cp.orb_margin(112, 52, inset=12))
+check("  (the display with more of its window would have pulled it under the line)", old_way[1] + 112 <= LAPTOP[3], old_way)
+# Mid-drag the page may resize the window (the pill's text changing): it stays under the pointer.
+moved = (700.0, 1500.0, 360.0, 112.0)
+f = cp.orb_resized(moved, 52, (360, 112), 52, "bottom-right", WIDE, inset_was=12, inset=12, held=True)
+check("a drag holds it: a resize mid-drag never puts it back in its corner", f == moved, f)
+f = cp.orb_resized(moved, 52, (360, 112), 52, "bottom-right", WIDE, inset_was=12, inset=12)
+check("  (not dragged: in its corner, as before)", f[:2] == cp.orb_at_corner("bottom-right", (360, 112), 52, WIDE, inset=12), f)
+
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
 sys.exit(1 if fails else 0)

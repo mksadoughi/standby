@@ -108,6 +108,29 @@ def _overlap(a, b):
     return w * h if w > 0 and h > 0 else 0.0
 
 
+def display_at(point, displays):
+    """The display a point is on, (name, frame, visible frame): the orb's
+    centre, so a drop over the line onto another display is on that one, not on
+    the one holding more of its window (mostly see-through; it was pulled back
+    to the first display's edge). Off every display: the nearest one.
+    displays: [(name, frame, visible frame)]."""
+    if not displays:
+        return None
+    px, py = point
+    away = lambda f: max(f[0] - px, 0, px - f[0] - f[2]) + max(f[1] - py, 0, py - f[1] - f[3])
+    return min(displays, key=lambda d: away(d[1]))
+
+
+def orb_point(frame, shapes=None):
+    """The orb's centre on screen: its circle among the hit shapes on screen
+    (hit_on_screen), else the window's centre."""
+    circle = next((sh for sh in shapes or () if sh[0] == "circle"), None)
+    if circle:
+        return circle[1], circle[2]
+    x, y, w, h = frame
+    return x + w / 2.0, y + h / 2.0
+
+
 def home(window, displays, main):
     """The visible frame the companion comes up in, every time (the user,
     2026-10-08): that of the display the main window is on (most of it),
@@ -212,16 +235,17 @@ def orb_at_corner(corner, window, glyph, screen, margin=GLYPH_MARGIN, inset=None
     return at_corner(corner, (w, h), screen, orb_margin(h, glyph, margin, inset))
 
 
-def orb_resized(frame, glyph_was, size, glyph, corner, screen, inset_was=None, inset=None):
+def orb_resized(frame, glyph_was, size, glyph, corner, screen, inset_was=None, inset=None, held=False):
     """The orb window at a new size and glyph (resting to voice, the hover
     controls out), with the glyph's outer edges held still: in a corner, where
-    orb_at_corner puts them; unsnapped, where they are now."""
+    orb_at_corner puts them; unsnapped, or held by a drag, where they are now
+    (a drag that put it back in its corner stopped following the pointer)."""
     nw, nh = size
-    if corner:
+    if corner and not held:
         return orb_at_corner(corner, (nw, nh), glyph, screen, inset=inset) + (nw, nh)
     x, y, w, h = frame
     was, now = glyph_inset(h, glyph_was, inset_was), glyph_inset(nh, glyph, inset)
-    hs, vs = nearest_sides(frame, screen)
+    hs, vs = edges(frame, corner, screen)
     nx = x + w - was + now - nw if hs == "right" else x + was - now
     ny = y + h - was + now - nh if vs == "top" else y + was - now
     return nx, ny, nw, nh

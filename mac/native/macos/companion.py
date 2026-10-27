@@ -273,6 +273,7 @@ class CompanionWebView(WebKit.WKWebView):
             return
         if not self._dragging:
             self._dragging = True
+            self._owner.call("dragged")         # its release is no click: a drag paused the call
             self._owner.hold_followers()
         self.window().setFrameOrigin_(Foundation.NSMakePoint(self._origin.x + dx, self._origin.y + dy))
 
@@ -507,11 +508,20 @@ class Companion(object):
         """A page global, if the page has it: fn(args...)."""
         self.js("window.%s&&%s(%s)" % (fn, fn, ",".join(json.dumps(a) for a in args)))
 
+    def _display(self):
+        """The screen the orb is on (rules.display_at): the one under its centre, not
+        the one holding more of its window, which a drop over the line was clamped to."""
+        frame = _tuple(self.panel.frame())
+        point = rules.orb_point(frame, rules.hit_on_screen(self.hit, frame) if self.hit else None)
+        screens = list(AppKit.NSScreen.screens())
+        found = rules.display_at(point, [(i, _tuple(s.frame()), None) for i, s in enumerate(screens)])
+        return screens[found[0]] if found else (self.panel.screen() or AppKit.NSScreen.mainScreen())
+
     def _screen(self, fresh=False):
-        """The usable frame of the panel's screen (usable), as last worked out unless
+        """The usable frame of the orb's screen (usable), as last worked out unless
         fresh or on another screen now: the window list is read on a move (home, a
         drop, a Space change), not on every hover."""
-        screen = self.panel.screen() or AppKit.NSScreen.mainScreen()
+        screen = self._display()
         key = display_key(screen)
         if fresh or getattr(self, "_fitted", None) is None or getattr(self, "_fitted_on", None) != key:
             self._fitted_on, self._fitted = key, usable(screen)
@@ -634,7 +644,7 @@ class Companion(object):
         ms): a view inside the window, so nothing is laid out again."""
         was, was_inset = (self.glyph if self.glyph is not None else glyph), self.inset
         frame = rules.orb_resized(_tuple(self.panel.frame()), was, (w, h), glyph, self.corner, self._screen(),
-                                  inset_was=was_inset, inset=inset)
+                                  inset_was=was_inset, inset=inset, held=self.dragging)
         self.size, self.glyph, self.glass, self.inset, self.under = (w, h), glyph, glass, inset, under
         # The system shadow follows the window's alpha: around glass that fills
         # the window, it is the glass's; with less or none it would double the
@@ -677,6 +687,10 @@ class Companion(object):
         _animate([(self.panel, frame)] + [(c.panel, f) for c, f in others], seconds, ease,
                  views, fade, both)
 
+    @property
+    def dragging(self):
+        return bool(getattr(getattr(self, "web", None), "_dragging", False))
+
     def hold_followers(self):
         """A drag starts: whatever follows the orb is its child again at once,
         even part way through a move, so it comes along."""
@@ -696,7 +710,7 @@ class Companion(object):
         self.corner = rules.DEFAULT
         x, y = rules.at_corner(self.corner, self.size, visible, self._margin(self.size[1]))
         self.move((x, y) + tuple(self.size))
-        self._fitted, self._fitted_on = visible, display_key(self.panel.screen() or AppKit.NSScreen.mainScreen())
+        self._fitted, self._fitted_on = visible, display_key(self._display())
         self._tell_edges()
 
     def refit(self):
