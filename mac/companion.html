@@ -343,17 +343,21 @@ function full() { post({ type: "expand" }) }
 function callSettings() { post({ type: "settings", pane: "call" }) }
 function say(t) { flash = t.length > 40 ? t.slice(0, 39) + "…" : t; render(); setTimeout(() => { flash = ""; render() }, 2500) }
 
-// Hover: the pill comes after 120 ms and goes 150 ms after the pointer leaves (the user, 2026-10-27: 600 was slow). Over other apps
-// only the panel sees the pointer (judged against the hit areas), so hover() is what counts;
-// the page's own events do the same in a preview, or while Standby itself is in front.
+// Hover: the pill comes after 120 ms and goes 150 ms after the pointer leaves (the user, 2026-10-27: 600 was slow).
+// In the panel only its own pointer reading (judged against the hit areas) calls hover(): the page's
+// mouseover isn't to be trusted there, as once the panel lets the mouse go, WebKit replays one at the
+// pointer's last spot on any change under it (the time ticking) and the pill never went (the user,
+// 2026-10-27). The page's own events stand in for it in a preview.
 let want = false;
 function hover(on) { on = !!on; if (on === want) return; want = on; clearTimeout(hoverT);
   hoverT = setTimeout(() => { if (open !== want) { open = want; render() } }, on ? 120 : 150) }
 window.hover = hover;
 if (!WORDS) {
   const pill = $("cmp");
-  pill.addEventListener("mouseover", e => { if (e.target.closest && e.target.closest(".orbs,.ctls")) hover(true) });
-  pill.addEventListener("mouseleave", () => hover(false));
+  if (!SB) {
+    pill.addEventListener("mouseover", e => { if (e.target.closest && e.target.closest(".orbs,.ctls")) hover(true) });
+    pill.addEventListener("mouseleave", () => hover(false));
+  }
   pill.addEventListener("dblclick", e => { if (!e.target.closest("button")) post({ type: "expand" }) });
   document.addEventListener("contextmenu", e => { e.preventDefault(); menu(e.clientX, e.clientY) });
 }
