@@ -508,6 +508,26 @@ class Question(object):
         self.quiet = False       # dropped because the user went on: the chat keeps no trace of it
         self.worker = None
         self.lock = threading.Lock()
+        # What its answer does (a hand-off, a stopped task, the call's end) waits for this: at once for
+        # a question of their finished turn; for one asked early, until the turn is over (taken) or
+        # they went on (dropped). "Write a file." (pause) "But first confirm the name with me." handed
+        # "Write a file." on before they had finished.
+        self.decided = threading.Event()
+        self.go = None if hold else True
+        if not hold:
+            self.decided.set()
+
+    def decide(self, go):
+        """Its answer may act (go) or not: once, the first word stands."""
+        if self.go is None:
+            self.go = bool(go)
+        self.decided.set()
+
+    def committed(self, timeout=60.0):
+        """For the app, before its answer acts: True once its turn is the user's finished one,
+        False if they went on (or nothing decided in `timeout`)."""
+        self.decided.wait(timeout)
+        return self.go is True
 
     def heard(self, at):
         """What the user has heard of the answer by `at`: the sentences played,
@@ -624,6 +644,7 @@ class VoiceSession(object):
         self._st = {}            # the recorder's live status, as last read
         self._you_at = 0.0       # when the user's mic was last in an utterance
         self._ask_heard = takes(ask, "heard")    # an older app is not told what was heard
+        self._ask_commit = takes(ask, "commit")  # nor asked to hold an early answer's actions
         self._cancel_quiet = takes(cancel, "quiet")
         self._cancel_said = takes(cancel, "said")      # an app that keeps what was said of an answer dropped quietly
         self.holding = False     # "hold on": an answer waits for them
@@ -1001,6 +1022,7 @@ class VoiceSession(object):
             return None
         if q.text == question.strip():
             self._trace("early", step="taken", words=question.strip())
+            q.decide(True)                          # their turn: what its answer does goes now
             return q
         self._trace("early", step="dropped", why="went on", words=q.text)
         self._cancel_ask(q, quiet=True)
@@ -1126,6 +1148,8 @@ class VoiceSession(object):
         def work():
             try:
                 extra = {"heard": q.cut} if q.cut is not None and self._ask_heard else {}
+                if q.go is None and self._ask_commit:
+                    extra["commit"] = q.committed
                 q.got["answer"] = self.ask(text, on_event, on_queued, **extra)
             except Exception as exc:
                 q.got["answer"] = "Sorry, I could not reach Claude (%s)." % exc.__class__.__name__
@@ -1229,6 +1253,8 @@ class VoiceSession(object):
         with q.lock:
             q.cancelled, q.held = True, []
             q.quiet = q.quiet or quiet
+        if quiet:
+            q.go = False if q.go is None else q.go      # they went on: what it would do never goes
         if q.live:
             self.speaker.stop()
         alive = q.worker is not None and q.worker.is_alive()
@@ -1243,7 +1269,7 @@ class VoiceSession(object):
                     self.cancel(q.got["qid"])
             except Exception as exc:
                 self.log("voice: cancel failed: %r" % exc)
-
+        q.decide(False)
     def _resume(self, q):
         """Carry on after a pause: from the start of the sentence it was cut in,
         then what came meanwhile."""

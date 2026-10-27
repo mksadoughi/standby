@@ -2011,20 +2011,22 @@ def deliver_ended(sid, progress=None):
     return ok
 
 
-def ask_spoken(sid, question, on_event, on_queued, heard=None):
+def ask_spoken(sid, question, on_event, on_queued, heard=None, commit=None):
     """A voice mode question, answered before returning: the answer text. It
     shows in the chat like a typed one, and streams to on_event as it comes.
     heard: what the user had heard of the answer they cut off, which
-    Claude is told with it (voice.with_cut); not shown in the chat."""
+    Claude is told with it (voice.with_cut); not shown in the chat.
+    commit: a question asked early, before the turn was surely over (voice.Question.committed):
+    what its answer does waits on it (_run_ask)."""
     if sid in LITE_CALLS:                          # a call from a Claude Code session: its own rules
-        return lite_ask(sid, question, on_event, on_queued, heard)
+        return lite_ask(sid, question, on_event, on_queued, heard, commit=commit)
     refused = _begin_ask(sid, question, voice=True)
     if refused:
         return "I'm still on your last question." if "previous" in refused["error"] else refused["error"]
-    return _run_ask(sid, question, voice=True, on_event=on_event, on_queued=on_queued, heard=heard)
+    return _run_ask(sid, question, voice=True, on_event=on_event, on_queued=on_queued, heard=heard, commit=commit)
 
 
-def _run_ask(sid, question, voice=False, on_event=None, on_queued=None, heard=None):
+def _run_ask(sid, question, voice=False, on_event=None, on_queued=None, heard=None, commit=None):
     import agentctl
     t0 = time.time()
     written = []
@@ -2080,19 +2082,24 @@ def _run_ask(sid, question, voice=False, on_event=None, on_queued=None, heard=No
         import voice as voice_mod
         answer = voice_mod.spoken_error(answer)   # an error is never read out as it is
     log("ask %.1fs%s" % (time.time() - t0, " (voice)" if voice else ""))
+    # Asked early: its words may have been ready, but what it does ([HANDOFF], [CANCEL #n], [END])
+    # waits until the turn is surely theirs. They went on: none of it goes.
+    went_on = commit is not None and not commit()
     with _lock:
         pending = PENDING.get(sid, {})
         steps = [e["text"] for e in pending.get("progress", []) if e.get("kind") == "tool"]
-        quiet = bool(pending.get("quiet"))
+        quiet = bool(pending.get("quiet")) or went_on
     if quiet:
         # The user went on: the next question has all of it, so this one leaves no
-        # trace.
+        # trace, and does nothing.
         if pending.get("row") is not None:
             drop_chat_row(sid, pending["row"])
         with _lock:
             PENDING.pop(sid, None)
         log("ask dropped from the chat: the user went on (voice)")
-        return answer.strip()
+        trace(sid, "early", step="held", why="went on", acts=bool(CANCEL_RE.search(answer) or END_TAG in answer
+                                                               or answer.strip().startswith(HANDOFF_TAG)))
+        return ""
     more = None
     if sid in LITE_CALLS and END_TAG in answer:    # the voice ends the call after this goodbye
         answer = answer.replace(END_TAG, "").strip()
@@ -2575,7 +2582,7 @@ def start_voice(sid):
     # The recorder plays Claude's voice, the one voice of a call (echo cancelled where it can:
     # the user can talk over it); never one of this process's, nor the Mac's, instead.
     vs = voice.VoiceSession(sid, SESSIONS / sid,
-                            ask=lambda q, ev, qd, heard=None: ask_spoken(sid, q, ev, qd, heard=heard),
+                            ask=lambda q, ev, qd, heard=None, commit=None: ask_spoken(sid, q, ev, qd, heard=heard, commit=commit),
                             cancel=lambda qid, quiet=False: cancel_voice(sid, qid, quiet),
                             speaker=voice.RecorderSpeaker(SESSIONS / sid, log=log),
                             log=log,
@@ -3405,7 +3412,7 @@ def _lite_watch(sid):
         time.sleep(0.15)
 
 
-def lite_ask(sid, question, on_event, on_queued, heard=None):
+def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     """A turn in a Claude Code session's call. "Stop" while the session works stops the
     session; work the voice hands on goes to the session; anything else is today's voice."""
     import interrupt
@@ -3440,8 +3447,9 @@ def lite_ask(sid, question, on_event, on_queued, heard=None):
             fresh["text"] = text
     if fresh.get("text") and fresh["text"] != c.get("greeted") and not fresh.get("told"):
         c["gist"], fresh["told"] = fresh["text"], True          # made after the hello: with this turn
-    if c.get("gist"):                              # newer than what the voice started with: once
-        notes.append("[SUMMARY] What this session has been working on, now:\n%s\n[END SUMMARY]" % c["gist"])
+    gist, rang = c.get("gist"), False
+    if gist:                                       # newer than what the voice started with: once
+        notes.append("[SUMMARY] What this session has been working on, now:\n%s\n[END SUMMARY]" % gist)
         c["gist"] = None
     vs = VOICE.get(sid)
     tasks = "" if getattr(vs, "ledger", False) else _lite_tasks_note(sid, c)    # on the record: the agent places it
@@ -3449,6 +3457,8 @@ def lite_ask(sid, question, on_event, on_queued, heard=None):
         notes.append(tasks)
     if c.pop("rang", False):                       # they're back from a pause where something waited
         notes.append(LITE_RESUMED)
+        rang = True
+    typed_rows = list(c.get("typed") or [])
     typed = _lite_typed_words(sid, c)              # what they typed or pasted in the chat: their words too
     if typed:
         question = "%s\n%s" % (typed, question)
@@ -3456,7 +3466,14 @@ def lite_ask(sid, question, on_event, on_queued, heard=None):
     refused = _begin_ask(sid, question, voice=True)
     if refused:
         return "I'm still on your last question." if "previous" in refused["error"] else refused["error"]
-    answer = _run_ask(sid, told, voice=True, on_event=on_event, on_queued=on_queued, heard=heard)
+    answer = _run_ask(sid, told, voice=True, on_event=on_event, on_queued=on_queued, heard=heard, commit=commit)
+    if commit is not None and not commit():        # asked early, and they went on: it did nothing, and
+        if gist and not c.get("gist"):             # what it carried once goes with the turn that is theirs
+            c["gist"] = gist
+        if rang:
+            c["rang"] = True
+        c["typed"] = typed_rows + (c.get("typed") or [])
+        return ""
     for tid in CANCEL_RE.findall(str(answer or "")):    # the voice stops a task: [CANCEL #n]
         _lite_cancel(sid, c, tid)
     answer = _no_cancel(answer)
