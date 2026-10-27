@@ -6089,17 +6089,38 @@ background:var(--rec);box-shadow:0 0 0 2px var(--bg)}
 display:flex;align-items:center;justify-content:center;gap:10px;
 background:radial-gradient(circle at 34% 28%,#d9d6ff 0%,#8f86ff 38%,#5046e5 75%,#3b2fc0 100%);
 box-shadow:0 22px 70px rgba(80,70,229,.3),inset -14px -18px 42px rgba(30,20,120,.35)}
-/* C · Wave: the sound inside; the bars move with you listening, ripple thinking, quicken speaking */
-.orb i{display:block;flex:none;width:13px;height:26px;border-radius:7px;background:rgba(255,255,255,.92)}.orb i:nth-child(2){height:38px}
-.voice.listening .orb i{animation:vbar 1s ease-in-out infinite}.voice.listening .orb i:nth-child(2){animation-delay:-.35s}.voice.listening .orb i:nth-child(3){animation-delay:-.7s}
-.voice.thinking .orb i,.voice.starting .orb i{animation:vbar 1.4s ease-in-out infinite}
-.voice.thinking .orb i:nth-child(2),.voice.starting .orb i:nth-child(2){animation-delay:-.2s}.voice.thinking .orb i:nth-child(3),.voice.starting .orb i:nth-child(3){animation-delay:-.4s}
-.voice.speaking .orb{animation:vspeak 1s ease-in-out infinite}
+/* C · Wave: the sound inside, and the mini window's motions, so the orb says the state with no words
+   (the user, 2026-10-27): listening, the bars barely move; hearing you, they move with you and the glow
+   turns cyan; thinking, three dots rising in a turning rainbow; Claude talking, quick bars, a violet
+   glow and rings going out */
+.orbw{position:relative;flex:none;width:45.36px;height:45.36px}.orbw .orb{position:relative;z-index:1}
+.vhalo{position:absolute;inset:-3px;border-radius:50%;filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .35s}
+.vrp{position:absolute;inset:0;border-radius:50%;opacity:0;pointer-events:none}
+.orb i{display:block;flex:none;width:13px;height:26px;border-radius:7px;background:rgba(255,255,255,.92);transition:width .32s,height .32s}.orb i:nth-child(2){height:38px}
+.voice.listening .orb i{animation:vcalm 2.8s ease-in-out infinite}.voice.listening .orb i:nth-child(2){animation-delay:-.9s}.voice.listening .orb i:nth-child(3){animation-delay:-1.8s}
+.voice.listening .vhalo{background:#5046e5;animation:vhb 3.6s ease-in-out infinite}
+.voice.listening.hearing .orb i{animation:vbar 1s ease-in-out infinite}.voice.listening.hearing .orb i:nth-child(2){animation-delay:-.35s}.voice.listening.hearing .orb i:nth-child(3){animation-delay:-.7s}
+.voice.listening.hearing .vhalo{background:#22d3ee;animation:none;opacity:.75}
+.voice.thinking .orb i,.voice.starting .orb i{width:24px;height:24px;border-radius:50%;animation:vdot 1.25s ease-in-out infinite}
+.voice.thinking .orb i:nth-child(2),.voice.starting .orb i:nth-child(2){animation-delay:.16s}.voice.thinking .orb i:nth-child(3),.voice.starting .orb i:nth-child(3){animation-delay:.32s}
+.voice.thinking .vhalo,.voice.starting .vhalo{background:conic-gradient(#5046e5,#8b5cf6,#ec4899,#f59e0b,#22d3ee,#5046e5);opacity:.9;animation:vspin 2.4s linear infinite}
+.voice.speaking .orb{animation:vspeak 1.05s ease-in-out infinite}
 .voice.speaking .orb i{animation:vbar .5s ease-in-out infinite}.voice.speaking .orb i:nth-child(2){animation-delay:-.15s}.voice.speaking .orb i:nth-child(3){animation-delay:-.3s}
+.voice.speaking .vhalo{background:#a855f7;animation:vhb2 1.05s ease-in-out infinite}
+.voice.speaking .vrp{box-shadow:0 0 0 2.4px rgba(168,85,247,.7);animation:vripple 1.8s ease-out infinite}.voice.speaking .vrp+.vrp{animation-delay:.9s}
 .voice.muted .orb,.voice.paused .orb{filter:grayscale(1);opacity:.4}
+.voice.muted .orb i:nth-child(n),.voice.paused .orb i:nth-child(n){height:20px;animation:none}
 .voice.holding .orb i{animation:none;height:26px}.voice.holding .orb{opacity:.75}
+.voice.muted .vhalo,.voice.paused .vhalo,.voice.holding .vhalo{display:none}
 @keyframes vbar{0%,100%{height:23px}50%{height:64px}}
-@keyframes vspeak{0%,100%{transform:scale(1)}25%{transform:scale(1.06)}55%{transform:scale(.98)}80%{transform:scale(1.04)}}
+@keyframes vcalm{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.2)}}
+@keyframes vdot{0%,70%,100%{opacity:.45;transform:none}35%{opacity:1;transform:translateY(-16px)}}
+@keyframes vspin{to{transform:rotate(1turn)}}
+@keyframes vhb{0%,100%{opacity:.18}50%{opacity:.4}}
+/* Claude talking, a fifth stronger than the mini window's first cut (the user, 2026-10-27: too subtle) */
+@keyframes vhb2{0%,100%{opacity:.55}50%{opacity:.95}}
+@keyframes vripple{from{transform:scale(1);opacity:.8}to{transform:scale(1.32);opacity:0}}
+@keyframes vspeak{0%,100%{transform:scale(1)}25%{transform:scale(1.085)}55%{transform:scale(.975)}80%{transform:scale(1.05)}}
 .vstate{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
 /* while Claude works: its actions counted, a quiet status line */
 .vsteps{min-width:0;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;
@@ -6223,7 +6244,7 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
     </header>
     <div class="vlog" id="mxcalllog"></div>
     <div class="vstage">
-      <button class="orb" id="orb" onclick="voiceTap()" aria-label="Interrupt"><i></i><i></i><i></i></button>
+      <span class="orbw"><span class="vhalo"></span><span class="vrp"></span><span class="vrp"></span><button class="orb" id="orb" onclick="voiceTap()" aria-label="Interrupt"><i></i><i></i><i></i></button></span>
       <div class="vtext">
         <div class="vrow"><div class="vstate" id="vstate"></div><span class="vbusy" id="vbusy" hidden></span><div class="vsteps" id="vsteps" aria-live="polite"></div></div>
         <div class="vwords"><div class="vcap you" id="vyou"></div><div class="vcap" id="vclaude"></div>
@@ -6498,13 +6519,18 @@ async function voiceLoop(v){while(voice===v){let st=null;try{st=await api("/api/
       // a call that ended (the server says its voice is off): let go the one way a call ends (agents.js)
       if(typeof MX==="object"&&MX.call&&MX.call.session===v.sid)mxCallGone(MX.call);paint();return}
     if(st)paintVoice(st);await new Promise(r=>setTimeout(r,110))}}
-function paintVoice(st){const s=st.state||"starting";$("voice").className="voice "+s+(st.holding?" holding":"");
+function paintVoice(st){const s=st.state||"starting";
+  // hearing you: the voice's level over a whisper, held 0.7 s so the orb doesn't flicker between words
+  if(s==="listening"&&(st.level||0)>.02)voice.heard=Date.now();const hearing=s==="listening"&&Date.now()-(voice.heard||0)<700;
+  $("voice").className="voice "+s+(st.holding?" holding":"")+(hearing?" hearing":"");
   const lvl=s==="listening"?Math.min(1,Math.sqrt((st.level||0)*5)):0;voice.lvl=voice.lvl*.55+lvl*.45;
   $("orb").style.setProperty("--s",(1+voice.lvl*.24).toFixed(3));
   $("orb").title=s==="thinking"||s==="speaking"?"Tap to interrupt":"";
   const work=s==="thinking"&&st.actions?stepLine(st):"";$("vsteps").textContent=work;
-  $("vstate").textContent=st.notice?st.notice:st.holding?HOLDING:s==="thinking"?(!work&&stepLine(st))||"Thinking…":
-    ({starting:"Starting…",listening:"Listening",speaking:"Speaking",muted:"Paused",paused:"Paused while you dictate"}[s]||"");
+  // the orb says listening, thinking, speaking and paused by its motion (the user, 2026-10-27); the line
+  // says only what the orb can't: a notice, on hold, what Claude is doing, starting, paused for dictation
+  $("vstate").textContent=st.notice?st.notice:st.holding?HOLDING:s==="thinking"?(!work&&stepLine(st))||"":
+    ({starting:"Starting…",paused:"Paused while you dictate"}[s]||"");
   paintPrep(st);
   $("vyou").textContent=(st.you||"").replace(/^\[CALL START\]\s*/,"");$("vclaude").textContent=s==="speaking"?(st.claude||""):"";
   // Pause and Resume answer at once (VPEND, below): until the voice has done it, the button says so
