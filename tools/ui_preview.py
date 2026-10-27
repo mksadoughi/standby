@@ -217,7 +217,7 @@ const CHECK55 = () => SCENE === "start-update" ? { done: true, ready: false, pro
 const DICTATION = { on: true, running: true, old: false, updating: false, problem: null, hold: false,
   words: { count: 12, learned: 5, suggested: 2 },
   shortcut: SCENE === "dictation-shortcut" ? { id: "custom", label: "⌥ Space", kind: "combo" } : { id: "mickey", label: "Press F5", kind: "key" },
-  shortcuts: [{ id: "mickey", label: "Press F5", kind: "key" }, { id: "control2", label: "Control twice", kind: "double" },
+  shortcuts: [{ id: "mickey", label: "Press F5", kind: "key" }, { id: "rcommand2", label: "Right Command twice", kind: "double" },
     { id: "fn2", label: "Fn (Globe) twice", kind: "double" }, { id: "rcommand2", label: "Right Command twice", kind: "double" },
     { id: "roption2", label: "Right Option twice", kind: "double" }],
   missing: SCENE === "dictation" ? [{ key: "mic", name: "Microphone", why: "hears you", action: "ask", button: "Allow" },

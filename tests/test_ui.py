@@ -393,16 +393,16 @@ fh.write("%d\\n" % os.getpid()); fh.flush(); print("held", flush=True); time.sle
         dq = call("/api/dictation-app")[1]
         check("shortcut: the one in use, every preset with its kind, and hold to talk",
               dq["shortcut"]["id"] == "mickey" and dq["hold"] is False
-              and [x["id"] for x in dq["shortcuts"]][:2] == ["mickey", "control2"]
+              and [x["id"] for x in dq["shortcuts"]][:2] == ["mickey", "fn2"]
               and {x["kind"] for x in dq["shortcuts"]} == {"key", "double"}, dq.get("shortcuts"))
-        _, r, _ = call("/api/dictation-app", {"shortcut": "control2"})
+        _, r, _ = call("/api/dictation-app", {"shortcut": "fn2"})
         check("  a preset: saved, and the running app told to reload", r.get("ok")
-              and r["shortcut"] == {"id": "control2", "label": "Press Control twice", "kind": "double"}
-              and cfg_dict().get("shortcut") == "control2"
+              and r["shortcut"] == {"id": "fn2", "label": "Press Fn (Globe) twice", "kind": "double"}
+              and cfg_dict().get("shortcut") == "fn2"
               and (root / "dictation.cmd").read_text().split()[-1] == "reload", r)
         _, r, _ = call("/api/dictation-app", {"shortcut": {"code": "KeyQ", "key": "q", "mods": ["meta"]}})
         check("  a recorded one that would clash: refused in one line, nothing saved",
-              r == {"error": "⌘ Q is an app shortcut everywhere"} and cfg_dict().get("shortcut") == "control2", r)
+              r == {"error": "⌘ Q is an app shortcut everywhere"} and cfg_dict().get("shortcut") == "fn2", r)
 
         def answer(ok, why=""):
             """The app, registering the hotkey a moment after it is told to reload."""

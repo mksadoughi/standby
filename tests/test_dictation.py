@@ -56,7 +56,16 @@ def tap(t, key, hold=0.08):
     return [(t, "mod", key, True), (t + hold, "mod", key, False)]
 
 
-ctl = d.SHORTCUTS["control2"][1]
+ctl = (59, 62)                                 # a double tap of Control: the gesture itself
+# `standby dictation on` says the setup window's line only while something is missing.
+d.STATUS.write_text(json.dumps({"pid": 4242, "permissions": {"listen": True, "post": True, "mic": "allowed"}}))
+check("dictation on, all allowed: no word about a setup window", d.permissions_note(4242, wait=0.2) is None)
+d.STATUS.write_text(json.dumps({"pid": 4242, "permissions": {"listen": False, "post": True, "mic": "allowed"}}))
+check("  one missing: the setup window's line", d.permissions_note(4242, wait=0.2) == d.SETUP_NOTE)
+check("  the app not yet saying: the line, to be safe", d.permissions_note(999, wait=0.2) == d.SETUP_NOTE)
+d.STATUS.unlink()
+check("Control twice is not offered: Apple Dictation's own, macOS asks to turn that on",
+      "control2" not in d.SHORTCUTS and all("Control" not in label for label, _k in d.SHORTCUTS.values()))
 check("Control twice toggles", run(d.Gesture(ctl), tap(0, CTRL) + tap(0.25, CTRL)) == ["toggle"])
 check("left then right Control count as twice", run(d.Gesture(ctl), tap(0, CTRL) + tap(0.25, RCTRL)) == ["toggle"])
 check("taps too far apart do nothing", run(d.Gesture(ctl), tap(0, CTRL) + tap(0.9, CTRL)) == [])
@@ -859,7 +868,7 @@ check("  the others from their System Settings pane",
       and rows[2]["action"] == "open" and rows[2]["url"].endswith("Privacy_Accessibility")
       and rows[2]["button"] == "Open Settings…", rows)
 check("  in plain words, naming the shortcut",
-      rows[1]["why"] == "notices the F5 key" and d.setup_rows(none_yet, "control2")[1]["why"] == "notices the shortcut"
+      rows[1]["why"] == "notices the F5 key" and d.setup_rows(none_yet, "rcommand2")[1]["why"] == "notices the shortcut"
       and rows[2]["why"] == "pastes the text", rows)
 denied = d.setup_rows({"listen": True, "post": True, "mic": "denied"})
 check("  a denied mic opens its pane", denied[0]["action"] == "open" and denied[0]["url"].endswith("Privacy_Microphone")
@@ -876,7 +885,7 @@ check("  no emoji in the new words", all(ord(ch) < 0x2190 for ch in d.STALE_BUTT
                                          + da.NO_POST.replace("⌘", "") + da.NO_POST_BUTTON))
 check("first success: says what to press",
       d.ready_text("mickey") == "Dictation is ready. Press F5 in any app"
-      and d.ready_text("control2") == "Dictation is ready. Press Control twice in any app")
+      and d.ready_text("rcommand2") == "Dictation is ready. Press Right Command twice in any app")
 preview = (d.HERE.parent / "tools" / "dictation_preview.py").read_text()
 check("  the panel's pictures for the website draw the app's own line, no emoji either",
       "d.ready_text(" in preview and "🎤" not in preview.split('"""', 2)[2].split("def huds", 1)[1].split("def ", 1)[0])
@@ -983,6 +992,8 @@ else:
 
     d.save_setting("sounds", False)
     d.save_setting("shortcut", "control2")
+    check("a Control twice saved before: F5 instead", d.settings()["shortcut"] == "mickey")
+    d.save_setting("shortcut", "rcommand2")
     c = da.Controller.alloc().initHeadless_(True)
     c.capture, c.engine, c.hud, c.inserter, c.guard = FakeCapture(), FakeEngine(), FakeHUD(), FakeInserter(), FakeGuard()
     c.next_check = time.time() + 3600               # no permission polling in a test
@@ -1027,14 +1038,14 @@ else:
 
     def double_tap(key):
         on_clock([(Quartz.kCGEventFlagsChanged, flags_event(key, down)) for down in (True, False, True, False)])
-    double_tap(CTRL)
-    check("controller: Control twice starts listening",
+    double_tap(RCMD)
+    check("controller: Right Command twice starts listening",
           c.listening and c.capture.on and c.engine.warmed == 1 and c.guard.calls == ["begin"])
     check("  and shows the listening panel", c.hud.shown[-1] == "Listening", c.hud.shown)
     key = Quartz.CGEventCreateKeyboardEvent(None, 0, True)
     c.on_event(Quartz.kCGEventKeyDown, key)
-    double_tap(CTRL)
-    check("controller: Control twice again stops, and the audio is decoded",
+    double_tap(RCMD)
+    check("controller: Right Command twice again stops, and the audio is decoded",
           not c.listening and not c.capture.on and c.engine.audio is not None and c.guard.calls == ["begin", "end"])
     c.tick_(None)
     text = [g for g in c.inserter.got]
@@ -1370,7 +1381,7 @@ else:
         check("  and says plainly when another app holds its keys",
               head[1] == "Press ⌥ Space can't be used: another app already uses it", head)
         c.hotkey_state = None
-        d.save_setting("shortcut", "control2")
+        d.save_setting("shortcut", "rcommand2")
         c.reload_settings()
         check("a double tap again: no hotkey needed", c.wanted_hotkey() is None and isinstance(c.gesture, d.Gesture))
         d.save_setting("shortcut", "mickey")

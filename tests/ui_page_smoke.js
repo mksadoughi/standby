@@ -140,7 +140,7 @@ eval(require("fs").readFileSync(process.env.UI_PAGE_JS, "utf8") + `
   ok("  an error says so, escaped, not as an empty state", el("ubody").innerHTML.includes("not available right now") && el("ubody").innerHTML.includes("&lt;host&gt;"));
   // The dictation shortcut: presets or one recorded; the server judges, a refusal changes nothing.
   DICT = { on: true, running: true, missing: [], hold: false, shortcut: { id: "mickey", label: "Press F5", kind: "key" },
-    shortcuts: [{ id: "mickey", label: "Press F5", kind: "key" }, { id: "control2", label: "Control twice", kind: "double" }] };
+    shortcuts: [{ id: "mickey", label: "Press F5", kind: "key" }, { id: "rcommand2", label: "Right Command twice", kind: "double" }] };
   paintDict();
   ok("shortcut: the field shows the one in use", !el("kshortf").hidden && el("kfield").innerHTML.includes("Press F5"), el("kfield").innerHTML);
   openShortcuts();
