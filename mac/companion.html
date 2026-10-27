@@ -55,18 +55,27 @@ flex:none;color:var(--c-muted);transition:background .12s,color .12s,transform .
    a rail that ends at the orb's centre and lies under the orb: shut, it waits behind the orb;
    out, it slides to its place, its outer end round and its inner end running on under the orb
    to its centre, so the menu reads as sliding out of the mini window (the user, 2026-10-23). */
-.rail{position:absolute;right:calc(12px + var(--g) / 2);bottom:calc(12px + var(--g) / 2 - 20px);width:calc(var(--w) - 12px - var(--g) / 2);height:40px;
+.rail{position:absolute;right:calc(12px + var(--g) / 2);bottom:calc(12px + var(--g) / 2 - var(--ph,40px) / 2);width:calc(var(--w) - 12px - var(--g) / 2);height:var(--ph,40px);
 overflow:hidden;pointer-events:none;z-index:0;transition:right .32s cubic-bezier(.23,1,.32,1),bottom .32s cubic-bezier(.23,1,.32,1),width .32s cubic-bezier(.23,1,.32,1)}
 body:not(.r) .rail{right:auto;left:calc(12px + var(--g) / 2);transition-property:left,bottom,width}
-[data-v=top] .rail{bottom:auto;top:calc(12px + var(--g) / 2 - 20px);transition-property:right,top,width}
+[data-v=top] .rail{bottom:auto;top:calc(12px + var(--g) / 2 - var(--ph,40px) / 2);transition-property:right,top,width}
 body:not(.r)[data-v=top] .rail{transition-property:left,top,width}
-.ctls{position:absolute;top:0;right:0;display:flex;flex-direction:row;align-items:center;gap:2px;height:40px;padding:0 calc(var(--g) / 2 + 10px) 0 3px;
-box-sizing:border-box;border-radius:20px;pointer-events:auto;transform:translateX(var(--shut,200px));
+.ctls{position:absolute;top:0;right:0;display:flex;flex-direction:row;align-items:center;gap:2px;height:var(--ph,40px);padding:0 calc(var(--g) / 2 + 10px) 0 3px;
+box-sizing:border-box;border-radius:var(--pr,20px);pointer-events:auto;transform:translateX(var(--shut,200px));
 transition:transform .26s cubic-bezier(.5,0,.75,0),padding .32s cubic-bezier(.23,1,.32,1)}
 .rail.out .ctls{transform:none;transition:transform .34s cubic-bezier(.23,1,.32,1),padding .32s cubic-bezier(.23,1,.32,1)}
 body:not(.r) .ctls{right:auto;left:0;padding:0 3px 0 calc(var(--g) / 2 + 10px);transform:translateX(calc(-1 * var(--shut,200px)))}
 body:not(.r) .rail.out .ctls{transform:none}
 .ctls:empty{visibility:hidden}
+/* on a call, pointed at (the user, 2026-10-27): one panel rolls out, the session's name and time on
+   top, the three icons under it */
+.ctls.card{flex-direction:column;align-items:stretch;justify-content:center;gap:2px;padding:6px calc(var(--g) / 2 + 10px) 6px 6px}
+body:not(.r) .ctls.card{padding:6px 6px 6px calc(var(--g) / 2 + 10px)}
+.ctls .nmrow{display:flex;align-items:center;gap:7px;height:22px;padding:0 8px;font:600 13px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--c-text);white-space:nowrap}
+.ctls .nmrow .dot{width:6px;height:6px;border-radius:50%;background:var(--c-rec);flex:none}
+.ctls .nmrow .nm{max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.ctls .nmrow .tm{margin-left:auto;padding-left:4px;font-weight:500;font-size:12px;color:var(--c-muted);font-variant-numeric:tabular-nums}
+.ctls .btns{display:flex;gap:2px}
 
 /* the orb is Claude: a click starts voice mode, another ends it. Its box is always the full
    88, pinned to the corner; it shows at 52 or 88 by one transform from that corner. */
@@ -152,7 +161,7 @@ background:conic-gradient(var(--c-ring) calc(var(--pp,25) * 1%),rgba(80,70,229,.
 /* a passing message, like "Standby isn't answering" */
 .txt{padding:0 6px;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;color:var(--c-muted);font-weight:400}
 
-/* the words' window, hugging its text: on a call a mic macOS refuses, or, pointed at, the session's name */
+/* the words' window, hugging its text: on a call only a mic macOS refuses is said */
 .says{position:fixed;right:0;bottom:0;box-sizing:border-box;width:max-content;max-width:300px;padding:8px 14px;
 font:400 15px/21px ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;text-align:right;
 display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -160,10 +169,6 @@ body:not(.r) .says{right:auto;left:0;text-align:left}
 [data-v=top] .says{bottom:auto;top:0}
 .says p{margin:0;color:var(--c-claude)}
 .says p.warn{color:var(--c-attn)}
-.says p.tab{display:flex;align-items:center;gap:7px;color:var(--c-text);font:600 13px/18px -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
-.says p.tab .dot{width:6px;height:6px;border-radius:50%;background:var(--c-rec);flex:none}
-.says p.tab .nm{max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.says p.tab .tm{font-weight:500;font-size:12px;color:var(--c-muted);font-variant-numeric:tabular-nums}
 .says p.in{animation:fadein .34s ease both}
 
 /* outside the panel (a preview), a stand-in for the glass and its shadow; the orb's canvas
@@ -185,6 +190,8 @@ if (!SB) document.documentElement.classList.add("preview");
 const WORDS = location.hash === "#words", $ = id => document.getElementById(id);
 // The orb's size in voice mode and at rest; its window is 24 more.
 const ORB = 88, REST = 52, INSET = 12, W = 360, H = 112, PH = 40, GAP = 10;
+const PHC = 72, PRC = 16;      // the panel on a call, pointed at: two rows, softer corners (it fits the orb's 88)
+let ph = PH, pr = PH / 2;      // the pill's height and corners now: its last content's
 document.documentElement.style.setProperty("--orb", ORB + "px");
 document.documentElement.style.setProperty("--w", W + "px");
 document.documentElement.style.setProperty("--h", H + "px");
@@ -222,7 +229,11 @@ function render() {
   const btns = !open ? "" : B("Full window", "full()", ICON.window) + B("Settings", "callSettings()", ICON.gear) +
     `<button class="hang" title="End" aria-label="End" onclick="end()"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-3.2 0-6.2.9-8.6 2.6a1.6 1.6 0 0 0-.6 1.8l.7 2a1.3 1.3 0 0 0 1.6.8l3.2-1a1.3 1.3 0 0 0 .9-1.1l.2-1.6a12 12 0 0 1 5.2 0l.2 1.6a1.3 1.3 0 0 0 .9 1.1l3.2 1a1.3 1.3 0 0 0 1.6-.8l.7-2a1.6 1.6 0 0 0-.6-1.8C18.2 9.9 15.2 9 12 9z"/></svg></button>`;
   const fl = flash ? `<span class="txt">${esc(flash)}</span>` : "";
-  const inner = fl + btns;
+  // on a call, the session's name and how long it has run, over the icons; the time ticks in place
+  const card = !!(btns && l && l.call && !flash);
+  const inner = card ? `<span class="nmrow"><span class="dot"></span><span class="nm">${esc(l.call.name || "Claude")}</span><span class="tm" id="ctm"></span></span><span class="btns">${btns}</span>` : fl + btns;
+  if (inner) { ph = card ? PHC : PH; pr = card ? PRC : PH / 2 }
+  el.style.setProperty("--ph", ph + "px"); el.style.setProperty("--pr", pr + "px");
   // The orb and the rail are built once and kept, so the orb's motion runs on and the pill can
   // roll; what changes is their classes, the orb's tip and what the pill holds.
   if (!el.firstChild) el.innerHTML = '<button class="talk" onclick="orb()"><span class="orbs"><span class="halo"></span><span class="orb" id="orb"><i></i><i></i><i></i></span><span class="rp"></span><span class="rp"></span>' +
@@ -241,7 +252,9 @@ function render() {
   el.style.setProperty("--k", (g / ORB).toFixed(4));
   el.style.setProperty("--g", g + "px");
   const rail = el.querySelector(".rail"), c = el.querySelector(".ctls");
-  if (rail && c) pillTo(rail, c, inner, g);
+  if (rail && c) pillTo(rail, c, inner, g, card);
+  const ctm = $("ctm"), at = card && l.call.started ? clock(Date.now() / 1000 - l.call.started) : "";
+  if (ctm && ctm.textContent !== at) ctm.textContent = at;
   el.style.setProperty("--pp", pp === null ? 25 : Math.max(3, pp));
   const lv = vs === "listening" ? Math.min(1, Math.sqrt((v.level || 0) * 5)) : 0;
   $("orb").style.setProperty("--lv", (1 + lv * .06).toFixed(3)); el.style.setProperty("--hl", lv.toFixed(2));
@@ -250,10 +263,10 @@ function render() {
 // The pill: out with what it holds, or rolling back under the orb, its last content kept until
 // it is gone. Shut, it waits behind the orb, its inner edge at the orb's centre less 20.
 let shown = "", shutT = null;
-function pillTo(rail, c, inner, g) {
-  if (inner && inner !== shown) { c.innerHTML = inner; shown = inner }
+function pillTo(rail, c, inner, g, card) {
+  if (inner && inner !== shown) { c.innerHTML = inner; shown = inner; c.classList.toggle("card", !!card) }
   const pw = shown ? Math.ceil(c.offsetWidth) : 0;
-  c.style.setProperty("--shut", (pw - PH / 2) + "px");      // pw runs on to the orb's centre
+  c.style.setProperty("--shut", (pw - ph / 2) + "px");      // pw runs on to the orb's centre
   const out = !!inner;
   if (out === rail.classList.contains("out")) return;
   clearTimeout(shutT);
@@ -265,12 +278,12 @@ function pillTo(rail, c, inner, g) {
 let lastHit = "";
 function size(el, g, c, r_, top) {
   // the pill runs from its round outer end to the orb's centre (its inner end hidden under the orb)
-  const pw = c ? Math.ceil(c.offsetWidth) : 0, px = INSET + g / 2, py = top ? INSET + g / 2 - PH / 2 : H - INSET - g / 2 - PH / 2;
+  const pw = c ? Math.ceil(c.offsetWidth) : 0, px = INSET + g / 2, py = top ? INSET + g / 2 - ph / 2 : H - INSET - g / 2 - ph / 2;
   // the pill, in page px from the window's top left; glass is the same rect from the inner side
-  const pill = pw ? { x: r_ ? W - px - pw : px, y: py, w: pw, h: PH, radius: PH / 2 } : null;
-  const glass = pill ? { x: W - px - pw, y: py, w: pw, h: PH, radius: PH / 2 } : null;
+  const pill = pw ? { x: r_ ? W - px - pw : px, y: py, w: pw, h: ph, radius: pr } : null;
+  const glass = pill ? { x: W - px - pw, y: py, w: pw, h: ph, radius: pr } : null;
   // where the glass rolls out from and back to: a circle under the orb's centre
-  const under = { x: W - INSET - g / 2 - PH / 2, y: py, w: PH, h: PH, radius: PH / 2 };
+  const under = { x: W - INSET - g / 2 - ph / 2, y: py, w: ph, h: ph, radius: ph / 2 };
   const m = { type: "orb", w: W, h: H, glyph: g, inset: INSET, glass, under, ms: glass ? 340 : 260 }, k = JSON.stringify(m);
   if (k !== lastSize) { lastSize = k; post(m) }
   const cx = r_ ? W - INSET - g / 2 : INSET + g / 2, cy = top ? INSET + g / 2 : H - INSET - g / 2;
@@ -279,25 +292,18 @@ function size(el, g, c, r_, top) {
 }
 
 // The words' window: on a call, just the orb (the user: "just the orb itself"); its state is in its
-// animation, with no captions or working line. A mic macOS refuses is said (the call can't hear you
-// then); otherwise, only while the orb is pointed at, the call's tab: its session's name and time.
+// animation, with no time, captions or working line. Only a mic macOS refuses is said: the call can't
+// hear you then.
 let lastW = "";
 function words() {
   const l = C && C.live, box = $("says"), p = $("sp");
   const text = l && l.mic_denied ? "Can’t hear your mic" : "";   // the band's and the window's words, short for the mini window
-  // pointed at, a call's tab: its session's name and how long it has run (the user, 2026-10-27)
-  const name = !text && open && l && l.call ? l.call.name : "";
-  if (name) {
-    const tab = `<span class="dot"></span><span class="nm">${esc(name)}</span>` + (l.call.started ? `<span class="tm">${clock(Date.now() / 1000 - l.call.started)}</span>` : "");
-    if (p.className !== "tab" && p.className !== "tab in") { p.className = "tab"; void p.offsetWidth; p.className = "tab in" }
-    if (p.innerHTML !== tab) p.innerHTML = tab;
-  }
-  if (!text && !name) {
+  if (!text) {
     box.style.display = "none"; p.textContent = "";
     if (lastW !== "0") { lastW = "0"; post({ type: "words", w: 0, h: 0, radius: null, ms: 180 }) }
     return;
   }
-  if (text && text !== p.textContent) { p.textContent = text; p.className = "warn"; void p.offsetWidth; p.className = "warn in" }
+  if (text !== p.textContent) { p.textContent = text; p.className = "warn"; void p.offsetWidth; p.className = "warn in" }
   box.style.display = ""; box.style.minWidth = "";
   const r = box.getBoundingClientRect();
   // The window hugs the text in steps of 8, so it breathes rather than twitching per word.
