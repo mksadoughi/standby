@@ -632,8 +632,15 @@ def reset_post():
     core.log("accessibility: reset this app's entry: %s (%s)" % ("done" if ok else "failed", said[:200]))
     return ok, said
 def ask_post():
+    if os.environ.get("STANDBY_NO_DEVICES"):
+        return                                  # a test never asks macOS
     import Quartz
     Quartz.CGRequestPostEventAccess()
+def ask_listen():
+    if os.environ.get("STANDBY_NO_DEVICES"):
+        return
+    import Quartz
+    Quartz.CGRequestListenEventAccess()
 def ax_trusted():
     try:
         ax = ctypes.CDLL("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
@@ -1540,11 +1547,11 @@ class Controller(NSObject):
             self.install_tap()
         if ask and not self.headless:
             import Quartz
+            if self.perm["mic"] != "allowed" and "mic" in self.asked:
+                mic_access()                        # granted meanwhile: the next check has it
             if self.perm["mic"] == "ask" and "mic" not in self.asked and not self.listening:
                 self.asked.add("mic")
                 self.ask_mic()
-            elif self.perm["mic"] != "allowed" and "mic" in self.asked:
-                mic_access()                        # granted meanwhile: the next check has it
             elif not self.perm["listen"] and "listen" not in self.asked:
                 self.asked.add("listen")
                 Quartz.CGRequestListenEventAccess()
@@ -1623,8 +1630,21 @@ class Controller(NSObject):
             self.asked.add(row["key"])
             self.ask_mic()
         else:
+            self.request(row["key"])            # macOS lists the app in that pane only once it has asked
             open_url(row["url"])
         self.next_check = 0.0              # look again at once
+
+    @python_method
+    def request(self, key):
+        """Have macOS ask for permission `key`, once: it lists this app in the pane only after
+        that (a VM run: Open Settings… showed a list without Standby Dictation in it)."""
+        if key not in ("listen", "post") or key in self.asked:
+            return
+        self.asked.add(key)
+        try:
+            (ask_listen if key == "listen" else ask_post)()
+        except Exception as exc:
+            core.log("asking for %s: %r" % (key, exc))
 
     def showSetup_(self, _sender):
         self.show_setup()
