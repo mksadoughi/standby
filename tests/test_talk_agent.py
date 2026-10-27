@@ -141,10 +141,13 @@ def wait(pred, secs=PATIENCE):
     return False
 
 
-def ask(question, *extra):
+def ask(question, *extra, ident=None):
+    """The answer's text; ident: a list, given the question's id (the agent's "queued" line)."""
     p = subprocess.run([PY, agent, "q", "--json"] + list(extra) + [question], env=env,
                        capture_output=True, text=True, timeout=60)
     lines = [json.loads(l) for l in p.stdout.splitlines() if l.strip()]
+    if ident is not None:
+        ident.extend(l["id"] for l in lines if l.get("type") == "queued")
     return lines[-1].get("text") if lines else p.stderr
 
 
@@ -447,12 +450,9 @@ try:
           in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
     # An early question the user went on from: answered with a hand-off, then dropped (agentctl.cancel's
     # .x). The hand-off never went, so the voice's next turn has no note that it's working on it.
-    # its question's id from the trace, which is written behind: the new hand-off, not an earlier turn's row
-    handed = lambda: [r["q"] for r in map(json.loads, open(tpath)) if r["ev"] == "model" and r.get("outcome") == "handed"]
-    handed_before = set(handed())
-    got = ask("[VOICE] can you ask the agent to create a new text file, just a sample text file?")
-    wait(lambda: set(handed()) - handed_before, 10)
-    qid = sorted(set(handed()) - handed_before)[-1]
+    ids = []                         # its question's id, as the agent queued it (never the trace, written behind)
+    got = ask("[VOICE] can you ask the agent to create a new text file, just a sample text file?", ident=ids)
+    qid = ids[-1] if ids else "none"
     open(os.path.join(root, "agent", "spool", qid + ".x"), "w").close()
     ask("[VOICE] what time is it there")
     check("a hand-off whose early question they went on from: the voice keeps no note it's working on it",
