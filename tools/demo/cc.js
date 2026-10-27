@@ -58,45 +58,63 @@ const micIcon = (x, y, c, s = 1) => `<g transform="translate(${f(x)} ${f(y)}) sc
 function wrap(s, n) { const out = []; let cur = ""; for (const wd of s.split(" ")) { if ((cur + " " + wd).trim().length > n && cur) { out.push(cur); cur = wd } else cur = (cur + " " + wd).trim() } if (cur) out.push(cur); return out }
 
 // A window's header, as the app has it now: the three lights, ‹ (back to the list), then the name. Live (o.controls):
-// a dot, the name (cut short with … to fit), the time after it, then Pause as an icon (Resume while paused), End as a
-// red icon (a hang-up for a call, a stop square for a meeting), on a call "Mini window", and ⋯. Not live: the name and
-// under it what it was ("Meeting · 12 min · ended …"). o.lean: only what the story needs (no Mini window, no ⋯).
+// a dot (‖ while paused), the name (cut short with … to fit), the time after it, on a call "Mini window", and ⋯ (Pause
+// and End live in the bar at the bottom now). Not live: the name and under it what it was ("Meeting · 12 min · ended
+// …"). o.lean: only what the story needs (no Mini window, no ⋯).
 function header(r, title, sub, o = {}) {
   const { x, y, w } = r;
   let g = [0, 1, 2].map(i => `<circle cx="${x + 26 + i * 22}" cy="${y + 34}" r="7" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
     `<path d="M${x + 106} ${y + 27} l-7 7 7 7" fill="none" stroke="${W.mut}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>`;
   if (!o.controls) return g + ui(x + 124, y + 32, title, 21, { weight: 700, fill: W.ink }) + ui(x + 124, y + 58, sub, 16, { fill: W.mut }) + kebab(x + w - 44, y + 35);
-  const cy = y + 36, more = x + w - (o.lean ? 10 : 44), pill = o.call && !o.lean ? 132 : 0, endX = more - 30 - pill - (pill ? 12 : 0) - 20, pauseX = endX - 50;
-  g += `<circle cx="${x + 130}" cy="${cy}" r="6" fill="${o.dot || W.red}" opacity=".75"/>`;
-  const clock = o.clock || "", room = pauseX - 30 - (x + 146) - clock.length * 10.5 - 12, n = Math.max(4, Math.floor(room / 11.5));
+  const cy = y + 36, pill = o.call && !o.lean ? 132 : 0, right = x + w - (o.lean ? 24 : 60) - pill;
+  g += o.paused ? box(x + 125, cy - 7, 3.5, 14, 1.5, W.ink) + box(x + 131, cy - 7, 3.5, 14, 1.5, W.ink)
+    : `<circle cx="${x + 130}" cy="${cy}" r="6" fill="${o.dot || W.red}" opacity=".75"/>`;
+  const clock = o.clock || "", room = right - (x + 146) - clock.length * 10.5 - 12, n = Math.max(4, Math.floor(room / 11.5));
   const name = title.length > n ? title.slice(0, n - 1).trimEnd() + "…" : title;
   g += ui(x + 146, cy + 7, name, 21, { weight: 700, fill: W.ink }) + ui(x + 146 + name.length * 11.5 + 12, cy + 7, clock, 18, { fill: W.mut });
-  g += `<circle cx="${pauseX}" cy="${cy}" r="20" fill="${W.win}" stroke="${W.line}" stroke-width="2"/>` +
-    (o.paused ? `<path d="M${pauseX - 5} ${cy - 8} l13 8 -13 8 Z" fill="${W.ink}"/>` : box(pauseX - 7, cy - 8, 4.5, 16, 1.5, W.ink) + box(pauseX + 2.5, cy - 8, 4.5, 16, 1.5, W.ink));
-  g += `<circle cx="${endX}" cy="${cy}" r="20" fill="${W.redsoft}" stroke="#f2a8b0" stroke-width="2"/>` + (o.call
-    ? `<path d="M${endX - 11} ${cy + 3} q11 -9 22 0 l-1.5 4.5 -5.5 -1.8 v-3.2 q-4 -1.6 -8 0 v3.2 l-5.5 1.8 Z" fill="${W.red}"/>`
-    : box(endX - 6.5, cy - 6.5, 13, 13, 2.5, W.red));
-  if (pill) g += box(endX + 32, cy - 20, pill, 40, 20, W.win, { stroke: W.line, sw: 2 }) + ui(endX + 32 + pill / 2, cy + 6, "Mini window", 16, { anchor: "middle", fill: W.ink });
-  return g + (o.lean ? "" : kebab(more, y + 35));
+  if (pill) g += box(right + 8, cy - 20, pill, 40, 20, W.win, { stroke: W.line, sw: 2 }) + ui(right + 8 + pill / 2, cy + 6, "Mini window", 16, { anchor: "middle", fill: W.ink });
+  return g + (o.lean ? "" : kebab(x + w - 44, y + 35));
 }
+// The bar at the bottom of a live window, as the app has it now: a mark on the left (the orb on a call, red bars for a
+// meeting), a small state word over what's being said now, then Pause (a play mark while paused) and End, red (a
+// hang-up on a call, a stop square for a meeting).
+const BAR = 104;
+function liveBar(r, t, o) {
+  const { x, y, w, h } = r, by = y + h - BAR, cy = by + BAR / 2, endX = x + w - 48, pauseX = endX - 62;
+  let g = `<path d="M${x} ${by} H${x + w} V${y + h - 18} Q${x + w} ${y + h} ${x + w - 18} ${y + h} H${x + 18} Q${x} ${y + h} ${x} ${y + h - 18} Z" fill="${W.soft}"/>` +
+    `<line x1="${x}" y1="${by}" x2="${x + w}" y2="${by}" stroke="${W.line}" stroke-width="1.5"/>`;
+  g += o.mark(x + 54, cy);
+  const tx = x + 102, room = pauseX - 40 - tx, n = Math.max(10, Math.floor(room / 9.6));
+  g += ui(tx, cy - 12, o.word, 16, { fill: W.mut, weight: 600 }) + (o.extra || "");
+  wrap(o.line || "", n).slice(0, 2).forEach((s, i) => { g += ui(tx, cy + 14 + i * 22, s, 18, { fill: W.ink }) });
+  g += `<circle cx="${pauseX}" cy="${cy}" r="24" fill="${W.win}" stroke="${W.line}" stroke-width="2"/>` +
+    (o.paused ? `<path d="M${pauseX - 5} ${cy - 9} l14 9 -14 9 Z" fill="${W.ink}"/>` : box(pauseX - 7, cy - 9, 5, 18, 1.5, W.ink) + box(pauseX + 2, cy - 9, 5, 18, 1.5, W.ink));
+  g += `<circle cx="${endX}" cy="${cy}" r="26" fill="${W.red}"/>` + (o.call
+    ? `<path d="M${endX - 12} ${cy + 3} q12 -10 24 0 l-1.6 5 -6 -2 v-3.5 q-4.4 -1.8 -8.8 0 v3.5 l-6 2 Z" fill="#fff"/>`
+    : box(endX - 8, cy - 8, 16, 16, 3, "#fff"));
+  return g;
+}
+const bars = (bx, cy, t, s = 1) => [0, 1, 2].map(i => { const hh = (7 + 10 * Math.abs(Math.sin(t * 7 + i * 1.7))) * s; return box(bx + i * 8 * s, cy - hh / 2, 4.5 * s, hh, 2 * s, W.red, { op: i ? .7 : 1 }) }).join("");
+const mutedMark = (mx, cy, c = W.mut) => `<g transform="translate(${mx} ${cy})" fill="none" stroke="${c}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M-11 -4 h5 l7 -6 v20 l-7 -6 h-5 Z"/><path d="M5 -4 l8 8 M13 -4 l-8 8"/></g>`;
 // The meeting window: its header; "Started …"; each line's time, who (dotted when the voice is known from before),
-// what they said; while someone talks, their words so far, dim, after the red bars.
+// what they said; at the bottom the bar: "Listening · Your mic · Zoom ˄" over the words being said now. A click on the
+// sources opens the list above the bar, a tick for each (o.sources: [{ name, detail, on }], o.open 0..1); o.geom gets
+// where the chevron and each row's tick are, for a pointer.
 // o.lines: [{ at, ts, who, col, text, known }] (shown from `at`), o.sep: [{ at, text }], o.live: { who, text, from, to },
 // o.clock: the time recorded; o.ended: the whole line under the name instead ("Meeting · 12 min · ended 10:42 AM")
 function meetingWin(r, t, o) {
-  const { x, y, w, h } = r, pad = 30;
-  let g = frame(r) + (o.ended ? header(r, o.title, o.ended) : o.paused ? header(r, o.title, "", { controls: true, paused: true, clock: o.clock, lean: o.lean })
-    : header(r, o.title, "", { controls: true, dot: W.red, clock: o.clock, lean: o.lean }));
+  const { x, y, w, h } = r, pad = 30, liveWin = !o.ended;
+  let g = frame(r) + (o.ended ? header(r, o.title, o.ended) : header(r, o.title, "", { controls: true, paused: o.paused, dot: W.red, clock: o.clock, lean: o.lean }));
   const items = [];
   if (o.started) items.push({ at: -1, sep: o.started });
   (o.sep || []).forEach(s => items.push({ at: s.at, sep: s.text }));
   (o.lines || []).forEach(l => items.push(l));
   items.sort((a, b) => a.at - b.at);
-  const shown = items.filter(i => t > i.at), ROWH = o.rowh || 84, SEPH = 44, live = o.live && t > o.live.from && t < o.live.to;
-  const heights = shown.map(i => i.sep ? SEPH : ROWH), area = h - 98 - (o.top || 0) - (live ? 54 : 0);
+  const shown = items.filter(i => t > i.at), ROWH = o.rowh || 84, SEPH = 44;
+  const heights = shown.map(i => i.sep ? SEPH : ROWH), area = h - 98 - (liveWin ? BAR + 8 : 0);
   let total = heights.reduce((m, v) => m + v, 0), skip = 0;
   while (total > area && skip < shown.length) { total -= heights[skip]; skip++ }
-  let cy = y + 96 + (o.top || 0);
+  let cy = y + 96;
   shown.slice(skip).forEach(i => {
     const k = out(span(t, i.at, i.at + .35));
     if (i.sep) { g += `<g opacity="${fo(k)}">` + ui(x + w / 2, cy + 22, i.sep, 16, { anchor: "middle", fill: W.mut }) + "</g>"; cy += SEPH; return }
@@ -107,10 +125,31 @@ function meetingWin(r, t, o) {
       ui(x + pad + 96, cy + 54, i.text, 21, { fill: W.ink }) + "</g>";
     cy += ROWH;
   });
-  if (live) {
-    const n = Math.floor(clamp((t - o.live.from) * 18, 0, o.live.text.length)), bx = x + pad + 96;
-    g += [0, 1, 2].map(i => box(bx + i * 8, cy + 16 - (6 + 8 * Math.abs(Math.sin(t * 7 + i))), 4.5, 2 * (6 + 8 * Math.abs(Math.sin(t * 7 + i))) - 12, 2, W.red)).join("") +
-      ui(bx + 34, cy + 20, o.live.who + ": " + o.live.text.slice(0, n), 17, { fill: W.mut });
+  if (!liveWin) return g;
+  const src = o.sources || [{ name: "Your mic", detail: "MacBook Pro Microphone", on: true }], open = o.open || 0;
+  const live = o.live && t > o.live.from && t < o.live.to ? o.live : null;
+  const said = live ? live.who + ": " + live.text.slice(0, Math.floor(clamp((t - live.from) * 18, 0, live.text.length))) : "";
+  const wx = x + 102 + 96, fit = Math.max(6, Math.floor((x + w - 48 - 62 - 40 - wx - 18) / 8.6)), all = src.map(s => s.name).join(" · ");
+  const names = all.length > fit ? all.slice(0, fit - 1).trimEnd() + "…" : all, chevX = wx + names.length * 8.6 + 14, by = y + h - BAR;   // cut short to fit, as the app does
+  const extra = ui(wx, by + BAR / 2 - 12, names, 16, { fill: W.mut }) +
+    `<path d="M${chevX - 6} ${by + BAR / 2 - 15 + (open > .5 ? -3 : 3)} l6 ${open > .5 ? 6 : -6} 6 ${open > .5 ? -6 : 6}" fill="none" stroke="${W.mut}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>`;   // ˄ shut, ˅ open
+  g += liveBar(r, t, { word: (o.paused ? "Paused" : "Listening") + " ·", extra, line: said, paused: o.paused,
+    mark: (mx, my) => `<circle cx="${mx}" cy="${my}" r="30" fill="${W.redsoft}"/>` + bars(mx - 10, my, t) });
+  o.geom = { chev: [chevX, by + BAR / 2 - 15], rows: [] };
+  if (open > 0) {
+    const rh = 62, ph = 24 + src.length * rh, px = x + 18, pw = w - 36, py = by - 10 - ph * open;
+    let pg = `<rect x="${px}" y="${f(py + 8)}" width="${pw}" height="${f(ph * open)}" rx="18" fill="#1e1a50" opacity=".12" filter="url(#soft)"/>` + box(px, py, pw, ph * open, 18, W.win, { stroke: W.line, sw: 2 });
+    let rg = "";
+    src.forEach((s, i) => {
+      const ry = by - 10 - ph + 12 + i * rh, off = !s.on;
+      rg += off ? box(px + 22, ry + 8, 28, 28, 7, W.win, { stroke: "#cfcfdc", sw: 2 })
+        : box(px + 22, ry + 8, 28, 28, 7, W.acc) + `<path d="M${px + 29} ${ry + 22} l5 5 10 -11" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+      rg += ui(px + 66, ry + (s.detail || off ? 20 : 30), s.name, 19, { fill: off ? W.mut : W.ink }) +
+        (s.detail || off ? ui(px + 66, ry + 44, off ? "Playing, not listened to" : s.detail, 15, { fill: W.mut }) : "") +
+        (off ? mutedMark(px + pw - 34, ry + 22) : bars(px + pw - 48, ry + 22, t));
+      o.geom.rows.push([px + 36, ry + 22]);
+    });
+    g += `<g opacity="${fo(span(open, .2, 1))}">` + pg + `<g opacity="${fo(span(open, .6, 1))}">${rg}</g></g>`;
   }
   return g;
 }
@@ -137,36 +176,32 @@ DEFS_EXTRA += `<radialGradient id="orbapp" cx=".35" cy=".3" r=".8"><stop offset=
   `<radialGradient id="orbgrey" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#e2e2e8"/><stop offset="1" stop-color="#a9a9b4"/></radialGradient>` +
   `<linearGradient id="rainbow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a59"/><stop offset=".35" stop-color="#ffd166"/><stop offset=".65" stop-color="#5ad1ff"/><stop offset="1" stop-color="#b58cff"/></linearGradient>`;
 
-// The call view: its header ("On a call · 00:08", Pause, End, ⋯); the small orb with the exchange going on beside it
-// (what you asked, dim; what the voice says); then what was said: yours in a bubble with a mic, the voice's after its
-// small mark.
-// o.items: [{ at, kind: "you" | "voice" | "asked", text }], o.state(t), o.now(t): { q, a }, o.clock
+// The call view, as the app has it now: its header (the name, the time; Mini window and ⋯ unless lean); what was said:
+// yours in a bubble on the right, the voice's after its small mark, "Working on it…" while the session works; and the bar
+// at the bottom: the orb, what it's doing (Listening, Speaking, Thinking, Paused) over what's being said now, Pause, End.
+// o.items: [{ at, kind: "you" | "voice", text }], o.state(t), o.now(t): { q, a }, o.working(t), o.clock
 const voiceMark = (x, y) => box(x - 12, y - 12, 24, 24, 7, "#6d4ff0") + [-1, 0, 1].map((j, m) => box(x + j * 5.5 - 1.5, y - [4, 7, 5][m], 3, [8, 14, 10][m], 1.5, "#fff")).join("");
+const STATE_WORD = { listening: "Listening", hearing: "Listening", thinking: "Thinking", speaking: "Speaking", muted: "Paused" };
 function callWin(r, t, o) {
-  const { x, y, w, h } = r;
-  let g = frame(r) + header(r, o.title, "", { controls: true, call: true, dot: "#b9b4f2", clock: o.clock || "00:08", lean: o.lean });
-  const st = o.state(t), oy = y + 130;
-  g += orbApp(x + 64, oy, 40, st, t);
-  if (o.now) {
-    const q = o.now(t), n = Math.floor((w - 150) / 10.4);
-    if (q && q.q) g += ui(x + 122, oy - 22, wrap(q.q, n + 6)[0], 16, { fill: W.mut });
-    if (q && q.a) wrap(q.a, n).slice(0, 2).forEach((s, i) => { g += ui(x + 122, oy + 8 + i * 28, s, 20, { fill: W.ink }) });
-  }
-  g += `<line x1="${x}" y1="${oy + 72}" x2="${x + w}" y2="${oy + 72}" stroke="${W.line}" stroke-width="1.5"/>`;
-  // each line wrapped to the window, as the app does: yours in a bubble on the right, the voice's after its mark
-  const items = (o.items || []).filter(i => t > i.at), area = y + h - 24 - (oy + 92);
+  const { x, y, w, h } = r, st = o.state(t), paused = st === "muted";
+  let g = frame(r) + header(r, o.title, "", { controls: true, call: true, paused, dot: "#b9b4f2", clock: o.clock || "00:08", lean: o.lean });
+  const working = o.working ? o.working(t) : false;
+  const items = (o.items || []).filter(i => t > i.at), top = y + 92, area = y + h - BAR - 16 - top - (working ? 46 : 0);
   const nYou = Math.floor((w - 150) / 9.2), nVoice = Math.floor((w - 100) / 9.2);
-  const rows = i => wrap(i.text, i.kind === "you" ? nYou : nVoice), H = i => i.kind === "you" ? 66 + (rows(i).length - 1) * 24 : i.kind === "voice" ? 50 + (rows(i).length - 1) * 24 : 40;
+  const rows = i => wrap(i.text, i.kind === "you" ? nYou : nVoice), H = i => i.kind === "you" ? 64 + (rows(i).length - 1) * 24 : 48 + (rows(i).length - 1) * 24;
   let total = items.reduce((m, i) => m + H(i), 0), skip = 0;
   while (total > area && skip < items.length) { total -= H(items[skip]); skip++ }
-  let iy = oy + 92;
+  let iy = top;
   items.slice(skip).forEach(i => {
     const k = out(span(t, i.at, i.at + .35)), ls = rows(i);
-    if (i.kind === "you") { const bw = Math.min(w - 80, Math.max(...ls.map(l => l.length)) * 9.4 + 64), bh = 52 + (ls.length - 1) * 24;
-      g += `<g opacity="${fo(k)}">` + box(x + w - 24 - bw, iy, bw, bh, 18, W.bubble) + micIcon(x + w - 24 - bw + 26, iy + 27, W.acc, .9) +
-        ls.map((l, j) => ui(x + w - 24 - bw + 46, iy + 33 + j * 24, l, 17, { fill: W.acc })).join("") + "</g>" }
-    else if (i.kind === "voice") g += `<g opacity="${fo(k)}">` + voiceMark(x + 40, iy + 19) + ls.map((l, j) => ui(x + 66, iy + 25 + j * 24, l, 17, { fill: W.ink })).join("") + "</g>";
+    if (i.kind === "you") { const bw = Math.min(w - 80, Math.max(...ls.map(l => l.length)) * 9.4 + 40), bh = 50 + (ls.length - 1) * 24;
+      g += `<g opacity="${fo(k)}">` + box(x + w - 24 - bw, iy, bw, bh, 18, W.bubble) + ls.map((l, j) => ui(x + w - 24 - bw + 20, iy + 32 + j * 24, l, 17, { fill: W.acc })).join("") + "</g>" }
+    else g += `<g opacity="${fo(k)}">` + voiceMark(x + 40, iy + 19) + ls.map((l, j) => ui(x + 66, iy + 25 + j * 24, l, 17, { fill: W.ink })).join("") + "</g>";
     iy += H(i);
   });
+  if (working) g += `<g transform="translate(${x + 40} ${iy + 18}) rotate(${f(t * 90)})">` + [0, 1, 2, 3].map(i => `<line x1="0" y1="-10" x2="0" y2="10" stroke="${W.acc}" stroke-width="3" stroke-linecap="round" transform="rotate(${i * 45})"/>`).join("") + "</g>" +
+    ui(x + 66, iy + 25, "Working on it" + ".".repeat(1 + Math.floor(t * 2) % 3), 17, { fill: W.mut });
+  const q = o.now ? o.now(t) : null, line = q ? (st === "speaking" || !q.q ? q.a || q.q : q.q) : "";
+  g += liveBar(r, t, { call: true, paused, word: STATE_WORD[st] || "Listening", line, mark: (mx, my) => orbApp(mx, my, 30, st, t) });
   return g;
 }

@@ -174,6 +174,9 @@ function slides(t) {
 
 // orbstory: a call starts in Claude Code, its window shrinks into the orb in the corner, you go on studying a chart
 // in another app while the orb keeps listening, and a click brings the call's window back
+// the call window in the mini window story: one exchange, as the app shows it now
+const CALL2 = (clock, st) => ({ lean: true, title: "Guest TTL fix", clock, state: () => st,
+  items: [{ at: -1, kind: "you", text: "Can we talk the cache through?" }, { at: -1, kind: "voice", text: "Sure, go ahead." }], now: () => ({ q: "", a: "Sure, go ahead." }) });
 function orbstory(t) {
   let g = `<rect width="1600" height="900" fill="${DARK ? "#262338" : "#e9e7f2"}"/>`;
   // Claude Code, a call starting
@@ -189,7 +192,7 @@ function orbstory(t) {
   if (wk > 0 && away < 1) {
     const s = lerp(1, .06, away), cx = lerp(win.x + win.w / 2, ORB[0], away), cy = lerp(win.y + win.h / 2, ORB[1], away);
     g += `<g opacity="${fo(wk * (1 - span(away, .7, 1)))}" transform="translate(${f(cx)} ${f(cy)}) scale(${fs(s)}) translate(${f(-(win.x + win.w / 2))} ${f(-(win.y + win.h / 2))})">` +
-      frame(win) + header(win, "Guest TTL fix", "", { controls: true, call: true, dot: "#b9b4f2", clock: "00:04" }) + orbApp(win.x + 220, win.y + 260, 80, "speaking", t) + "</g>";
+      callWin(win, t, CALL2("00:04", "speaking")) + "</g>";
   }
   // you go on working in another app: a chart you're studying
   const bk = out(span(t, 2.4, 3.0)), B = { x: 260, y: 170, w: 1040, h: 620 };
@@ -210,13 +213,18 @@ function orbstory(t) {
     if (t > 3.0 && t < 4.8) g += `<line x1="${f(cx)}" y1="${B.y + 140}" x2="${f(cx)}" y2="${B.y + B.h - 30}" stroke="${W.mut}" stroke-width="1.5" stroke-dasharray="4 6"/>`;
     g += "</g>";
   }
-  // the orb stays on top, listening
+  // the mini window stays on top, listening; pointing at it shows its buttons, and Full window brings the call back
   const back = inout(span(t, 4.9, 5.6)), ok = out(span(t, 2.3, 2.7)) * (1 - span(t, 4.9, 5.1));
   if (ok > 0) g += orbApp(ORB[0], ORB[1], 52 * pop(span(t, 2.3, 2.8)), Math.floor(t * 1.2) % 2 ? "hearing" : "listening", t, ok);
-  if (back > 0) {                                                     // a click on the orb: the call's window comes back, full size
+  const pk = out(span(t, 4.0, 4.25)) * (1 - span(t, 4.95, 5.1)), PW = 330, PX = ORB[0] - 66 - PW;
+  if (pk > 0) g += `<g opacity="${fo(pk)}">` + box(PX, ORB[1] - 30, PW + 40, 60, 30, W.win, { stroke: W.line, sw: 2 }) +
+    ui(PX + 28, ORB[1] + 8, "Full window", 22, { fill: W.ink }) + ui(PX + 178, ORB[1] + 8, "Settings", 22, { fill: W.ink }) +
+    `<path d="M${PX + 286} ${ORB[1] + 3} q12 -10 24 0 l-1.6 5 -6 -2 v-3.5 q-4.4 -1.8 -8.8 0 v3.5 l-6 2 Z" fill="${W.red}"/></g>`;
+  if (t > 3.5 && t < 5.4) g += pointerAt(t, [[3.5, ORB[0] - 260, ORB[1] - 200], [4.0, ORB[0] - 10, ORB[1] + 6], [4.35, ORB[0] - 10, ORB[1] + 6], [4.75, PX + 80, ORB[1] + 4], [6, PX + 80, ORB[1] + 4]], [4.85], span(t, 3.5, 3.7) * (1 - span(t, 5.1, 5.4)));
+  if (back > 0) {                                                     // Full window: the call's window comes back, full size
     const s = lerp(.06, 1, back), cx = lerp(ORB[0], win.x + win.w / 2, back), cy = lerp(ORB[1], win.y + win.h / 2, back);
     g += `<g opacity="${fo(span(back, 0, .3))}" transform="translate(${f(cx)} ${f(cy)}) scale(${fs(s)}) translate(${f(-(win.x + win.w / 2))} ${f(-(win.y + win.h / 2))})">` +
-      frame(win) + header(win, "Guest TTL fix", "", { controls: true, call: true, dot: "#b9b4f2", clock: "01:20" }) + orbApp(win.x + 220, win.y + 260, 80, "listening", t) + "</g>";
+      callWin(win, t, CALL2("01:20", "listening")) + "</g>";
   }
   return g;
 }
@@ -230,54 +238,21 @@ function sources(t) {
   return `<g opacity="${fo(1 - k)}">${sourcesMap(5.2)}</g><g opacity="${fo(k)}">${hearBox(t - 2.8)}</g>`;
 }
 function hearBox(u) {
-  const x = 330, y = 40, w = 940, by = y + 104, ink = W.ink, mut = W.mut;
-  const S = [["Your mic", "MacBook Pro Microphone", 9], ["Zoom", "Playing", 9], ["Google Chrome", "Playing", 2.4], ["Telegram", "Playing", 3.4]];
-  const off = i => u > S[i][2], open = inout(span(u, 1.0, 1.5));
-  const bars = (bx, cy, s = 1) => [0, 1, 2].map(i => { const hh = (8 + 12 * Math.abs(Math.sin(u * 7 + i * 1.7))) * s; return box(bx + i * 9 * s, cy - hh / 2, 5 * s, hh, 2.5 * s, W.red, { op: i ? .7 : 1 }) }).join("");
-  const muteIc = (mx, cy, c, s = 1) => `<g transform="translate(${f(mx)} ${f(cy)}) scale(${fs(s)})" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M-12 -5 h6 l8 -7 v24 l-8 -7 h-6 Z"/><path d="M7 -5 l9 10 M16 -5 l-9 10"/></g>`;
-  const rowsH = 4 * 84 + 20, boxH = 158 + rowsH * open;
-  let g = `<rect x="${x}" y="${y + 14}" width="${w}" height="800" rx="22" fill="#1e1a50" opacity=".14" filter="url(#soft)"/>` + box(x, y, w, 800, 22, W.win, { stroke: W.line });
-  g += [0, 1, 2].map(i => `<circle cx="${x + 34 + i * 28}" cy="${y + 46}" r="9" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
-    `<circle cx="${x + 160}" cy="${y + 46}" r="8" fill="${W.red}" opacity=".7"/>` + ui(x + 182, y + 56, "Design review", 30, { weight: 700, fill: ink }) +
-    box(x + w - 250, y + 22, 110, 50, 25, W.win, { stroke: W.line, sw: 2 }) + ui(x + w - 195, y + 56, "Pause", 22, { anchor: "middle", fill: ink }) +
-    box(x + w - 126, y + 22, 90, 50, 25, W.redsoft, { stroke: "#f2a8b0", sw: 2 }) + ui(x + w - 81, y + 56, "End", 22, { anchor: "middle", fill: W.red });
-  // the box: a chip per source, what's being said, and when open, a tick for each
-  g += box(x + 26, by, w - 52, boxH, 26, W.soft);
-  let cx = x + 50;
-  S.forEach(([n], i) => {
-    const o = off(i), cw = n.length * 13.5 + (o ? 74 : 84);
-    g += box(cx, by + 20, cw, 52, 26, o ? W.soft : W.win, { stroke: o ? "#d5d4e2" : "none", sw: 2 });
-    g += o ? muteIc(cx + 30, by + 46, mut, .9) + ui(cx + 52, by + 56, n, 24, { fill: mut }) : ui(cx + 22, by + 56, n, 24, { fill: ink }) + bars(cx + cw - 42, by + 46, .9);
-    cx += cw + 12;
-  });
-  g += `<path d="M${x + w - 74} ${by + (open > .5 ? 50 : 40)} l10 ${open > .5 ? -10 : 10} 10 ${open > .5 ? 10 : -10}" fill="none" stroke="${mut}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
-  const said = "Nadia: is the region in the fares key?", n = Math.floor(clamp(u * 16, 0, said.length));
-  g += ui(x + 56, by + 126, said.slice(0, n), 26, { fill: ink }) + (n < said.length ? box(x + 60 + n * 10.6, by + 102, 3, 30, 1, W.acc) : "");
-  if (open > 0) {
-    let rg = `<line x1="${x + 56}" y1="${by + 156}" x2="${x + w - 56}" y2="${by + 156}" stroke="#dcdbe8" stroke-width="2"/>`;
-    S.forEach(([nm, det], i) => {
-      const o = off(i), ry = by + 176 + i * 84;
-      rg += o ? box(x + 56, ry + 8, 36, 36, 9, W.win, { stroke: "#cfcfdc", sw: 2.5 })
-        : box(x + 56, ry + 8, 36, 36, 9, W.acc) + `<path d="M${x + 65} ${ry + 26} l7 7 13 -14" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`;
-      rg += ui(x + 114, ry + 26, nm, 26, { fill: o ? mut : ink }) + ui(x + 114, ry + 58, o ? "Playing, not listened to" : det, 21, { fill: mut });
-      rg += o ? muteIc(x + w - 84, ry + 26, mut) : bars(x + w - 100, ry + 26);
-    });
-    g += `<g opacity="${fo(span(open, .4, 1))}">${rg}</g>`;
-  }
-  // under it, the transcript (inside the window); a line notes each source turned off
-  g += `<clipPath id="hbclip"><rect x="${x}" y="${y}" width="${w}" height="800" rx="22"/></clipPath><g clip-path="url(#hbclip)">`;
-  let ty = by + boxH + 50;
-  const lines = [["Nadia", "#3f7cf3", "Guests pay by region."], ["Theo", "#0e9f9a", "I'd check the fares key first."]];
-  const notes = [];
-  [2, 3].forEach(i => { if (off(i)) notes.push(S[i][0] + " is off") });
-  g += ui(x + w / 2, ty, "Started 2:00 PM", 21, { anchor: "middle", fill: mut }); ty += 56;
-  lines.forEach(([who, c, txt]) => { g += ui(x + 56, ty, who, 24, { fill: c, weight: 700 }) + ui(x + 56, ty + 38, txt, 26, { fill: ink }); ty += 96 });
-  notes.forEach(nt => { g += ui(x + w / 2, ty, nt, 21, { anchor: "middle", fill: mut }); ty += 44 });
-  g += "</g>";
-  // the pointer: opens the list, then unticks Chrome and Telegram
-  const rowY = i => by + 176 + i * 84 + 26;
-  g += pointerAt(u, [[0, x + w - 40, by + 300], [.9, x + w - 66, by + 48], [1.6, x + w - 66, by + 48], [2.3, x + 74, rowY(2)], [3.0, x + 74, rowY(2)], [3.3, x + 74, rowY(3)], [9, x + 74, rowY(3)]], [1.0, 2.4, 3.4], span(u, -.2, .2));
-  return g;
+  // the meeting window as the app has it now, a little closer: what it hears in the bar at the bottom; a click opens the
+  // list, and Google Chrome, then Telegram, are unticked for this meeting
+  const M = { x: 520, y: 100, w: 560, h: 600 };
+  const mo = { lean: true, title: "Design review", clock: "12 min", started: "Started 2:00 PM", rowh: 90,
+    lines: [{ at: -1, ts: "2:05", who: "Nadia", col: "#3f7cf3", text: "Guests pay by region." }, { at: -1, ts: "2:06", who: "Theo", col: "#0e9f9a", text: "I'd check the fares key first." }],
+    sep: [u > 2.4 ? { at: 2.6, text: "Google Chrome is off" } : null, u > 3.4 ? { at: 3.6, text: "Telegram is off" } : null].filter(Boolean),
+    open: inout(span(u, 1.0, 1.4)) * (1 - inout(span(u, 4.6, 5.0))),
+    sources: [{ name: "Your mic", detail: "MacBook Pro Microphone", on: true }, { name: "Zoom", detail: "Playing", on: true },
+      { name: "Google Chrome", detail: "Playing", on: u < 2.4 }, { name: "Telegram", detail: "Playing", on: u < 3.4 }],
+    live: { who: "Nadia", text: "is the region in the fares key?", from: .2, to: 99 } };
+  let g = meetingWin(M, u, mo);
+  const G = mo.geom, r2 = G.rows[2] || [M.x + 60, M.y + 360], r3 = G.rows[3] || [M.x + 60, M.y + 420];
+  g += pointerAt(u, [[0, G.chev[0] + 120, G.chev[1] - 160], [.9, G.chev[0], G.chev[1]], [1.6, G.chev[0], G.chev[1]], [2.3, r2[0], r2[1]], [3.0, r2[0], r2[1]], [3.3, r3[0], r3[1]], [9, r3[0], r3[1]]],
+    [1.0, 2.4, 3.4], span(u, -.2, .2) * (1 - span(u, 4.4, 4.8)));
+  return `<g transform="translate(800 450) scale(1.42) translate(${-(M.x + M.w / 2)} ${-(M.y + M.h / 2)})">${g}</g>`;
 }
 function sourcesMap(t) {
   const ORB = [1180, 450], roomOff = t > 2.6;

@@ -106,9 +106,9 @@ function work(t) {
   rows.push(dim("  ⋯ 2h 40m of work above"));
   RUN.forEach((row, i) => { if (t > WORK0 + .25 + i * .17) rows.push(past || (t > ZIN1 && i < RUN.length - 1) ? blur(row) : row) });
   rows.push("");
-  if (t > ZIN1 && t < ENTER_CALL) prompt = typed(CALL_ASK, t, TYPE_CALL, 22);
+  if (t > ZIN1 && t < ENTER_CALL) prompt = typed(CALL_ASK, t, TYPE_CALL, 26);   // typed a little quicker, so the lit line holds a moment before it's sent
   // typed, the words light up once, left to right, to white, before it's sent
-  const SWEEP = [TYPE_CALL + CALL_ASK.length / 22 + .08, ENTER_CALL - .05];
+  const SWEEP = [TYPE_CALL + CALL_ASK.length / 26 + .08, TYPE_CALL + CALL_ASK.length / 26 + .63];
   if (t > SWEEP[0] && t < ENTER_CALL) {
     const head = lerp(-5, CALL_ASK.length + 5, span(t, SWEEP[0], SWEEP[1])), hex = v => Math.round(v).toString(16).padStart(2, "0");
     prompt = [...CALL_ASK].map((ch, i) => { const k = Math.max(0, 1 - Math.abs(i - head) / 5), c = hex(lerp(160, 255, k));
@@ -158,7 +158,7 @@ function work(t) {
     const clock = t => { const s = Math.floor(Math.max(0, t - OPEN) * 6); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0") };
     const sc = lerp(1, .07, mq), wx = WIN.x + WIN.w / 2, wy = WIN.y + WIN.h / 2, cx = lerp(wx, ORB[0], mq), cy = lerp(wy, ORB[1], mq);
     g += `<g opacity="${fo(cw)}" transform="translate(${f(cx + (1 - out(span(t, OPEN + .2, OPEN + .7))) * 40)} ${f(cy)}) scale(${fs(sc)}) translate(${f(-wx)} ${f(-wy)})">` +
-      callWin(WIN, t, { lean: true, title: "Guest route cache", clock: clock(t), state: callState, items, now }) + "</g>";
+      callWin(WIN, t, { lean: true, title: "Guest route cache", clock: clock(t), state: callState, items, now, working: t => t > HANDOFF + .2 && t < HANDOFF + 2.8 }) + "</g>";
   }
   const ok = pop(span(mq, .55, 1));                                      // the mini window: Standby's mark, over everything
   if (ok > 0) g += orbApp(ORB[0], ORB[1], 40 * ok, callState(t), t, clamp(ok));
@@ -233,37 +233,21 @@ function lapScreen(t) {
     const lines = STORY_LINES.filter(l => l.at > MEET0 && l.at < MEET1).map(l => ({ at: l.at + l.dur, ts: "2:0" + (l.id === "n1" ? 5 : 6), who: l.who, col: COL[l.who], text: l.text, known: true }));
     const now = STORY_LINES.find(l => l.at > MEET0 && l.at < MEET1 && t > l.at && t < l.at + l.dur);
     const M = { x: 1050, y: 50, w: 510, h: 800 };
-    g += `<g opacity="${fo(split)}" transform="translate(${f((1 - split) * 60)} 0)">` + meetingWin(M, t,
-      { lean: true, title: "Fares sync", clock: mins(t, ENTER_J, 1.6).replace("m", " min"), started: "Started 2:00 PM", rowh: 96, lines, top: 76,
-        sep: t > ZOOMOFF ? [{ at: ZOOMOFF + .2, text: "Zoom is off" }] : [], live: now ? { who: now.who, text: now.text, from: now.at, to: now.at + now.dur } : null }) +
-      hearing(M, t) + "</g>";
+    // what it hears, in the bar at the bottom: a click opens the list, Zoom is unticked for this meeting, the list closes
+    const open = inout(span(t, BOXOPEN, BOXOPEN + .4)) * (1 - inout(span(t, ZOOMOFF + 1.4, ZOOMOFF + 1.8)));
+    const mo = { lean: true, title: "Fares sync", clock: mins(t, ENTER_J, 1.6).replace("m", " min"), started: "Started 2:00 PM", rowh: 96, lines, open,
+      sources: [{ name: "Your mic", detail: "MacBook Pro Microphone", on: true }, { name: "Zoom", detail: "Playing", on: t < ZOOMOFF }],
+      sep: t > ZOOMOFF ? [{ at: ZOOMOFF + .2, text: "Zoom is off" }] : [], live: now ? { who: now.who, text: now.text, from: now.at, to: now.at + now.dur } : null };
+    g += `<g opacity="${fo(split)}" transform="translate(${f((1 - split) * 60)} 0)">` + meetingWin(M, t, mo) + hearPointer(mo.geom, t) + "</g>";
   }
   return g;
 }
-// what the meeting hears, as the app shows it under the header: a chip each for your mic and Zoom; a click opens the
-// list, Zoom is unticked (for this meeting: it shows muted and nothing of it is transcribed), and the list closes
-function hearing(M, t) {
-  const x = M.x + 20, y = M.y + 92, w = M.w - 40, open = inout(span(t, BOXOPEN, BOXOPEN + .4)) * (1 - inout(span(t, ZOOMOFF + 1.4, ZOOMOFF + 1.8))), off = t > ZOOMOFF;
-  const bars = (bx, cy) => [0, 1, 2].map(i => { const hh = 7 + 10 * Math.abs(Math.sin(t * 7 + i * 1.7)); return box(bx + i * 8, cy - hh / 2, 4.5, hh, 2, W.red, { op: i ? .7 : 1 }) }).join("");
-  const muted = (mx, cy) => `<g transform="translate(${mx} ${cy})" fill="none" stroke="${W.mut}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M-11 -4 h5 l7 -6 v20 l-7 -6 h-5 Z"/><path d="M5 -4 l8 8 M13 -4 l-8 8"/></g>`;
-  let g = box(x, y, w, 64 + 130 * open, 20, W.soft);
-  g += box(x + 14, y + 12, 128, 40, 20, W.win) + ui(x + 32, y + 39, "Your mic", 18, { fill: W.ink }) + bars(x + 110, y + 32);
-  g += off ? box(x + 152, y + 12, 104, 40, 20, W.soft, { stroke: "#d5d4e2", sw: 2 }) + muted(x + 176, y + 32) + ui(x + 196, y + 39, "Zoom", 18, { fill: W.mut })
-    : box(x + 152, y + 12, 96, 40, 20, W.win) + ui(x + 170, y + 39, "Zoom", 18, { fill: W.ink }) + bars(x + 222, y + 32);
-  g += `<path d="M${x + w - 34} ${y + (open > .5 ? 38 : 28)} l8 ${open > .5 ? -8 : 8} 8 ${open > .5 ? 8 : -8}" fill="none" stroke="${W.mut}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`;
-  if (open > 0) {
-    let rg = "";
-    [["Your mic", "MacBook Pro Microphone", false], ["Zoom", off ? "Playing, not listened to" : "Playing", off]].forEach(([n, d, o], i) => {
-      const ry = y + 76 + i * 62;
-      rg += o ? box(x + 18, ry + 6, 28, 28, 7, W.win, { stroke: "#cfcfdc", sw: 2 })
-        : box(x + 18, ry + 6, 28, 28, 7, W.acc) + `<path d="M${x + 25} ${ry + 20} l5 5 10 -11" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
-      rg += ui(x + 60, ry + 19, n, 19, { fill: o ? W.mut : W.ink }) + ui(x + 60, ry + 43, d, 15, { fill: W.mut }) + (o ? muted(x + w - 30, ry + 20) : bars(x + w - 44, ry + 20));
-    });
-    g += `<g opacity="${fo(span(open, .5, 1))}">${rg}</g>`;
-  }
-  const zy = y + 76 + 62 + 20;
-  return g + pointerAt(t, [[BOXOPEN - .8, x + w - 10, y + 220], [BOXOPEN - .1, x + w - 26, y + 34], [BOXOPEN + .5, x + w - 26, y + 34], [ZOOMOFF - .1, x + 32, zy],
-    [ZOOMOFF + 2.5, x + 32, zy]], [BOXOPEN, ZOOMOFF], span(t, BOXOPEN - .9, BOXOPEN - .6) * (1 - span(t, ZOOMOFF + 1.6, ZOOMOFF + 2)));
+// the pointer for what the meeting hears: to the chevron in the bar, a click; then to Zoom's tick, a click
+function hearPointer(G, t) {
+  if (!G || t < BOXOPEN - 1) return "";
+  const z = G.rows[1] || [G.chev[0] - 120, G.chev[1] - 90];
+  return pointerAt(t, [[BOXOPEN - .8, G.chev[0] + 60, G.chev[1] + 60], [BOXOPEN - .1, G.chev[0], G.chev[1]], [BOXOPEN + .5, G.chev[0], G.chev[1]],
+    [ZOOMOFF - .1, z[0], z[1]], [ZOOMOFF + 2.5, z[0], z[1]]], [BOXOPEN, ZOOMOFF], span(t, BOXOPEN - .9, BOXOPEN - .6) * (1 - span(t, ZOOMOFF + 1.6, ZOOMOFF + 2)));
 }
 function callScreenRoom() {                                           // the room's screen, straight on the far wall
   const tiles = [["Theo", "#3b4d4c"], ["Jules", "#4d3f3b"]], W = 500, H = 270;
@@ -403,7 +387,7 @@ function film(t0) {
   if (d > 0) g += `<g opacity="${fo(d)}">${outro(t)}</g>`;
   const ck = closeUp(t) * fade(t, WORK0, WORK1, .4);                   // up close, the terminal fills the top: paper under the words
   if (ck > 0) g += `<rect width="1600" height="150" fill="${PAPER}" opacity="${fo(ck)}"/>`;
-  g += cap(t, [[WORK0 + .3, ZIN1 + .2, "Hours into a session, on a long task."], [ZIN1 + .3, ZOUT1 + .4, "Ask it to call."],
+  g += cap(t, [[WORK0 + .3, ZIN1 + .2, "Hours into a Claude Code session, on a long task."], [ZIN1 + .3, ZOUT1 + .4, "Ask it to call."],
     [OPEN + .2, end("c3") + .2, "Call it and brainstorm, for hours."], [end("c3") + .3, HANDOFF + .2, "On your same Claude Code session."],
     [HANDOFF + .3, MEET0 + .2, "It builds while you talk."],
     [MEET0 + PULL - .1, ZLAP0 + .3, "Then take it to your meetings."], [ZLAP1 + .1, WIN0 + .4, "Just ask it to join."],
