@@ -714,6 +714,42 @@ def workspace_for(session):
     return AGENT
 
 
+def holds_home(path):
+    """Is `path` the home folder, or a folder above it? Claude Code started in one reads into the
+    folders macOS guards there (Desktop, Documents, Downloads) as it starts, and macOS then asks the
+    user, in Standby's name, with the call waiting on it (measured, 2026-10-27)."""
+    if not path:
+        return False
+    home, p = os.path.realpath(os.path.expanduser("~")), os.path.realpath(path)
+    return p == home or home.startswith(p.rstrip(os.sep) + os.sep)
+
+
+def start_dir(cwd, argv):
+    """Where a Claude Code of this agent's starts: `cwd`, unless that holds the home folder, then the
+    neutral agent dir. What it reads stays the same (its --add-dir folders and the fence). Claude Code
+    resumes a conversation only from its own folder's slot, so the one argv resumes is copied there:
+    a fork's source afresh each time (never an earlier call's copy), the agent's own conversation once.
+    Nothing is ever written back into the user's slot."""
+    if not holds_home(cwd):
+        return cwd
+    if "--resume" in argv[:-1]:
+        sid = argv[argv.index("--resume") + 1]
+        slot = os.path.expanduser("~/.claude/projects/" + project_slot(AGENT))
+        mine = os.path.join(slot, "%s.jsonl" % sid)
+        fresh = "--fork-session" in argv
+        for path in glob.glob(os.path.expanduser("~/.claude/projects/*/%s.jsonl" % sid)):
+            if os.path.dirname(path) != slot and (fresh or not os.path.exists(mine)):
+                try:
+                    os.makedirs(slot, exist_ok=True)
+                    shutil.copyfile(path, mine + ".part")
+                    os.replace(mine + ".part", mine)
+                except OSError as exc:
+                    sys.stderr.write("standby-agent: couldn't copy conversation %s to %s: %s\n" % (sid, slot, exc))
+                break
+    os.makedirs(AGENT, exist_ok=True)
+    return AGENT
+
+
 def project_slot(path):
     """Where Claude Code keeps a working dir's conversations, under
     ~/.claude/projects: its real path with every non-alphanumeric as "-" (past
@@ -1720,7 +1756,7 @@ class ClaudeSession(object):
             cwd = conversation_dir(voice_from(self.session)) or cwd     # a fork resumes only from its folder
         self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE,
-                                     stderr=self.errfh, cwd=cwd)
+                                     stderr=self.errfh, cwd=start_dir(cwd, argv))
         self.buf = b""
 
     def stop(self, hard=False):
@@ -2123,7 +2159,7 @@ class VoiceTurn(ClaudeSession):
             cwd = conversation_dir(voice_from(self.session)) or cwd     # a fork resumes only from its folder
         elif self.parent is not None:
             cwd = conversation_dir(self.parent) or cwd
-        self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.errfh, cwd=cwd)
+        self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.errfh, cwd=start_dir(cwd, argv))
         self.buf = b""
 
     def finish(self):
