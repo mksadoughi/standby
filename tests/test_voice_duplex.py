@@ -359,6 +359,20 @@ check("  the app is told (resume), and the mic is Claude's again",
 speak(stop=True)
 wait(lambda: not vlive().get("saying"))
 
+# Its own words heard back past the echo cancelling, a little off ("A long" heard as "Uh, long"):
+# not the user, so it goes on (talk-20261026-195509: its greeting stopped it, and was answered).
+halts, unducks = eng.halts, FakeEngine.unducks
+talked_over("Uh, long answer, about the hiring")
+ticks()
+Script.talking, Script.voiced = None, 0.0           # ducked, the voice is quiet: so is its echo
+check("its own words heard back over it: it goes on, not stopped",
+      wait(lambda: FakeEngine.unducks > unducks) and eng.halts == halts
+      and wait(lambda: any(r.get("overlap") == "resume" and r.get("why") == "its own words" for r in rows())),
+      (FakeEngine.unducks, eng.halts, rows()[-2:]))
+wait(lambda: vlive().get("mode") == "hold")
+speak(stop=True)
+wait(lambda: not vlive().get("saying"))
+
 halts = eng.halts
 talked_over("wait, what about the EU region")
 check("words of a turn over it: it stops, and the app is told why",

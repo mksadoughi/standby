@@ -546,9 +546,16 @@ def _words(text):
     return re.findall(r"[a-z0-9']+", str(text or "").lower())
 
 
+# Sounds an echo's onset is often heard as, in place of the voice's first word.
+_ECHO_FILLERS = {"um", "uh", "er", "erm", "ah", "hm", "hmm", "mm"}
+
+
 def echoes_voice(text, now=None, said=None):
     """Are `text`'s words what the voice said in the last VOICE_ECHO_SECS (in order,
-    within one sentence)?"""
+    within one sentence)? Heard back, an echo's words come out a little off: three or
+    more of them still are, with fillers among them and, from five on, one word misheard
+    ("Hi, good to hear you." heard as "Uh good to hear you.", talk-20261026-195509)."""
+    import difflib
     now = time.time() if now is None else now
     heard = _words(text)
     if not heard:
@@ -558,6 +565,16 @@ def echoes_voice(text, now=None, said=None):
             continue
         w = _words(sentence)
         if any(w[i:i + len(heard)] == heard for i in range(len(w) - len(heard) + 1)):
+            return True
+        if len(heard) < 3:
+            continue
+        blocks = [b for b in difflib.SequenceMatcher(None, heard, w, autojunk=False).get_matching_blocks() if b.size]
+        if not blocks:
+            continue
+        found = {b.a + k for b in blocks for k in range(b.size)}
+        off = [x for i, x in enumerate(heard) if i not in found and x not in _ECHO_FILLERS]
+        stretch = blocks[-1].b + blocks[-1].size - blocks[0].b      # one stretch of the sentence, not words from all over it
+        if len(off) <= (1 if len(heard) >= 5 else 0) and len(found) >= 3 and stretch <= len(heard):
             return True
     return False
 
@@ -3627,6 +3644,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
 
     def overlap_step(vio):
         """A duck in progress (barge_in): more of what is said, and what it means."""
+        import interrupt
         import overlap
         ov, now = voice["overlap"], time.time()
         if vio is None or vio.ducked is None:            # the app stopped it meanwhile (its words came first)
@@ -3648,12 +3666,17 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
                 words.append(pause if pause is not None else c.partial)
         text = " ".join([w for w in ov["said"] + words if w]).strip()
         since = now - ov["at"]
+        echo = len(_words(text)) >= 2 and echoes_voice(text) and interrupt.classify(text) not in (interrupt.CANCEL, interrupt.WAIT)
+        if echo:                                         # the voice's own words, heard back past the echo cancelling
+            text, ov["echo"] = "", True
         whose = [ident.open_whose(c) for c in mics() if c.speaking and ident.ignoring_others(c.speaker)]
         try:
             if whose and all(w == "other" for w in whose):
                 act, why = overlap.RESUME, "someone else"    # ducked before the voice was told apart
             else:
                 act, why = overlap.decide(text, since, ov["voiced"], speaking)
+                if ov.get("echo") and act == overlap.RESUME:
+                    why = "its own words"
         except Exception as exc:                         # never left ducked (VoiceIO.DUCK_MAX is the last resort)
             act, why = overlap.RESUME, "could not decide: %r" % exc
         if act is None:
