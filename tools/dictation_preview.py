@@ -4,7 +4,7 @@
     ~/.standby/venv/bin/python tools/dictation_preview.py OUT
 
 Draws, off screen, in light and dark, at 2x:
-  OUT/setup-<state>-<light|dark>.png   the setup window, for a few states of the permissions
+  OUT/setup-<step>-<light|dark>.png    the setup window, at each of its steps
   OUT/hud-<state>-<light|dark>.png     the panel: listening, transcribing, a note
 For design review: the window and the panel only appear for real. The panel's
 glass is drawn by the window server, so here a plain capsule stands in for it
@@ -19,14 +19,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import dictation as d  # noqa: E402
 from native.macos import dictation_app as da  # noqa: E402  (its Mac parts: the app, keys, pasting)
 
+# (permissions, the words tried, the panes sent to, what a try said instead): each step of the setup window
 STATES = {
-    "none": {"listen": False, "post": False, "mic": "ask"},
-    "partial": {"listen": True, "post": False, "mic": "allowed"},
-    "denied": {"listen": True, "post": True, "mic": "denied"},
-    "all": {"listen": True, "post": True, "mic": "allowed"},
-    # the optional row (with room_only on): beside three still needed, and once they are done
-    "optional-none": {"listen": False, "post": False, "mic": "ask", "hear_mac": False},
-    "optional-rest": {"listen": True, "post": True, "mic": "allowed", "hear_mac": False},
+    "1-microphone": ({"listen": False, "post": False, "mic": "ask"}, None, (), None),
+    "2-input-monitoring": ({"listen": False, "post": False, "mic": "allowed"}, None, (), None),
+    "2-waiting": ({"listen": False, "post": False, "mic": "allowed"}, None, ("listen",), None),
+    "3-accessibility": ({"listen": True, "post": False, "mic": "allowed"}, None, ("post",), None),
+    "4-try": ({"listen": True, "post": True, "mic": "allowed"}, None, (), None),
+    "4-try-again": ({"listen": True, "post": True, "mic": "allowed"}, None, (), "Didn't catch that. Try again."),
+    "4-done": ({"listen": True, "post": True, "mic": "allowed"}, "Let's ship the release notes on Friday.", (), None),
+    "mic-denied": ({"listen": False, "post": False, "mic": "denied"}, None, ("mic",), None),
 }
 
 
@@ -41,10 +43,10 @@ def main(out):
     for mode, name in (("light", "NSAppearanceNameAqua"), ("dark", "NSAppearanceNameDarkAqua")):
         look = NSAppearance.appearanceNamed_(name)
         NSAppearance.setCurrentAppearance_(look)       # colors resolve against this while drawing
-        for state, perm in STATES.items():
-            sw = da.SetupWindow(c, optional="hear_mac" in perm)
+        for state, (perm, tried, sent, failed) in STATES.items():
+            sw = da.SetupWindow(c)
             sw.window.setAppearance_(look)
-            sw.update(d.setup_rows(perm, "mickey"))
+            sw.update(d.setup_steps(perm, d.DEFAULTS, tried, sent, failed))
             view = sw.window.contentView()
             view.setWantsLayer_(True)
             view.layer().setBackgroundColor_(NSColor.windowBackgroundColor().CGColor())

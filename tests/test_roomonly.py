@@ -655,12 +655,13 @@ check("  and then without asking: its last look kept for the key press", dc.perm
 asked_screen = []
 dictation.ask_screen = lambda: asked_screen.append(1)
 da.open_url = lambda url: asked_screen.append(url)
-sw = da.SetupWindow(dc, optional=True)
-sw.update(dictation.setup_rows(dc.perm, dc.settings))
-dc.setupAction_(sw.buttons[3])
-check("  its button, clicked: macOS's own prompt, that once", asked_screen == [1], asked_screen)
-check("  the window says one more is optional, and is never shown in a test",
-      len(sw.buttons) == 4 and not sw.visible, len(sw.buttons))
+dc.allowHearMac_(None)
+check("  from the menu (no longer in the setup window): macOS's own prompt, that once", asked_screen == [1], asked_screen)
+dc.perm["hear_mac_asked"] = True
+dc.allowHearMac_(None)
+check("    then its pane", asked_screen == [1, dictation.PANE + "ScreenCapture"], asked_screen)
+check("  the setup window's steps never include it",
+      [x["key"] for x in dc.setup_steps()["steps"]] == ["mic", "listen", "post", "try"])
 cfg_path.write_text(json.dumps({}))
 
 # The apps switched off in a meeting: each its own reference, on that app alone, added together.

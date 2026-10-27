@@ -1178,98 +1178,204 @@ def ask_fix(text):
 
 
 class SetupWindow(object):
-    """What is missing, where it cannot be missed. The menu-bar menu said so
-    too, but nobody opens it, so the app never got Accessibility. Shown at
-    launch while a permission is missing: each permission with a live
-    checkmark and the button that fixes it. The app closes it once all are
-    granted. Buttons send setupAction: to `target`, tagged with the row's
-    index, and Later sends setupLater:."""
+    """What macOS has to allow, one step at a time (core.setup_steps): Microphone, Input
+    Monitoring, Accessibility, then trying it once. Only the current step has a button, done
+    steps tick green in one line, later ones wait greyed. Shown at launch while a permission is
+    missing; the ticks follow System Settings live (update). Buttons send setupAction: to
+    `target` tagged with the step's number, the reset link setupReset:, Not now setupLater:."""
 
-    W, M, ROW = 440, 20, 44
+    W, M = 440, 22
 
-    def __init__(self, target, optional=False):
-        from AppKit import (NSBackingStoreBuffered, NSButton, NSColor, NSFont, NSImageView, NSMakeRect,
-                            NSTextField, NSView, NSWindow)
-        shown = core.PERMISSIONS + (core.OPTIONAL if optional else ())
-        self.optional = optional
-        rows = len(shown) * self.ROW
-        h = 16 + 28 + 12 + rows + 14 + 18 + 4 + 22 + 18 - 22      # the title, then the rows: no paragraph between
+    def __init__(self, target):
+        from AppKit import NSBackingStoreBuffered, NSMakeRect, NSView, NSWindow
+        self.target = target
         w = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(0, 0, self.W, h), 1 | 2, NSBackingStoreBuffered, False)   # titled, closable
+            NSMakeRect(0, 0, self.W, 300), 1 | 2, NSBackingStoreBuffered, False)   # titled, closable
         w.setTitle_("Standby Dictation")
         w.setReleasedWhenClosed_(False)
         w.setCollectionBehavior_(1 << 1)      # moves to the Space you are on
-        view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, self.W, h))
-
-        def label(text, size, x, y, width, weight=0.0, muted=False):
-            f = NSTextField.labelWithString_(text)
-            f.setFont_(NSFont.systemFontOfSize_weight_(size, weight))
-            f.setTextColor_(NSColor.secondaryLabelColor() if muted else NSColor.labelColor())
-            f.setFrame_(NSMakeRect(x, y, width, size + 6))
-            view.addSubview_(f)
-            return f
-
-        def button(title, action, tag=0):
-            b = NSButton.buttonWithTitle_target_action_(title, target, action)
-            b.setControlSize_(1)                                   # small
-            b.setFont_(NSFont.systemFontOfSize_(NSFont.smallSystemFontSize()))
-            b.setTag_(tag)
-            view.addSubview_(b)
-            return b
-        top = h - 18
-        label("Allow dictation in any app", 15, self.M, top - 22, self.W - 2 * self.M, weight=0.3)
-        self.icons, self.whys, self.buttons, self.alts = [], [], [], []
-        y = 16 + 28 + 12 + rows - self.ROW
-        for i, (_key, name, why, _pane) in enumerate(shown):
-            icon = NSImageView.alloc().initWithFrame_(NSMakeRect(self.M, y + 13, 18, 18))
-            view.addSubview_(icon)
-            label(name, 13, self.M + 28, y + 22, 220, weight=0.23)
-            self.whys.append(label(why, 11, self.M + 28, y + 6, 260, muted=True))     # its line, beside Open Settings…
-            self.icons.append(icon)
-            self.buttons.append(button("Open Settings…", "setupAction:", i))
-            self._place(self.buttons[-1], y + 10)
-            self.alts.append(button(core.STALE_BUTTON, "setupReset:", i))
-            self._place(self.alts[-1], y + 10, beside=self.buttons[-1])
-            self.alts[-1].setHidden_(True)
-            self.alts[-1].setToolTip_(core.STALE_HINT)
-            y -= self.ROW
-        self.footer = label("", 11, self.M, 8, 320, muted=True)       # empty until a reset has something to say
-        self.footer.setFrame_(NSMakeRect(self.M, 8, 320, 30))
-        self.footer.setMaximumNumberOfLines_(2)
-        self.footer.cell().setWraps_(True)
-        self._place(button("Later", "setupLater:"), 16)
-        w.setContentView_(view)
-        self.window = w
-
-    def _place(self, b, y, beside=None):
-        b.sizeToFit()
-        width = max(72.0, b.frame().size.width)
-        right = beside.frame().origin.x - 6 if beside is not None else self.W - self.M
-        b.setFrame_(((right - width, y), (width, b.frame().size.height)))
+        w.setContentView_(NSView.alloc().initWithFrame_(NSMakeRect(0, 0, self.W, 300)))
+        self.window, self.model, self._drawn, self._said = w, None, None, ("", False)
+        self.buttons, self.spinner, self.box = {}, None, None
 
     def say(self, text, strong=False):
-        """The footer: the hint, or how a reset went and what to do next."""
-        from AppKit import NSColor
-        self.footer.setStringValue_(text)
-        self.footer.setTextColor_(NSColor.labelColor() if strong else NSColor.secondaryLabelColor())
+        """A line above Not now: how a reset went, and what to do next."""
+        self._said = (text, strong)
+        self._drawn = None
+        if self.model is not None:
+            self.update(self.model)
 
-    def update(self, rows):
-        from AppKit import NSColor, NSImage
-        for row, icon, why, b, alt in zip(rows, self.icons, self.whys, self.buttons, self.alts):
-            # the optional row, not allowed yet: a dashed circle, so it reads apart from the three needed
-            opt = row.get("optional") and not row["ok"]
-            img = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
-                "checkmark.circle.fill" if row["ok"] else "circle.dashed" if opt else "circle",
-                "Allowed" if row["ok"] else "Optional, not allowed" if opt else "Not allowed yet")
-            icon.setImage_(img or NSImage.imageWithSystemSymbolName_accessibilityDescription_("circle", "Not allowed yet"))
-            icon.setContentTintColor_(NSColor.systemGreenColor() if row["ok"] else NSColor.tertiaryLabelColor())
-            why.setStringValue_(row["why"])
-            b.setHidden_(row["ok"])
-            if row["button"] and b.title() != row["button"]:
-                b.setTitle_(row["button"])
-                self._place(b, b.frame().origin.y)
-                self._place(alt, b.frame().origin.y, beside=b)
-            alt.setHidden_(not row.get("alt"))
+    def update(self, model):
+        """Draws the steps again when anything shown changed."""
+        import json
+        self.model = model
+        drawn = json.dumps([model, self._said], sort_keys=True, default=str)
+        if drawn != self._drawn:
+            self._drawn = drawn
+            self._draw(model)
+
+    @python_method
+    def _draw(self, model):
+        from AppKit import (NSBox, NSButton, NSColor, NSFont, NSImage, NSImageView, NSMakeRect,
+                            NSProgressIndicator, NSTextField, NSView)
+        M, W = self.M, self.W
+        items = []                    # (view, y from the top, height): placed once the height is known
+
+        def text(s, size, weight=0.0, color=None, width=W - 2 * M, lines=1):
+            f = NSTextField.labelWithString_(s)
+            f.setFont_(NSFont.systemFontOfSize_weight_(size, weight))
+            f.setTextColor_(color or NSColor.labelColor())
+            if lines > 1:
+                f.setMaximumNumberOfLines_(lines)
+                f.cell().setWraps_(True)
+            f.setFrame_(NSMakeRect(0, 0, width, (size + 5) * lines))
+            return f
+
+        def button(title, action, tag=0, default=False, link=False):
+            b = NSButton.buttonWithTitle_target_action_(title, self.target, action)
+            b.setTag_(tag)
+            if default:
+                b.setKeyEquivalent_("\r")          # Return presses it
+                b.setBezelColor_(NSColor.controlAccentColor())    # blue even before the window is key
+            if link:
+                b.setBordered_(False)
+                b.setFont_(NSFont.systemFontOfSize_(12))
+                b.setContentTintColor_(NSColor.linkColor())
+            b.sizeToFit()
+            return b
+
+        def circle(st):
+            box = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, 22, 22))
+            box.setBoxType_(4)                      # custom: a filled, bordered circle
+            box.setCornerRadius_(11)
+            box.setBorderWidth_(1.5)
+            box.setTitlePosition_(0)
+            box.setContentViewMargins_((0, 0))
+            done = st["state"] == "done" or (st["state"] == "current" and st.get("box_ok"))
+            box.setFillColor_(NSColor.systemGreenColor() if done else NSColor.clearColor())
+            box.setBorderColor_(NSColor.systemGreenColor() if done else NSColor.controlAccentColor()
+                                if st["state"] == "current" else NSColor.tertiaryLabelColor())
+            if done:
+                mark = NSImageView.alloc().initWithFrame_(NSMakeRect(5, 5, 12, 12))
+                mark.setImage_(NSImage.imageWithSystemSymbolName_accessibilityDescription_("checkmark", "Done"))
+                mark.setContentTintColor_(NSColor.whiteColor())
+                box.contentView().addSubview_(mark)
+            else:
+                n = text(str(st["n"]), 12, 0.4, NSColor.controlAccentColor() if st["state"] == "current"
+                         else NSColor.tertiaryLabelColor(), width=22)
+                n.setAlignment_(1)                  # centred
+                n.setFrame_(NSMakeRect(0, 2, 22, 17))
+                box.contentView().addSubview_(n)
+            return box
+
+        y = 14
+        head = text(model["title"], 15, 0.3, width=280)
+        items.append((head, M, y, 22))
+        count = text(model["count"], 12, 0.0, NSColor.secondaryLabelColor(), width=100)
+        count.setAlignment_(2)                      # right
+        items.append((count, W - M - 100, y + 3, 17))
+        y += 34
+        self.buttons, self.spinner, self.box = {}, None, None
+        inner = W - 2 * M - 20 - 32                  # the text column inside a step
+        for st in model["steps"]:
+            x0 = M + 10 + 32
+            if st["state"] != "current":
+                items.append((circle(st), M + 10, y + 9, 22))
+                items.append((text(st["name"], 13, 0.25 if st["state"] == "done" else 0.3,
+                                   NSColor.labelColor() if st["state"] == "done" else NSColor.tertiaryLabelColor(),
+                                   width=inner), x0, y + 11, 18))
+                y += 40 + 6
+                continue
+            top, parts = y, []
+            parts.append((circle(st), M + 10, y + 9, 22))
+            parts.append((text(st["name"], 13, 0.3, width=inner), x0, y + 11, 18))
+            y += 31
+            parts.append((text(st["why"], 12, 0.0, NSColor.secondaryLabelColor(), width=inner, lines=2), x0, y, 17))
+            y += 20
+            if st["how"]:
+                how = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, inner, 42))
+                how.setBoxType_(4)
+                how.setCornerRadius_(7)
+                how.setBorderWidth_(0)
+                how.setTitlePosition_(0)
+                how.setContentViewMargins_((0, 0))
+                how.setFillColor_(NSColor.quaternaryLabelColor())
+                line = text(st["how"], 12, 0.0, NSColor.secondaryLabelColor(), width=inner - 18, lines=2)
+                line.setFrame_(NSMakeRect(9, 5, inner - 18, 32))
+                how.contentView().addSubview_(line)
+                parts.append((how, x0, y + 6, 42))
+                y += 50
+            if st["box"] is not None:
+                box = NSTextField.alloc().initWithFrame_(NSMakeRect(0, 0, inner, 56))
+                box.setEditable_(False)
+                box.setSelectable_(True)
+                box.setStringValue_(st["box"])
+                box.setFont_(NSFont.systemFontOfSize_(13))
+                box.setTextColor_(NSColor.labelColor() if st["box_ok"] else NSColor.tertiaryLabelColor())
+                box.cell().setWraps_(True)
+                self.box = box
+                parts.append((box, x0, y + 8, 56))
+                y += 64
+            if st["button"] or st["note"]:
+                y += 10
+                x = x0
+                if st["button"]:
+                    b = button(st["button"], "setupAction:", st["n"], default=True)
+                    self.buttons[st["key"]] = b
+                    parts.append((b, x - 6, y, b.frame().size.height))     # its bezel's inset: level with the text
+                    x += b.frame().size.width - 2
+                if st["waiting"]:
+                    sp = NSProgressIndicator.alloc().initWithFrame_(NSMakeRect(0, 0, 12, 12))
+                    sp.setStyle_(1)                  # spinning
+                    sp.setControlSize_(2)            # small
+                    sp.setDisplayedWhenStopped_(False)
+                    sp.startAnimation_(None)
+                    self.spinner = sp
+                    parts.append((sp, x, y + 6, 12))
+                    x += 18
+                if st["note"]:
+                    parts.append((text(st["note"], 12, 0.0, NSColor.secondaryLabelColor(), width=x0 + inner - x),
+                                  x, y + 5, 17))
+                y += 26
+            if st["stale"]:
+                link = button(core.SETUP_STALE, "setupReset:", st["n"], link=True)
+                link.setToolTip_(core.STALE_HINT)
+                self.buttons["stale"] = link
+                parts.append((link, x0 - 4, y + 4, link.frame().size.height))
+                y += 22
+            y += 10
+            card = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, W - 2 * M, y - top))
+            card.setBoxType_(4)                      # the current step sits on a slightly raised card
+            card.setCornerRadius_(10)
+            card.setBorderWidth_(0.5)
+            card.setBorderColor_(NSColor.separatorColor())
+            card.setFillColor_(NSColor.controlBackgroundColor())
+            card.setTitlePosition_(0)
+            items.append((card, M, top, y - top))
+            items.extend(parts)
+            y += 6
+        said, strong = self._said
+        if said:
+            note = text(said, 11, 0.0, NSColor.labelColor() if strong else NSColor.secondaryLabelColor(), lines=3)
+            items.append((note, M, y + 4, 42))
+            y += 46
+        if model["title"] != core.SETUP_DONE:          # done: Done closes it
+            later = button("Not now", "setupLater:", link=True)
+            later.setContentTintColor_(NSColor.secondaryLabelColor())
+            self.buttons["later"] = later
+            y += 8
+            items.append((later, M - 4, y, later.frame().size.height))
+        y += 34
+        view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, W, y))
+        for v, x, top, h in items:
+            f = v.frame()
+            v.setFrame_(NSMakeRect(x, y - top - h, f.size.width, h))
+            view.addSubview_(v)
+        frame = self.window.frame()
+        size = self.window.frameRectForContentRect_(NSMakeRect(0, 0, W, y)).size
+        self.window.setFrame_display_(NSMakeRect(frame.origin.x, frame.origin.y + frame.size.height - size.height,
+                                                 size.width, size.height), True)
+        self.window.setContentView_(view)
 
     @property
     def visible(self):
@@ -1351,7 +1457,9 @@ class Controller(NSObject):
         self.code_state = None            # what write_status last said about new code
         self.next_cmd = 0.0
         self.healthy = False              # up long enough that this launch went fine
-        self.close_setup_at = None        # all granted: the setup window goes at this time
+        self.setup_sent = set()           # the panes the setup window sent the user to
+        self.setup_tried = None           # the words of step 4's try: setup is done
+        self.setup_failed = None          # what step 4's last try said instead
         self.welcome_at = None            # and the panel says it is ready at this time
         return self
 
@@ -1524,9 +1632,9 @@ class Controller(NSObject):
 
     @python_method
     def check_permissions(self, ask=False):
-        """Ask for one permission at a time, in the setup window's order. Called
-        every couple of seconds (every second while the setup window is open),
-        so a grant in System Settings takes effect without a restart."""
+        """Where each permission stands. Called every couple of seconds (every second while
+        the setup window is open), so a grant in System Settings takes effect without a
+        restart. macOS asks only on the setup window's buttons (setupAction_), never by itself."""
         before = dict(self.perm)
         self.perm["listen"] = can_listen()
         self.perm["post"] = can_post()
@@ -1545,19 +1653,8 @@ class Controller(NSObject):
             self.perm.pop("hear_mac_asked", None)
         if self.tap is None and self.perm["listen"]:
             self.install_tap()
-        if ask and not self.headless:
-            import Quartz
-            if self.perm["mic"] != "allowed" and "mic" in self.asked:
-                mic_access()                        # granted meanwhile: the next check has it
-            if self.perm["mic"] == "ask" and "mic" not in self.asked and not self.listening:
-                self.asked.add("mic")
-                self.ask_mic()
-            elif not self.perm["listen"] and "listen" not in self.asked:
-                self.asked.add("listen")
-                Quartz.CGRequestListenEventAccess()
-            elif self.perm["listen"] and not self.perm["post"] and "post" not in self.asked:
-                self.asked.add("post")
-                Quartz.CGRequestPostEventAccess()
+        if ask and not self.headless and (self.perm["mic"] == "denied" or self.perm["mic"] == "ask" and "mic" in self.asked):
+            mic_access()                            # decided already: no prompt, and a grant meanwhile shows
         if self.perm != before or not core.STATUS.exists():
             core.log("permissions: input monitoring %s, accessibility %s, microphone %s"
                 % ("yes" if self.perm["listen"] else "NO", "yes" if self.perm["post"] else "NO",
@@ -1575,12 +1672,10 @@ class Controller(NSObject):
         now = time.time()
         open_ = self.setup is not None and self.setup.visible
         if self.setup is not None:
-            self.setup.update(core.setup_rows(self.perm, self.settings))
-        if open_ and not lacking and not core.optional_missing(self.perm) and self.close_setup_at is None:
-            self.close_setup_at = now + 0.8          # all three checkmarks, for a moment
+            self.setup.update(self.setup_steps())      # all three allowed: on to trying it (step 4)
         ready = not lacking and (self.remapped or self.settings["shortcut"] not in core.KEY_SHORTCUTS)
         if not self.headless and core.should_welcome(ready, self.was_missing, core.WELCOMED.exists()):
-            self.welcome_at = self.close_setup_at or now
+            self.welcome_at = None if open_ else now      # the setup window's step 4 says it instead
             try:
                 core.WELCOMED.touch()
             except OSError:
@@ -1591,13 +1686,28 @@ class Controller(NSObject):
     def show_setup(self):
         if self.headless:
             return
-        if self.setup is None or self.setup.optional != core.offered(self.perm):   # the optional row came or went
-            if self.setup is not None:
-                self.setup.close()
-            self.setup = SetupWindow(self, optional=core.offered(self.perm))
-        self.setup.update(core.setup_rows(self.perm, self.settings))
-        self.close_setup_at = None
+        if self.setup is None:
+            self.setup = SetupWindow(self)
+        self.setup.update(self.setup_steps())
         self.setup.show()
+        self.write_status()
+
+    @python_method
+    def setup_steps(self):
+        return core.setup_steps(self.perm, self.settings, self.setup_tried, self.setup_sent, self.setup_failed)
+
+    @python_method
+    def setup_trying(self):
+        """The setup window is open on step 4: a dictation goes into it, not into an app."""
+        if self.setup is None or not self.setup.visible:
+            return False
+        return any(st["key"] == "try" and st["state"] == "current" for st in self.setup_steps()["steps"])
+
+    @python_method
+    def setup_heard(self, text=None, failed=None):
+        """Step 4's try: its words (setup is done), or what it said instead."""
+        self.setup_tried, self.setup_failed = (text, None) if text else (self.setup_tried, failed)
+        self.after_permissions()
         self.write_status()
 
     def setupReset_(self, _sender):
@@ -1620,19 +1730,29 @@ class Controller(NSObject):
         self.write_status()
 
     def setupAction_(self, sender):
-        rows = core.setup_rows(self.perm, self.settings)
-        row = rows[int(sender.tag())] if 0 <= int(sender.tag()) < len(rows) else None
-        if row is None or row["ok"]:
+        """The current step's one button: macOS asks only now (never by itself)."""
+        steps = self.setup_steps()["steps"]
+        st = next((x for x in steps if x["n"] == int(sender.tag()) and x["state"] == "current"), None)
+        if st is None:
             return
-        if row["action"] == "ask" and row["key"] == "hear_mac":
-            core.ask_screen()                   # macOS's own prompt, on the user's click only
-        elif row["action"] == "ask":
-            self.asked.add(row["key"])
+        key = st["key"]
+        if key == "try":
+            if st["button"] == "Done":
+                if self.setup is not None:
+                    self.setup.close()
+            else:                                 # Try again: the box waits for words again
+                self.setup_failed = None
+                self.after_permissions()
+        elif key == "mic" and self.perm.get("mic") == "ask":
+            self.asked.add("mic")
             self.ask_mic()
         else:
-            self.request(row["key"])            # macOS lists the app in that pane only once it has asked
-            open_url(row["url"])
+            self.request(key)                     # macOS lists the app in that pane only once it has asked
+            self.setup_sent.add(key)
+            open_url(core.PANE + dict((k, pane) for k, _n, _w, pane in core.PERMISSIONS)[key])
+            self.after_permissions()
         self.next_check = 0.0              # look again at once
+        self.write_status()
 
     @python_method
     def request(self, key):
@@ -1645,6 +1765,15 @@ class Controller(NSObject):
             (ask_listen if key == "listen" else ask_post)()
         except Exception as exc:
             core.log("asking for %s: %r" % (key, exc))
+
+    def allowHearMac_(self, _sender):
+        """The optional permission, from the menu (it is not in the setup window): macOS's own
+        prompt the first time, its pane after."""
+        if self.perm.get("hear_mac_asked"):
+            open_url(core.PANE + "ScreenCapture")
+        else:
+            core.ask_screen()
+        self.next_check = 0.0
 
     def showSetup_(self, _sender):
         self.show_setup()
@@ -1825,7 +1954,10 @@ class Controller(NSObject):
             self.refresh_icon()
             # A call holding the mic, and its own not lent (a recorder from before this): say so,
             # not a vague "didn't hear"
-            self.flash(core.CALL_HAS_MIC if self.capture.in_call and not self.capture.from_call else "Didn't hear anything")
+            said = core.CALL_HAS_MIC if self.capture.in_call and not self.capture.from_call else "Didn't hear anything"
+            if self.setup_trying():
+                return self.setup_heard(failed=said + ". Try again.")
+            self.flash(said)
             return
         self.pending += 1
         self.hud.show("Transcribing…", spin=True)
@@ -1862,13 +1994,21 @@ class Controller(NSObject):
         self.pending -= 1
         self.last_used = time.time()
         self.refresh_icon()
+        trying = self.setup_trying()
         if err:
+            if trying:
+                return self.setup_heard(failed="Could not transcribe. Try again.")
             self.flash("Could not transcribe")
             return
         text = self.fixes.apply(text or "").strip()
         if not text:
+            if trying:
+                return self.setup_heard(failed="Didn't catch that. Try again.")
             self.flash("Didn't catch that")
             return
+        if trying:                         # step 4: the words show in the setup window, never pasted
+            self.last_text = text + " "
+            return self.setup_heard(text)
         text += " "       # so the next dictation does not run into this one
         self.last_text = text
         self.learner.heard(text)           # only queued: matched on the learner's thread
@@ -2010,11 +2150,6 @@ class Controller(NSObject):
         if now >= self.next_secure and not self.headless:
             self.next_secure = now + 1.0
             self.check_secure_input()
-        if self.close_setup_at and now >= self.close_setup_at:
-            self.close_setup_at = None
-            if self.setup is not None:
-                self.setup.close()
-            self.write_status()
         if self.welcome_at and now >= self.welcome_at:
             self.welcome_at = None
             self.flash(core.ready_text(self.settings), seconds=2.5)
@@ -2155,7 +2290,7 @@ class Controller(NSObject):
         if core.missing(self.perm):
             fixes.append(("Set Up…", "showSetup:", None))
         elif core.optional_missing(self.perm):           # where the optional row is
-            fixes.append(("Leave Out What the Mac Plays…", "showSetup:", "Optional. No screen is recorded"))
+            fixes.append(("Leave Out What the Mac Plays…", "allowHearMac:", "Optional. No screen is recorded"))
         if fixes:
             sep(menu)
             for title, action, tip in fixes:
@@ -2340,7 +2475,7 @@ def cmd_run(headless=False):
         menu = controller.build_menu()
         controller.hud.show("Listening", level=True, front=False)
         controller.hud.set_level(0.5)
-        SetupWindow(controller).update(core.setup_rows(controller.perm, controller.settings))
+        SetupWindow(controller).update(controller.setup_steps())
         print("selftest OK: menu of %d items, panel, setup window, %d shortcuts"
               % (menu.numberOfItems(), len(core.SHORTCUTS)))
         return 0

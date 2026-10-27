@@ -1012,6 +1012,63 @@ def setup_rows(perm, shortcut="mickey"):
     return rows
 
 
+# The setup window, as one sequence (the user: "very unclear what you expect the user to take
+# action on... maybe sequential"): each permission in turn, then trying it once. Only the
+# current step has a button; macOS asks only when it is pressed.
+SETUP_WHY = {"mic": "So Standby can hear you dictate.",
+             "listen": "So Standby notices when you press F5.",
+             "post": "So Standby can type the words where your cursor is."}
+SETUP_HOW = "In the list, turn on Standby Dictation, then come back here."
+SETUP_WAITING = "Waiting for you to turn it on"
+SETUP_STALE = "Already on? Turn it off and on again"
+SETUP_TRY_EMPTY = "Your words show here."
+SETUP_DONE = "You're all set"
+
+
+def try_how(settings):
+    """Step 4's line: how to dictate a few words with the shortcut as it is set."""
+    ident, label, kind = _shortcut(settings)
+    key = "F5" if ident in KEY_SHORTCUTS else label[len("Press "):] if label.startswith("Press ") else label
+    if settings.get("hold") and kind == "key":
+        return "Hold %s, say a few words, let go." % key
+    return "%s, say a few words, then %s again." % (how_to_start(settings), "press F5" if kind == "key" else "the same")
+
+
+def setup_steps(perm, settings, tried=None, sent=(), failed=None):
+    """The setup window's steps, in order: [{key, n, name, why, state: done|current|later,
+    button, note, waiting, how, stale, box, box_ok}] and the window's title and "Step N of 4".
+    tried: the words of a dictation made on step 4 (it's done then); sent: the panes it has
+    sent the user to; failed: what step 4's last try said instead of words."""
+    steps, current = [], None
+    shortcut = _shortcut(settings)[0]
+    for n, (key, name, _why, _pane) in enumerate(PERMISSIONS, 1):
+        why = SETUP_WHY[key]
+        if key == "listen" and shortcut not in KEY_SHORTCUTS:
+            why = "So Standby notices your shortcut."
+        steps.append({"key": key, "n": n, "name": name, "why": why, "done": granted(perm, key)})
+    steps.append({"key": "try", "n": 4, "name": "Try it", "why": try_how(settings), "done": bool(tried)})
+    for st in steps:
+        if not st["done"] and current is None:
+            current = st
+    for st in steps:
+        st.update(state="current" if st is current else "done" if st["done"] else "later", button=None, note=None, waiting=False, how=None, stale=False, box=None, box_ok=False)
+    if current is None:                                    # all done, and tried
+        last = steps[-1]
+        last.update(state="current", button="Done", note="Dictation is on. Use %s in any app." % (
+            "F5" if shortcut in KEY_SHORTCUTS else _shortcut(settings)[1][len("Press "):]),
+            box=tried, box_ok=True)
+        return {"title": SETUP_DONE, "count": "Step 4 of 4", "steps": steps}
+    key = current["key"]
+    if key == "mic" and perm.get("mic") == "ask":
+        current.update(button="Allow Microphone", note="macOS will ask: choose Allow.")
+    elif key in ("mic", "listen", "post"):
+        current.update(button="Open Settings", how=SETUP_HOW, waiting=key in sent,
+                       note=SETUP_WAITING if key in sent else None, stale=key == "post" and key in sent)
+    else:
+        current.update(box=failed or SETUP_TRY_EMPTY, button="Try again" if failed else None)
+    return {"title": "Set up dictation", "count": "Step %d of 4" % current["n"], "steps": steps}
+
+
 def optional_missing(perm):
     return [r["key"] for r in setup_rows(perm) if r.get("optional") and not r["ok"]]
 
