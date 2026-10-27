@@ -124,14 +124,18 @@ def warm_voice():
     _drop(_spool(transport.for_config()) / ("%d-%04d.w" % (int(time.time() * 1000), random.randint(0, 9999))), "voice")
 
 
-def cancel(qid, keep=False):
+def cancel(qid, keep=False, dropped=False):
     """Stop a question asked with ask(): skipped if waiting, interrupted if running. keep: the user cut
-    the voice off (not "they went on"): work its whole reply hands on still goes."""
+    the voice off (not "they went on"): work its whole reply hands on still goes. dropped: they went on
+    (an early question that wasn't their turn): answered already, what it left for the voice's next
+    turn goes too (the agent's notes of it: its .x)."""
     if not re.match(r"^[0-9]+-[0-9]+$", str(qid or "")):
         return
     spool = _spool(transport.for_config())
     if not (spool / (qid + ".a")).exists():        # answered already: nothing to stop
         (spool / (qid + ".c")).write_text("keep\n" if keep else "")
+    elif dropped:
+        (spool / (qid + ".x")).write_text("")
 
 
 def main(argv):

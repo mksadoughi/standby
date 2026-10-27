@@ -441,6 +441,18 @@ try:
           (ask("[VOICE] what time is it there") or True) and
           "You took this deeper, and are working on it now: Create a sample text file"
           in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
+    # An early question the user went on from: answered with a hand-off, then dropped (agentctl.cancel's
+    # .x). The hand-off never went, so the voice's next turn has no note that it's working on it.
+    models = lambda: [r for r in map(json.loads, open(tpath)) if r["ev"] == "model"]
+    n_models = len(models())
+    got = ask("[VOICE] can you ask the agent to create a new text file, just a sample text file?")
+    wait(lambda: len(models()) > n_models, 10)
+    qid = models()[-1]["q"]
+    open(os.path.join(root, "agent", "spool", qid + ".x"), "w").close()
+    ask("[VOICE] what time is it there")
+    check("a hand-off whose early question they went on from: the voice keeps no note it's working on it",
+          got.startswith("[HANDOFF]") and "You took this deeper" not in texts("voice", TALK)[-1]
+          and not os.path.exists(os.path.join(root, "agent", "spool", qid + ".x")), (qid, sorted(os.listdir(os.path.join(root, "agent", "spool")))[-6:], texts("voice", TALK)[-1][-300:]))
     os.remove(os.path.join(live, TALK + ".voice.json"))
 
     # The talk ended and a meeting is live. Typing into the talk continues it.

@@ -3182,6 +3182,11 @@ def wants_deep(text):
     return DEEP_TAG in (text or "")
 
 
+class Note(str):
+    """A note for the voice's next turn (remember), with the question it came of."""
+    ident = None
+
+
 # A [DEEP] with no task after it: the voice is asked for one, once, in its own conversation (it
 # has the context); its answer is what the session works on.
 TASK_TURN = ("[TASK] You went deeper without saying on what. Write it now: only what to do, in your "
@@ -3398,10 +3403,30 @@ class Voice(object):
             self.tasks.append(task)
             self.cv.notify()
 
-    def remember(self, session, text):
-        """Something the voice should know at its next turn (chat, answers)."""
+    def remember(self, session, text, ident=None):
+        """Something the voice should know at its next turn (chat, answers). ident: the question it came
+        of, when only that question's being the user's turn makes it so (a hand-off: _live_notes)."""
+        note = Note(text[:VOICE_CONTEXT_CHARS])
+        note.ident = ident
         with self.cv:
-            self.context.setdefault(session, []).append(text[:VOICE_CONTEXT_CHARS])
+            self.context.setdefault(session, []).append(note)
+
+    @staticmethod
+    def _live_notes(context):
+        """The notes of questions the user went on from leave (agentctl.cancel's .x: an early question
+        that wasn't their turn): it never handed that work on, so it mustn't think it did."""
+        out = []
+        for note in context:
+            ident = getattr(note, "ident", None)
+            gone = os.path.join(SPOOL, "%s.x" % ident) if ident else None
+            if gone and os.path.exists(gone):
+                try:
+                    os.remove(gone)
+                except OSError:
+                    pass
+                continue
+            out.append(note)
+        return out
 
     # -- the worker -------------------------------------------------------------
     def _next(self):
@@ -3497,7 +3522,7 @@ class Voice(object):
         rows = feeder.unsent() if listens(session) else []
         notes, notes_end = self._notes(session)
         with self.cv:
-            context = self.context.pop(session, [])
+            context = self._live_notes(self.context.pop(session, []))
         parts = [head]
         if rows:
             parts.append(transcript_block(rows, session))
@@ -3570,7 +3595,7 @@ class Voice(object):
                 new.append(("fact", "RESULT (%s, while they were talking): %s" % (m.group(1) or "done", m.group(2).strip())
                             if m else note))
         with self.cv:
-            context = self.context.pop(session, [])
+            context = self._live_notes(self.context.pop(session, []))
         new += [("fact", c) for c in context]
         try:
             with open(os.path.join(ROOT, "sessions", session, "tasks.txt"), encoding="utf-8") as fh:
@@ -3690,7 +3715,7 @@ class Voice(object):
             # a task it stopped to make room for this one ([CANCEL #n] before [DEEP]) goes to the Mac too
             text = "%s %s%s" % (HANDOFF_TAG, task, "".join(" [CANCEL #%s]" % n for n in CANCEL_RE.findall(text or "")))
             went += ", handed to the Claude Code session"
-            self.remember(session, "You took this deeper, and are working on it now: %s" % task)
+            self.remember(session, "You took this deeper, and are working on it now: %s" % task, ident=ident)
         elif rc == 0 and wants_deep(text) and holder(session) is not None:
             text = HELD_VOICE                # the meeting agent's conversation is in a terminal
         elif rc == 0 and wants_deep(text) and not stopping():
