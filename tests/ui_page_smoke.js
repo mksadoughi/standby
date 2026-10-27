@@ -60,6 +60,10 @@ const loosen = kind => e => { loose.push(kind); process.exitCode = 1;
 process.on("uncaughtException", loosen("uncaught error"));
 process.on("unhandledRejection", loosen("unhandled rejection"));
 process.on("exit", () => { if (loose.length) console.log("FAILURES: " + loose.length + " error(s) outside the checks") });
+// the dictation presets as Settings gets them (ui.py lists every one in dictation.py's SHORTCUTS, in its own
+// words), read from the source so the check below describes the shipped list
+const SHIPPED = [...require("fs").readFileSync(require("path").join(__dirname, "..", "mac", "dictation.py"), "utf8")
+  .match(/^SHORTCUTS = \{([\s\S]*?)^\}/m)[1].matchAll(/^\s*"(\w+)":\s*\("([^"]+)"/gm)].map(m => ({ id: m[1], label: m[2], kind: m[1] === "mickey" ? "key" : "double" }));
 eval(require("fs").readFileSync(process.env.UI_PAGE_JS, "utf8") + `
 (async () => {
   const out = [], body = () => el("body").innerHTML, ok = (k, v, d) => out.push([k, !!v, d]);
@@ -139,12 +143,13 @@ eval(require("fs").readFileSync(process.env.UI_PAGE_JS, "utf8") + `
   paintUsage({ error: "ssh: <host> did not answer" });
   ok("  an error says so, escaped, not as an empty state", el("ubody").innerHTML.includes("not available right now") && el("ubody").innerHTML.includes("&lt;host&gt;"));
   // The dictation shortcut: presets or one recorded; the server judges, a refusal changes nothing.
-  DICT = { on: true, running: true, missing: [], hold: false, shortcut: { id: "mickey", label: "Press F5", kind: "key" },
-    shortcuts: [{ id: "mickey", label: "Press F5", kind: "key" }, { id: "rcommand2", label: "Right Command twice", kind: "double" }] };
+  DICT = { on: true, running: true, missing: [], hold: false, shortcut: { id: "mickey", label: "Press F5", kind: "key" }, shortcuts: SHIPPED };
   paintDict();
   ok("shortcut: the field shows the one in use", !el("kshortf").hidden && el("kfield").innerHTML.includes("Press F5"), el("kfield").innerHTML);
   openShortcuts();
-  ok("  the list: the presets, the one in use ticked, then Record a shortcut…", el("kmenu").innerHTML.includes("Control twice") && el("kmenu").innerHTML.includes("✓") && el("kmenu").innerHTML.includes("Record a shortcut…"), el("kmenu").innerHTML);
+  ok("  the list: every shipped preset, none with Control (Apple Dictation's own), the one in use ticked, then Record a shortcut…",
+     SHIPPED.length >= 5 && SHIPPED.every(x => el("kmenu").innerHTML.includes(">" + x.label + "<")) && !/Control/.test(el("kmenu").innerHTML)
+     && el("kmenu").innerHTML.includes('Press F5</span><span class="ck">✓') && el("kmenu").innerHTML.includes("Record a shortcut…"), [SHIPPED.map(x => x.label), el("kmenu").innerHTML]);
   recordShortcut();
   ok("  recording: the field says so", el("kfield").innerHTML.includes("Press the keys"), el("kfield").innerHTML);
   let stopped = 0; const kev = o => Object.assign({ preventDefault() { stopped++ }, stopPropagation() {}, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false }, o);
