@@ -132,3 +132,4 @@ test_relaunch              py    par
 test_native_service        py    par
 test_api_auth              py    par  
 test_log_privacy           py    par
+test_home_start            py    par  
