@@ -64,6 +64,11 @@ eval(require("fs").readFileSync(process.env.UI_PAGE_JS, "utf8") + `
 (async () => {
   const out = [], body = () => el("body").innerHTML, ok = (k, v, d) => out.push([k, !!v, d]);
   await new Promise(r => setTimeout(r, 20));
+  // The stall watch: busy once between ticks on time is said; WebKit's once a second for a window it thinks idle is not
+  const ticks = lates => { const st = {prev: 0, prev2: 0}; return lates.map(l => stallTick(l, st)).filter(Boolean) };
+  ok("stall watch: a page busy 0.8 s is said (one tick on), once", JSON.stringify(ticks([2, 3, 800, 4, 2])) === "[800]", ticks([2, 3, 800, 4, 2]));
+  ok("  a window WebKit runs once a second (0.75 s late, tick after tick, and back): nothing", ticks([1, 2, 750, 760, 740, 755, 748, 3, 2]).length === 0, ticks([1, 2, 750, 760, 740, 755, 748, 3, 2]));
+  ok("  busy while it runs once a second (later than that can make it): said", JSON.stringify(ticks([750, 760, 1750, 750])) === "[1750]", ticks([750, 760, 1750, 750]));
   // The old session view is gone: no list, chat, box or tabs; Standby's view (agents.js) is the window
   ok("no old session view in the page", typeof renderList === "undefined" && typeof send === "undefined" && typeof setTab === "undefined" && typeof openVoice === "undefined" && typeof startTalk === "undefined");
   // The call view (Claude Code's calls): the voice's states, as it paints them
