@@ -55,6 +55,7 @@ def speakable(text):
     text = _EMPH.sub(r"\2", text)
     text = _BULLET.sub("", text)
     text = _HEADING.sub("", text)
+    text = _MARK.sub("", text)
     text = re.sub(r"\s+", " ", text.replace("|", " ")).strip()
     return text if sum(ch.isalnum() for ch in text) >= 1 else ""
 
@@ -63,8 +64,12 @@ _BOUNDARY = re.compile(r"\n+|[.!?…]+[\"'”’)\]]*(?=\s)")
 _ABBREV = {"e.g", "i.e", "etc", "vs", "mr", "mrs", "ms", "dr", "st", "jr", "sr", "approx",
            "fig", "no", "inc", "ltd", "co", "a.m", "p.m", "u.s", "cf"}
 # Speech ends where the written part begins: a line of --- (the [VOICE] rule)
-# or a code fence.
-_WRITTEN = re.compile(r"(?m)^[ \t]*(?:-{3,}|`{3})")
+# or a code fence; and where a hand-off begins ([DEEP] or the app's [HANDOFF]: the task, never said).
+_WRITTEN = re.compile(r"(?m)^[ \t]*(?:-{3,}|`{3})|\[(?:DEEP|HANDOFF)\]")
+# A call's signals in a reply ([QUIET], [END], [CANCEL #n]): never said, wherever they stand. A reply
+# with no deltas (one that was only a signal: the agent's stream had nothing to send) is said from
+# its answer, so they must go here too ("[QUIET]" said as a call's greeting).
+_MARK = re.compile(r"\[(?:QUIET|END|CANCEL[^\]]*)\]")
 # Where an answer's first clause may end, to be said before its sentence is whole.
 _CLAUSE = re.compile(r"[,;:](?=\s)|\s[\u2014\u2013]\s")
 
@@ -1486,8 +1491,8 @@ class VoiceSession(object):
                 mic = want
             if not q.worker.is_alive() and not flushed:
                 flushed = True
-                if not got["delta"]:                 # an engine that does not stream
-                    q.stream.feed(got["answer"] or "")
+                if not got["delta"]:                 # an engine that does not stream, or a reply that was only a signal
+                    self._say(q, q.stream.feed(got["answer"] or ""))
                 else:
                     # Words of the answer its deltas never brought (a greeting cut at "First, do"):
                     # the answer goes on from where they stopped, so the rest is said, all of it.

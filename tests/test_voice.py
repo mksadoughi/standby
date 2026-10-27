@@ -216,6 +216,12 @@ check("speech stops at a --- line: the rest is for reading",
       stream(["Drafted it below.\n", "--", "-\nDear team, ", "the plan is..."]) == ["Drafted it below."])
 check("and at a code fence", stream(["Here it is.\n```py\nprint(1)\n```"]) == ["Here it is."])
 check("a dash that is only an aside is spoken", stream(["Yes - mostly."]) == ["Yes - mostly."])
+check("a call's signals are never said, wherever they stand: a reply that's only [QUIET] says nothing",
+      stream(["[QUIET]"]) == [] and stream(["Bye for now. [END]"]) == ["Bye for now."]
+      and stream(["Sure. [CANCEL #2]"]) == ["Sure."] and S("Okay [END] then") == "Okay then")
+check("  and speech ends where a hand-off begins: its task is never said",
+      stream(["On it. [DEEP] edit the config file"]) == ["On it."] and stream(["[HANDOFF] edit it"]) == []
+      and stream(["Sending it. [HANDOFF] edit it", " more"]) == ["Sending it."])
 # the answer's first clause goes before its first sentence is whole.
 check("first clause first: said at its comma, before the sentence is written",
       voice.SentenceStream().feed("The migration is on track, the cache") == ["The migration is on track,"])

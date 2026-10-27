@@ -873,6 +873,30 @@ check("  they talk over the greeting being thought of: their words asked on thei
       and vs.status()["you"] in ("", "This is the test, one, two, three."), (agent.asked, vs.status()))
 done(vs, rec)
 
+# A reply that's only a signal brings no deltas (the agent's stream holds the signal back), so it's said
+# from the answer: "[QUIET]" was said aloud as a call's greeting, and kept in the record as said.
+class OnlyAnswer(Agent):
+    def ask(self, question, on_event, on_queued, heard=None):
+        self.asked.append(question); self.heards.append(heard)
+        on_queued("q%d" % len(self.asked))
+        time.sleep(0.05)
+        return self.pieces.pop(0)
+
+
+vs, rec, agent, spk, logged = session(agent=OnlyAnswer())
+agent.pieces = ["[QUIET]"]
+vs.open_with("[CALL START]")
+check("a greeting that's only [QUIET]: nothing said, and the mic is theirs",
+      wait(lambda: agent.asked == ["[CALL START]"], 3) and wait(lambda: vs.state == "listening", 3)
+      and time.sleep(0.3) is None and spk.said == [], (spk.said, vs.state))
+done(vs, rec)
+vs, rec, agent, spk, logged = session(agent=OnlyAnswer())
+agent.pieces = ["Talk soon. Bye for now. [END]"]
+rec.row(vs, turn=0, end_turn=True, text="Okay, bye.")
+check("  a goodbye with [END], no deltas: all of it said (only its last sentence was), never the signal",
+      wait(lambda: spk.said == ["Talk soon.", "Bye for now."], 5), (spk.said, agent.asked))
+done(vs, rec)
+
 # ---------------------------------------------------------------- the voice can't be heard: the orb says so
 vs, rec, agent, spk, logged = session()
 wait(lambda: vs.state == "listening")
