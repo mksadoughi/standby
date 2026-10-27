@@ -126,18 +126,21 @@ ok "Python: $("$PY" -V)"
 # run (measured on published releases), though `claude plugin install` says it worked on every one.
 CC_MIN="2.1.299"
 CC_OLD=no
-if command -v claude >/dev/null 2>&1; then
-  CC_VER="$(claude --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+# Claude Code's own installer puts it in ~/.local/bin and may leave that off the PATH: found there too
+CLAUDE="$(command -v claude 2>/dev/null || true)"
+[[ -z "$CLAUDE" && -x "$BINDIR/claude" ]] && CLAUDE="$BINDIR/claude"
+if [[ -n "$CLAUDE" ]]; then
+  CC_VER="$("$CLAUDE" --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
   if [[ -n "$CC_VER" && "$(printf '%s\n%s\n' "$CC_MIN" "$CC_VER" | sort -V | head -1)" != "$CC_MIN" ]]; then
     CC_OLD=yes
     warn "Claude Code $CC_VER is too old for Standby: it needs $CC_MIN or later. Update it with
      claude update
    then start a new Claude Code session. Everything else installs now; /standby works once it's updated."
   else
-    ok "Claude Code: $(claude --version 2>/dev/null | head -1)"
+    ok "Claude Code: $("$CLAUDE" --version 2>/dev/null | head -1)"
   fi
 else
-  warn "Claude Code CLI not found on PATH: Standby needs it on this Mac."
+  warn "Claude Code isn't on this Mac yet: Standby needs it (install it, then run this again)."
 fi
 
 say "Python environment ($VENV)"
@@ -179,7 +182,7 @@ say "Models (downloaded once, then used offline)"
 if [[ -s "$ROOT/models/nemo_en_titanet_small.onnx" ]]; then
   ok "speaker model already present"
 else
-  curl -fL --progress-bar -o "$ROOT/models/nemo_en_titanet_small.onnx.part" "$SPEAKER_URL"
+  curl -fL $([[ -t 2 ]] && echo --progress-bar || echo -sS) -o "$ROOT/models/nemo_en_titanet_small.onnx.part" "$SPEAKER_URL"
   printf '%s  %s\n' "$SPEAKER_SUM" "$ROOT/models/nemo_en_titanet_small.onnx.part" | shasum -a 256 -c --status \
     || { rm -f "$ROOT/models/nemo_en_titanet_small.onnx.part"; die "the speaker model's download didn't match its checksum: re-run install.sh"; }
   mv "$ROOT/models/nemo_en_titanet_small.onnx.part" "$ROOT/models/nemo_en_titanet_small.onnx"
@@ -238,8 +241,9 @@ else
   fi
 fi
 # The speech model Settings > Speech would choose here (Small on an 8 GB Mac,
-# Standard otherwise, the English one on an English Mac), pinned, unless it is here.
-"$VENV/bin/python" - "$REPO/mac" "$ROOT/config.json" <<'PYCODE'
+# Standard otherwise, the English one on an English Mac), pinned, unless it is here. Public models: the
+# download library's advice to sign in for higher rate limits is not for the user.
+HF_HUB_VERBOSITY=error "$VENV/bin/python" - "$REPO/mac" "$ROOT/config.json" <<'PYCODE'
 import json, sys
 sys.path.insert(0, sys.argv[1])
 import speechmodel
@@ -277,10 +281,10 @@ say "Claude Code plugin"
 # installed for every folder. Added and installed again on a re-run, which changes nothing. It loads
 # in place from lite/: after a git pull, a new Claude Code session (or /reload-plugins) has it.
 PLUGIN_CMDS="claude plugin marketplace add \"$REPO\" && claude plugin install standby@standby --scope user"
-if ! command -v claude >/dev/null 2>&1; then
+if [[ -z "$CLAUDE" ]]; then
   warn "Claude Code isn't on this Mac yet: once it is, add Standby to it with"
   echo "     $PLUGIN_CMDS"
-elif claude plugin marketplace add "$REPO" >/dev/null 2>&1 && claude plugin install standby@standby --scope user >/dev/null 2>&1; then
+elif "$CLAUDE" plugin marketplace add "$REPO" >/dev/null 2>&1 && "$CLAUDE" plugin install standby@standby --scope user >/dev/null 2>&1; then
   if [[ "$CC_OLD" == yes ]]; then           # added, but this Claude Code can't run it: never "type /standby"
     warn "plugin standby@standby added, but Claude Code $CC_VER can't run it: update it with 'claude update' (needs $CC_MIN or later)"
   else
@@ -349,6 +353,7 @@ PYMAIN
 cat > "$BUILD/setup.py" <<'PYSETUP'
 import os
 from setuptools import setup
+WHY = "Standby’s call reads the project you work on in Claude Code, so it knows your work."
 plist = {
     "CFBundleName": "Standby", "CFBundleDisplayName": "Standby",
     "CFBundleIdentifier": "dev.standby.app",
@@ -356,6 +361,10 @@ plist = {
     "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
     "NSMicrophoneUsageDescription":
         "Standby transcribes your meeting on this Mac so your Claude Code can answer questions about it.",
+    # macOS asks for these when a call's Claude reads a project kept in one of them: its words say why
+    **{key: WHY for key in ("NSDesktopFolderUsageDescription", "NSDocumentsFolderUsageDescription",
+                            "NSDownloadsFolderUsageDescription", "NSRemovableVolumesUsageDescription",
+                            "NSNetworkVolumesUsageDescription")},
 }
 opts = {"alias": True, "argv_emulation": False, "plist": plist}
 if os.path.exists("Standby.icns"):
