@@ -65,6 +65,8 @@ check("  macOS says it's allowed (a muted interface sends zeros too): not a perm
 auth["now"] = "denied"
 c._feed(room(0.1))
 check("sound comes: cleared at once", not c.mic_denied() and c.zeros == 0.0 and "cause" not in c.source())
+check("  and the source says the mic was heard (the band takes that as allowed); before it, it didn't",
+      c.source().get("heard") is True and src.get("heard") is None, (c.source(), src))
 q = mic()
 q._feed(room(10))
 check("a quiet room (low, never exact zeros): never taken for a refusal", not q.mic_denied())

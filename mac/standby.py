@@ -1174,8 +1174,9 @@ class Channel(object):
         self.diarizer, self.voices, self.held = None, None, []
         self.label_wait = lambda: True
         # seconds of nothing but exact zeros from the device, in a row (a mic macOS
-        # refuses), and when it was last opened again for it.
-        self.zeros, self._denied_reopen = 0.0, None
+        # refuses), and when it was last opened again for it; heard: any sound from it, ever
+        # (macOS lets it: the app's own question to macOS may still say "not asked yet").
+        self.zeros, self._denied_reopen, self.heard = 0.0, None, False
         # Q3: the speech model's view of the utterance still being spoken: (its frames, how
         # many of them it has heard, its speechvad.Stream), for onset.
         self._heard = None
@@ -1191,6 +1192,7 @@ class Channel(object):
             self._tap_feed(block)
         if self.capture is None:               # a call's capture sends zeros whenever the app is quiet
             self.zeros = 0.0 if block.any() else self.zeros + len(block) / float(SAMPLE_RATE)
+            self.heard = self.heard or not self.zeros
         if self.room is None:
             return self._queue(block)
         with self._room_lock:
@@ -1559,6 +1561,8 @@ class Channel(object):
                "state": "dead" if self.error is not None else self.state}
         if self.state == "muted":                # not a fault, the user's choice
             out["muted"] = True
+        if self.heard:
+            out["heard"] = True
         if self.table is not None and self.device_name not in ("?", ""):   # the same id as the lines'
             out["id"] = self.src_id()
             row = next((r for r in self.table.rows if r["id"] == out["id"]), {})
