@@ -353,7 +353,7 @@ PYMAIN
 cat > "$BUILD/setup.py" <<'PYSETUP'
 import os
 from setuptools import setup
-WHY = "Standby’s call reads the project you work on in Claude Code, so it knows your work."
+WHY = "So a call can read the project you’re working on in Claude Code."
 plist = {
     "CFBundleName": "Standby", "CFBundleDisplayName": "Standby",
     "CFBundleIdentifier": "dev.standby.app",
