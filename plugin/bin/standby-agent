@@ -1563,6 +1563,34 @@ def voice_settings(folder):
 GUARDED = ("~/Library", "~/Desktop", "~/Documents", "~/Downloads", "~/Pictures", "~/Movies", "~/Music")
 
 
+REFUSED_FILE = "refused.json"      # in the session's folder: a guarded folder macOS refuses its Claude
+NOT_PERMITTED = re.compile(r"operation not permitted", re.I)
+
+
+def note_refused(session, ev):
+    """A tool's read that macOS refused (EPERM) in a folder it guards: noted in the session's folder,
+    {"folder": "Desktop", "at": ...}, so the band says so plainly, with the way to allow it. macOS asks
+    once; after a Don't Allow nothing else would ever say why the call can't see that project."""
+    for block in (ev.get("message") or {}).get("content") or []:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            continue
+        body = block.get("content")
+        text = body if isinstance(body, str) else " ".join(
+            b.get("text", "") for b in body or [] if isinstance(b, dict))
+        if not NOT_PERMITTED.search(text or ""):
+            continue
+        for g in GUARDED[1:]:                     # not ~/Library: macOS asks nothing for it
+            top = os.path.expanduser(g)
+            if top + os.sep in text or text.rstrip().endswith(top):
+                sdir = os.path.join(ROOT, "sessions", session)
+                if os.path.isdir(sdir):
+                    tmp = os.path.join(sdir, REFUSED_FILE + ".part")
+                    with open(tmp, "w") as fh:
+                        json.dump({"folder": os.path.basename(top), "at": time.time()}, fh)
+                    os.replace(tmp, os.path.join(sdir, REFUSED_FILE))
+                return
+
+
 IMAGE_RE = re.compile(r"\[IMAGE (/[^\]\n]+)\]")
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp"}
 
@@ -2066,6 +2094,8 @@ class ClaudeSession(object):
                         notify("text", block["text"])
                     elif btype == "tool_use":
                         notify("tool", describe_tool(block.get("name"), block.get("input") or {}))
+            elif kind == "user":
+                note_refused(self.session, ev)
             elif kind == "stream_event":
                 delta = (ev.get("event") or {}).get("delta") or {}
                 if delta.get("type") == "text_delta" and delta.get("text"):

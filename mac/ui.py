@@ -2224,6 +2224,7 @@ def mic_permission():
 
 
 SCREEN_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+FOLDERS_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders"
 _MIC_CHECK = {}                   # what macOS says of the mic, kept 2 s (the band asks every few seconds)
 
 
@@ -2264,6 +2265,10 @@ def access(sid, capture):
     if capture in ("auto", "meeting"):
         out["meeting_audio"] = ("denied" if "meeting" in refused else "allowed" if _snap_permitted()
                                 else "denied" if SNAP_ASKED.exists() else "ask" if playing else "not_asked")
+    # a folder macOS refuses its Claude (the agent notes a read refused there): its name, for the band
+    folder = (read_json(SESSIONS / sid / "refused.json") or {}).get("folder")
+    if isinstance(folder, str) and folder in ("Desktop", "Documents", "Downloads", "Pictures", "Movies", "Music"):
+        out["folder_denied"] = folder
     return out
 
 
@@ -2285,14 +2290,15 @@ def lite_permission(b):
     if not valid_id(sid) or sid != live_session():
         return {"error": "Nothing is live"}
     now = access(sid, live_capture(sid))
-    pane = MIC_PANE if now.get("mic") == "denied" else SCREEN_PANE if now.get("meeting_audio") == "denied" else None
+    pane = (MIC_PANE if now.get("mic") == "denied" else SCREEN_PANE if now.get("meeting_audio") == "denied"
+            else FOLDERS_PANE if now.get("folder_denied") else None)
     if pane is None:
         return {"ok": True, "allowed": True}
     try:
         subprocess.run(OPEN + [pane], stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
     except (OSError, subprocess.SubprocessError) as exc:
         return {"error": "Couldn't open System Settings (%s)" % exc.__class__.__name__}
-    log("lite permission: System Settings opened at %s" % ("Microphone" if pane == MIC_PANE else "Screen Recording"))
+    log("lite permission: System Settings opened at %s" % {MIC_PANE: "Microphone", SCREEN_PANE: "Screen Recording"}.get(pane, "Files & Folders"))
     return {"ok": True}
 
 

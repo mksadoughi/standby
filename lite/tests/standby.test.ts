@@ -1466,6 +1466,20 @@ test('access · a call: the mic only, never the meeting’s sound; the voice fai
   expect((await band.findAll({ type: 'Button' })).map((b: any) => b.props.key ?? b.key)).toEqual(['mute', 'end', 'window', 'settings'])
 })
 
+test('access · a folder macOS refuses the call’s Claude: said plainly, with Settings', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], can: { listen: true, window: true },
+    live: { kind: 'call', session: 'c1', started: 1, phase: 'listening', mic: 'allowed', folder_denied: 'Desktop' } }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  const band = await bandOf($)
+  expect(await textOn(band, 'Standby can’t read your Desktop folder · allow it in Privacy & Security > Files & Folders'))
+    .toMatchObject({ props: { color: '#d29922' } })
+  await typed($, 's')
+  expect(posted(seen, '/api/lite/permission')).toBe(true)
+})
+
 test('every request to Standby carries this launch\'s token, from its file; the stream reads it from a file, never the command line', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [] }
   mock.clock(on)
