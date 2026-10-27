@@ -1961,6 +1961,8 @@ def cancel_voice(sid, qid, quiet=False, said=""):
             RECENT_VOICE.pop(sid, None)
         else:
             done = None
+    if quiet:                                      # answered already: nothing of it stays with the voice
+        agentctl.cancel(qid, dropped=True)
     if done is not None:
         rows = done["rows"]
         for row in rows:
@@ -1968,9 +1970,7 @@ def cancel_voice(sid, qid, quiet=False, said=""):
         log("ask dropped from the chat: the user went on (voice, answered already%s)" % (", what it had said kept" if said else ""))
         return
     # cut off (not "they went on", whose next question has all of it): a hand-off its whole reply made still goes
-    if running:
-        agentctl.cancel(qid, keep=not quiet)
-    elif not quiet:
+    if not quiet:
         agentctl.cancel(qid, keep=True)
 
 
