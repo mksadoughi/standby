@@ -266,6 +266,38 @@ check("  unlike their lasting print, but like them as heard in this call, on thi
       not vi.someone_else(long_other, "Me") and vi.like_here(noisy(OTHER), "Me") > 0.9)
 vi.here[mic] = [np.asarray(USER) * 5.0, 5.0]
 check("  unlike both: someone else's", vi.someone_else(long_other, "Me"))
+# Claude's own voice heard back, told by its print (CLAUDE_PRINT, made from what it played), whatever
+# its words came out as (talk-20261026-232015: "Did check one of the things actually." was answered).
+CLAUDE = rng.standard_normal(192)
+CLAUDE -= (CLAUDE @ USER) / (USER @ USER) * USER
+vc = sb.VoiceIdentity(sdir, {}, "talk", mics=lambda: [types.SimpleNamespace(speaker="Me", device_name=mic)],
+                      speakers=lambda: [], seq=lambda: 1, talking=lambda: False)
+vc.made, vc.v = True, mine
+sb.EMBED = lambda audio: noisy(CLAUDE if abs(float(audio[0]) - 0.5) < 1e-6 else USER) if len(audio) >= 8000 else None
+echo_clip, user_clip = np.full(12000, 0.5, "float32"), np.full(12000, 0.1, "float32")       # 0.75 s each
+check("Claude's own voice heard back: not told before its print is made", not vc.claude_echo(echo_clip))
+sb.CLAUDE_PRINT.update(emb=np.asarray(CLAUDE) / np.linalg.norm(CLAUDE), voice="alba")
+check("  then its print says so, from 0.75 s", vc.claude_echo(echo_clip), mine.trusted)
+check("  and never the user's own voice", not vc.claude_echo(user_clip))
+check("  nor an utterance too short to tell", not vc.claude_echo(echo_clip[:4000]))
+open_echo = types.SimpleNamespace(speaker="Me", voiced=0.8, open_audio=lambda: (7, echo_clip))
+open_user = types.SimpleNamespace(speaker="Me", voiced=0.8, open_audio=lambda: (8, user_clip))
+check("  while Claude speaks, an utterance still open in its voice is someone else's (it never ducks for it);"
+      " the user's is theirs", vc.open_whose(open_echo) == "other" and vc.open_whose(open_user) == "you",
+      (vc.open_whose(open_echo), vc.open_whose(open_user), mine.trusted_on(mic)))
+sb.CLAUDE_PRINT.update(emb=None, voice=None)
+# Its print is made from its own voice as played here: its first seconds, once per voice.
+played = types.SimpleNamespace(backend=types.SimpleNamespace(neural="alba", own_secs=3.2, own_audio=[np.full(76800, 0.5, "float32")]),
+                               log=lambda m: None)
+sb.VoiceIO.learn_own(played)
+check("its print, made from its first seconds as played (24 kHz, to 16 kHz), on a thread of its own",
+      wait(lambda: sb.CLAUDE_PRINT["voice"] == "alba" and sb.CLAUDE_PRINT["emb"] is not None)
+      and float(sb.CLAUDE_PRINT["emb"] @ (CLAUDE / np.linalg.norm(CLAUDE))) > 0.8, sb.CLAUDE_PRINT["voice"])
+played.backend.own_secs = 1.0
+played.backend.neural = "jean"
+sb.VoiceIO.learn_own(played)
+check("  another voice, too little of it yet: none made", (time.sleep(0.2) or True) and sb.CLAUDE_PRINT["voice"] == "alba")
+sb.CLAUDE_PRINT.update(emb=None, voice=None)
 sb.EMBED = was_embed
 check("  what it knows of each mic is kept", json.loads((root / "voices.json").read_text())["me"]["inputs"].get(mic, 0) >= myvoice.INPUT_TRUST)
 # The app: the user's own voice listed and forgotten on its own; voices.json locked by both.

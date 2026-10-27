@@ -137,6 +137,7 @@ class AVFBackend(object):
         self._halts = 0          # halt()s so far
         self._ducked = False     # turned down and paused while the user talks over it (duck)
         self._ramped = False     # its first sound came in from quiet (ramp_in): once per engine
+        self.own_audio, self.own_secs = [], 0.0     # Standby's voice as played, its first seconds (VoiceIO.learn_own)
         self._fades = 0          # duck()s, unduck()s and halt()s so far: a newer one ends a fade
         import threading
         self._lock = threading.Lock()
@@ -226,6 +227,7 @@ class AVFBackend(object):
             process.open()
             self.speech = tts.Speech(process, _PlayerOut(self), log=self.log)
         self.neural, self._logged = neural, False
+        self.own_audio, self.own_secs = [], 0.0     # another voice: its print made again (VoiceIO.learn_own)
         if why or self.failed == self._why:          # a reason of the old choice's goes with it
             self.failed = why
         self._why = why
@@ -453,6 +455,7 @@ class AVFBackend(object):
     # cancelling converges on it meanwhile instead of on its loudest (Apple's advice: "ramp up
     # your playback audio volume at the start ... over the first ~200 ms").
     RAMP = 0.25
+    OWN_SECS = 4.0       # seconds of Standby's voice kept as played, for its print (VoiceIO.learn_own)
 
     def ramp_in(self):
         """The first sound of this engine: faded in (RAMP). Once; never after a duck or halt began."""
@@ -547,6 +550,9 @@ class _PlayerOut(object):
             b.first_sound = time.time()
         if self.fmt is None:
             self.fmt = self.tts.pcm_format(b.avf)
+        if b.own_secs < b.OWN_SECS:                 # its own voice, kept a moment: its print (VoiceIO.learn_own)
+            b.own_audio.append(np.asarray(samples, dtype=np.float32))
+            b.own_secs += len(samples) / float(self.tts.RATE)
         b._schedule(self.tts.pcm_buffer(b.avf, self.fmt, samples), self.fmt, done)
         if not b.player.isPlaying() and not b._ducked:
             b.ramp_in()

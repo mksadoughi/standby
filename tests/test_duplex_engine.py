@@ -371,6 +371,8 @@ volumes = []
 pn.setVolume_ = lambda v: (volumes.append(v), setattr(pn, "volume", v))
 for _ in range(3):                            # 0.24 s: held until 0.2 s is there, then it goes (tts.Speech.PREROLL)
     fp.on_audio(2, np.full(1920, 0.25, "float32"))
+check("  its own voice kept as played, its first seconds only: for its print (VoiceIO.learn_own)",
+      abs(bn.own_secs - 3 * 1920 / 24000.0) < 1e-6 and len(bn.own_audio) == 3, (bn.own_secs, len(bn.own_audio)))
 check("  its very first sound comes in from quiet, so the echo cancelling converges on it (Apple's advice)",
       volumes[:1] == [bn.LOW] and wait(lambda: volumes[-1:] == [1.0], 2) and bn._ramped, volumes)
 buf, _h = pn.scheduled[-1]
