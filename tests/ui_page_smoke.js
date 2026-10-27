@@ -71,21 +71,22 @@ eval(require("fs").readFileSync(process.env.UI_PAGE_JS, "utf8") + `
   attachVoice("live-1");
   ok("call view: its screen shows for the call's session", el("voice").style.display === "" && voice && voice.sid === "live-1");
   paintVoice({ state: "listening", level: 0.2, you: "what is <Orion>", claude: "", muted: false });
-  ok("voice: listening shows the words heard, as text, under Listening (the row at the bottom names its state)", el("vyou").textContent === "what is <Orion>"
-     && el("voice").className === "voice listening" && el("vstate").textContent === "Listening");
+  ok("voice: listening shows the words heard, as text; the orb says listening, no word for it (2026-10-27)", el("vyou").textContent === "what is <Orion>"
+     && el("voice").className === "voice listening hearing" && el("vstate").textContent === "", [el("voice").className, el("vstate").textContent]);
+  ok("  hearing you: the orb's hearing motion, held a moment after", el("voice").className.includes("hearing"));
   ok("  and the orb grows with the voice", parseFloat(el("orb").style["--s"]) > 1, el("orb").style["--s"]);
   paintVoice({ state: "listening", level: 0, you: "", claude: "", muted: false, preparing: "Getting the voice ready… 40%" });
-  ok("voice: the first time, it still says Listening", el("vstate").textContent === "Listening", el("vstate").textContent);
+  ok("voice: the first time, still no state word", el("vstate").textContent === "", el("vstate").textContent);
   ok("  and a quiet line says the voice is getting ready, with its percent", !el("vprep").hidden && el("vpreptxt").textContent === "Getting Standby's voice ready · 40%"
      && el("vprepfill").style["--p"] === "40%", [el("vpreptxt").textContent, el("vprepfill").style]);
   paintVoice({ state: "listening", level: 0, you: "", claude: "", muted: false, preparing: "Getting the voice ready…", preparing_pct: null });
   ok("  while loading, no number: no percent", el("vpreptxt").textContent === "Getting Standby's voice ready…" && el("vprep").classList.contains("unknown"), el("vpreptxt").textContent);
   paintVoice({ state: "listening", level: 0, you: "", claude: "", muted: false });
-  ok("  and plain Listening after, the line gone", el("vstate").textContent === "Listening" && el("vprep").hidden);
+  ok("  and after, the line gone", el("vstate").textContent === "" && el("vprep").hidden);
   paintVoice({ state: "thinking", you: "what is Orion?", claude: "", step: "", muted: false });
-  ok("voice: thinking says so", el("vstate").textContent === "Thinking…" && el("orb").title === "Tap to interrupt");
+  ok("voice: thinking: the orb says so (its dots), no word", el("voice").className.startsWith("voice thinking") && el("vstate").textContent === "" && el("orb").title === "Tap to interrupt");
   paintVoice({ state: "thinking", you: "who owns it?", claude: "", step: "", action: "Searching your files", actions: 3, muted: false });
-  ok("voice: Claude at work, its actions counted at the bottom right", el("vsteps").textContent === "Searching your files · 3" && el("vstate").textContent === "Thinking…", [el("vsteps").textContent, el("vstate").textContent]);
+  ok("voice: Claude at work, its actions counted at the bottom right", el("vsteps").textContent === "Searching your files · 3" && el("vstate").textContent === "", [el("vsteps").textContent, el("vstate").textContent]);
   paintVoice({ state: "thinking", you: "who owns it?", claude: "", step: "", action: "", actions: 4, muted: false });
   ok("  with no plain name: Taking actions", el("vsteps").textContent === "Taking actions · 4", el("vsteps").textContent);
   paintVoice({ state: "thinking", you: "who owns it?", claude: "", step: "Still waiting for Claude", actions: 0, muted: false });
@@ -110,7 +111,7 @@ eval(require("fs").readFileSync(process.env.UI_PAGE_JS, "utf8") + `
   await voiceTap();
   ok("voice: a tap on the orb interrupts", voiceCalls("interrupt") === 1);
   paintVoice({ state: "muted", you: "", claude: "", muted: true });
-  ok("voice: paused (muted) shows in the call's header: the play mark, Resume its tip, the state Paused", el("vmute").title === "Resume" && el("vstate").textContent === "Paused");
+  ok("voice: paused (muted): the play mark, Resume its tip; the grey orb says paused, no word", el("vmute").title === "Resume" && el("voice").className.startsWith("voice muted") && el("vstate").textContent === "");
   paintVoice({ state: "muted", you: "", claude: "", muted: true, waiting: true });
   ok("  paused with work waiting: a red dot on Resume, and its tip", el("vmute").classList.contains("waiting") && /waiting: resume to hear it/.test(el("vmute").title));
   paintVoice({ state: "muted", you: "", claude: "", muted: true });

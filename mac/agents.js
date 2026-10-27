@@ -687,13 +687,12 @@ function mxInstall() {
     if (no && el) { el.innerHTML = mxMicNoHtml(no); el.classList.add("mx-warn") } else if (el) el.classList.remove("mx-warn");
     const i = MX.call && ((MXW[MX.call.session] || {}).d || {}).info;
     $("vtime").textContent = i && i.started ? mmss(elapsed(i)) : "";
-    // busy, quietly (the user, 2026-10-25; no sound): thinking for over a second, or work going on, or stalled
+    // busy, quietly (the user, 2026-10-25; no sound): work going on, or stalled; thinking is the orb's own (its dots, 2026-10-27)
     const was = JSON.stringify(VTASKS); VTASKS = Array.isArray(st.tasks) ? st.tasks : null;
     if (JSON.stringify(VTASKS) !== was) mxCallLog();
-    VTHINK = st.state === "thinking" ? VTHINK || Date.now() : 0;
     const ts = VTASKS || [], working = ts.filter(t => t.state === "running" || t.state === "sent").length, waiting = ts.filter(t => t.state === "queued").length;
     const words = working || waiting ? [working && working + " working", waiting && waiting + " waiting"].filter(Boolean).join(" \u00b7 ")
-      : VTHINK && Date.now() - VTHINK > 1000 ? "Thinking" : ts.some(t => t.state === "stalled") ? "No progress lately" : "";
+      : ts.some(t => t.state === "stalled") ? "No progress lately" : "";
     const bz = $("vbusy"), stall = words === "No progress lately", key = words + stall;
     if (bz && bz._k !== key) { bz._k = key; bz.hidden = !words; bz.className = "vbusy" + (stall ? " stall" : "");
       bz.innerHTML = words ? (stall ? "" : '<span class="spin0"></span>') + esc(words) : "" }
@@ -772,7 +771,7 @@ function mxFadeIn(fresh, el) {
   el._drawn = true;
 }
 // The voice's own state, kept for the call's log and its busy chip: its task records, and since when it thinks
-let VTASKS = null, VTHINK = 0;
+let VTASKS = null;
 async function mxCallLog() {
   const el = $("mxcalllog"), c = MX.call;
   if (!el || !c || !c.session) return;
