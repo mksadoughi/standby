@@ -1913,19 +1913,31 @@ def is_talk(sid):
     return read_json(SESSIONS / sid / "meta.json").get("kind") == "talk"
 
 
-def _begin_ask(sid, question, voice=False):
+def _begin_ask(sid, question, voice=False, own=False):
     # An ended session (a meeting or a talk) is asked by typing, like a chat:
     # no recorder, no mic. Voice mode is the live session's only.
+    # own: a turn of Claude's own (a call's greeting): no words of the user's, so no row and nothing shown as asked
     if voice and sid != live_session():
         return {"error": "voice mode works in the live session"}
     with _lock:
         if sid in PENDING:
             return {"error": "still working on the previous question"}
-        PENDING[sid] = {"question": question, "started": time.time(), "progress": [], "voice": voice}
+        PENDING[sid] = {"question": "" if own else question, "started": time.time(), "progress": [], "voice": voice}
+    if own:
+        return None
     row = append_chat(sid, "me", question, voice=voice)
     with _lock:
         PENDING[sid]["row"] = row
     return None
+
+
+def pending_shown(sid):
+    """The question being answered, as the window draws it, or None: none for a turn of Claude's own."""
+    with _lock:
+        pending = dict(PENDING[sid]) if sid in PENDING else None
+        if pending:
+            pending["progress"] = list(pending["progress"])
+    return pending if pending and pending.get("question") else None
 
 
 # The last voice question answered in each session, {"qid", "rows"}: dropped
@@ -3405,13 +3417,8 @@ def lite_ask(sid, question, on_event, on_queued, heard=None):
         return "Stopped it."
     if question == LITE_OPENING:                   # the greeting: Claude's own turn, no words of the user's
         _lite_fresh_hello(sid, c)
-        refused = _begin_ask(sid, question, voice=True)
-        if refused:
+        if _begin_ask(sid, question, voice=True, own=True):
             return ""
-        with _lock:
-            row = (PENDING.get(sid) or {}).get("row")
-        if row is not None:
-            drop_chat_row(sid, row)
         return _run_ask(sid, question, voice=True, on_event=on_event, on_queued=on_queued)
     # What the voice knows before their words, for it alone: never part of the user's line (chat, window, export)
     notes = []
@@ -5376,10 +5383,7 @@ class Handler(BaseHTTPRequestHandler):
             sid = path.rsplit("/", 1)[1]
             if not valid_id(sid):
                 return self._json({"error": "no such session"}, 404)
-            with _lock:
-                pending = dict(PENDING[sid]) if sid in PENDING else None
-                if pending:
-                    pending["progress"] = list(pending["progress"])
+            pending = pending_shown(sid)
             chat = read_jsonl(SESSIONS / sid / "chat.jsonl")
             info = session_info(sid)
             # The folder chip follows a /cd in Claude Code: only here, for the one
