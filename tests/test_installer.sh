@@ -120,8 +120,8 @@ check "standby command linked to the repo" "[[ \"\$(readlink $H/.local/bin/stand
 check "standby-ctx linked" "[[ -x $H/.local/bin/standby-ctx ]]"
 check "no standalone meeting skill linked any more" "[[ ! -e $H/.claude/skills/meeting-standby ]]"
 P="$H/Applications/Standby.app/Contents"
-check "app bundle: Info.plist valid, asks for the microphone" \
-  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$P/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby' and d['CFBundleIdentifier']=='dev.standby.app' and d.get('NSMicrophoneUsageDescription')))\""
+check "app bundle: Info.plist valid, asks for the microphone, says why for the Desktop and Documents" \
+  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$P/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby' and d['CFBundleIdentifier']=='dev.standby.app' and d.get('NSMicrophoneUsageDescription') and 'project you work on' in d.get('NSDesktopFolderUsageDescription', '') and d.get('NSDocumentsFolderUsageDescription') == d['NSDesktopFolderUsageDescription']))\""
 E="$H/.standby/app-build/Standby.py"
 check "app built in alias mode from the generated entry point, with icon" \
   "[[ \"\$(cat $P/build.txt)\" == '$E|True|$ICON_STANDBY' ]]"
@@ -200,6 +200,12 @@ NOC="$T/noclaude"; mkdir -p "$NOC"; cp "$B"/* "$NOC"/; rm -f "$NOC/claude"
 HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$NOC:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.7" 2>&1; rc=$?
 check "  no Claude Code yet: the install still succeeds, and says how to add it later" \
   "[[ $rc -eq 0 ]] && grep -q \"Claude Code isn't on this Mac yet\" $T/out.7 && grep -q 'claude plugin marketplace add' $T/out.7"
+LOC="$T/localbin"; mkdir -p "$LOC"; cp "$B"/* "$LOC"/; rm -f "$LOC/claude"; mkdir -p "$H/.local/bin"; cp "$B/claude" "$H/.local/bin/claude"
+: > "$T/claude.args"
+HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$LOC:/usr/bin:/bin" SHELL=/bin/bash bash "$REPO/install.sh" --from-here > "$T/out.9" 2>&1; rc=$?
+rm -f "$H/.local/bin/claude"
+check "  Claude Code where its own installer puts it (~/.local/bin, not on the PATH): found, the plugin added" \
+  "[[ $rc -eq 0 ]] && grep -q 'plugin standby@standby, in every folder' $T/out.9 && grep -qx 'plugin install standby@standby --scope user' $T/claude.args && ! grep -q \"isn't on this Mac\" $T/out.9"
 CC_VERSION=2.1.250 run 8; rc=$?
 check "  Claude Code too old for the plugin (before 2.1.299): says so, and how to update" \
   "[[ $rc -eq 0 ]] && grep -q 'Claude Code 2.1.250 is too old for Standby: it needs 2.1.299 or later' $T/out.8 && grep -q 'claude update' $T/out.8"
