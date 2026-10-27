@@ -147,6 +147,7 @@ def ticks(n=5):
 
 
 sb._stop.clear()
+sb.VoiceIO.LEARNING = 0.0           # the echo cancelling's first seconds: their own checks below (learning)
 th = threading.Thread(target=sb.run_session, args=("meet",), kwargs={"no_claude": True}, daemon=True)
 th.start()
 wait(lambda: (root / "daemon.ready").exists())
@@ -375,6 +376,7 @@ wait(lambda: not vlive().get("saying"))
 
 halts = eng.halts
 talked_over("wait, what about the EU region")
+Script.voiced = 0.8                               # a person goes on speaking under the duck (its echo would stop)
 check("words of a turn over it: it stops, and the app is told why",
       wait(lambda: eng.halts > halts) and wait(lambda: any(r.get("barge_in") and r.get("why") == "words" for r in rows())),
       (eng.halts, rows()[-2:]))
@@ -408,10 +410,20 @@ check("its first seconds of voice: a moment of sound over it (its echo) doesn't 
 Script.voiced = 1.0
 check("  speech that goes on over it: it ducks, as before", wait(lambda: vlive().get("ducked") is True), vlive())
 Script.talking, Script.voiced = None, 0.0
-sb.VoiceIO.LEARNING = 4.0
 wait(lambda: vlive().get("ducked") is not True)
 speak(stop=True)
 wait(lambda: not vlive().get("saying"))
+# Counted in voice played, never the clock: a silence before the first answer is not learnt from
+# (talk-20261026-232015: "[QUIET]" said, then 13 s of quiet, and the learning was over by the answer).
+p0 = vlive().get("played")
+time.sleep(0.6)
+check("  learning counts its voice played: a silence adds nothing", vlive().get("played") == p0, (p0, vlive().get("played")))
+speak(say="Another long answer, about the hiring budget.")
+wait(lambda: vlive().get("saying"))
+check("    its voice playing does", wait(lambda: (vlive().get("played") or 0) >= p0 + 0.3, 3), (p0, vlive().get("played")))
+speak(stop=True)
+wait(lambda: not vlive().get("saying"))
+sb.VoiceIO.LEARNING = 0.0
 (sdir / "dictate").write_text("hold 7\n")
 wait(lambda: vlive().get("mode") == "hold")
 
@@ -532,7 +544,8 @@ FakeEngine.loading = False
 check("a sentence that never ends (the engine stopped): its engine made again, once, and playing",
       wait(lambda: len(engines) == n0 + 2 and engines[-1].mic is not None and vlive().get("speaks"))
       and time.time() - t0 >= 2.2 and engines[n0].mic is None, (len(engines) - n0, time.time() - t0, vlive()))
-check("  what the stopped one held counts as done: nothing waits on it", vlive().get("done", 0) >= speak_id[0], vlive())
+check("  what the stopped one held counts as done: nothing waits on it",
+      wait(lambda: vlive().get("done", 0) >= speak_id[0], 3), vlive())      # live.json is written behind
 speak(seq=10, say="A sentence that never ends, again.")
 check("stopping again: the voice is off for this voice mode, and it says why (the app shows it)",
       wait(lambda: vlive().get("half") and not vlive().get("speaks"))

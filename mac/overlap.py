@@ -24,6 +24,10 @@ SUSTAINED = 0.9     # seconds of speech since the duck: a turn, whatever the wor
 NO_WORDS = 0.8      # ducked this long, nothing said and nothing being said: a noise
 MAX_DUCK = 1.6      # never ducked longer: still talking is a turn, quiet is not
 MIN_WORDS = 3       # words of a turn that give way while still talking (Vapi's recommended numWords)
+# Words with this little speech since the duck are the voice's own, heard back: ducked, its echo
+# stops, a person goes on. Measured: the echo that cut talk-20261026-232015 twice had 0.06 and
+# 0.15 s, echo that went on 0.18 and 0.21 s; people who stopped it 0.69 and 0.78 s.
+WORDS_SPEECH = 0.3
 
 
 def decide(text, since, voiced, speaking):
@@ -37,14 +41,18 @@ def decide(text, since, voiced, speaking):
     if kind in (interrupt.CANCEL, interrupt.WAIT):
         return COMMIT, kind
     if kind == interrupt.REAL:
-        if text.rstrip().rstrip("\"')]}").endswith("?"):
-            return COMMIT, "a question"
         core = [w for w in ws if w not in interrupt._FILLER]     # "Yeah, I", "Sit, um": one word, really
-        if len(core) >= MIN_WORDS:
+        sentence = text.rstrip().rstrip("\"')]}").endswith("?") or len(core) >= 2     # one word ("no") stops it as ever
+        if sentence and voiced < WORDS_SPEECH:
+            kind = "no speech"                # words, but nothing said since the duck: its own echo, maybe
+        elif text.rstrip().rstrip("\"')]}").endswith("?"):
+            return COMMIT, "a question"
+        elif len(core) >= MIN_WORDS:
             return COMMIT, "words"
-        kind = interrupt.classify(" ".join(core)) if core else interrupt.NOISE
-        if kind == interrupt.REAL and (len(core) == 1 or not speaking):
-            return COMMIT, "words"                    # one word that means something, or said and stopped
+        if kind == interrupt.REAL:
+            kind = interrupt.classify(" ".join(core)) if core else interrupt.NOISE
+            if kind == interrupt.REAL and (len(core) == 1 or not speaking):
+                return COMMIT, "words"                # one word that means something, or said and stopped
     if speaking and voiced >= SUSTAINED:
         return COMMIT, "kept talking"
     if since >= MAX_DUCK:
