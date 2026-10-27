@@ -2027,6 +2027,12 @@ class VoiceIO(object):
 
     POLL = 0.02           # a sentence written by the app starts within this
     BARGE_MIN = 0.3       # seconds of the user's speech over Claude's that stop it
+    # The echo cancelling learns the call's sound from Claude's first seconds of voice, and a
+    # faint echo gets through meanwhile: it ducked on its own greeting, a second's gap mid-
+    # sentence (talk-20261026-212951, 203402, 195509, all 1.6 to 2.3 s in). Then it ducks once
+    # the voice is told to be the user's (open_whose), or on BARGE_LEARNING of speech.
+    LEARNING = 4.0        # seconds of Claude's voice played before the echo cancelling has it
+    BARGE_LEARNING = 0.8
     # A sentence still "playing" after this long is an engine that stopped (a route
     # change, a voice that hung): about twice as slow as any voice speaks, plus a start.
     STUCK_BASE, STUCK_PER_CHAR = 5.0, 0.15
@@ -2061,6 +2067,7 @@ class VoiceIO(object):
         self.failed = None    # why the engine stopped working: the app's own voice speaks then
         self._warm = False    # a sentence has played in full: Standby's voice is warm
         self.ducked = None    # since when it is paused under the user's voice (duck), or None
+        self.first_sound = None   # when its first sentence began to play (learning)
         self._turn_of = {}    # a sentence's turn, as the app wrote it (the trace's)
 
     def start(self, seq, mics):
@@ -2123,6 +2130,12 @@ class VoiceIO(object):
         """Claude is saying something."""
         with self._lock:
             return self.current is not None or bool(self._queue)
+
+    @property
+    def learning(self):
+        """Its first seconds of voice: the echo cancelling still learns it (LEARNING). On
+        headphones there's no echo to learn."""
+        return self.aec and (self.first_sound is None or time.time() - self.first_sound < self.LEARNING)
 
     @property
     def can_duck(self):
@@ -2256,6 +2269,8 @@ class VoiceIO(object):
             stuck = None
             if self.current is not None and loading:
                 self.since = time.time()             # it waits for the voice: its time starts once it can play
+            elif self.current is not None and self.first_sound is None:
+                self.first_sound = time.time()
             if self.current is not None and not playing:
                 b = self.backend
                 trace(TRACE["sid"], "said", self._turn_of.pop(self.current[0], None), id=self.current[0],
@@ -3617,6 +3632,9 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
                 or not any(c.onset >= VoiceIO.BARGE_MIN for c in mics())):
             return
         over = [c for c in mics() if c.onset >= VoiceIO.BARGE_MIN]
+        if vio.learning and not any(ident.open_whose(c) == "you" or (ident.open_whose(c) != "other"
+                                                                      and c.onset >= VoiceIO.BARGE_LEARNING) for c in over):
+            return                           # its own echo, maybe: not yet
         if any(ident.ignoring_others(c.speaker) for c in over):
             whose_now = [ident.open_whose(c) for c in over]
             # Not yet told apart (None): it ducks now, and the words decide (overlap_step); only
