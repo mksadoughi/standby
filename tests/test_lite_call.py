@@ -824,6 +824,32 @@ time.sleep(1.0)
 check("they go on talking before it hangs up: the call stays", ended == [] and sid in ui.LITE_CALLS, ended)
 ui.lite_ended(sid)
 
+# The Claude Code the call is with quits (Ctrl+C, its window closed) without ending it: the call ends too
+# (the user's VM run, 2026-10-27: the call went on with nobody's session behind it)
+import subprocess as _sp
+cc_proc = _sp.Popen(["/bin/sleep", "60"])
+real_cc_pid, ui.CC_CHECK_EVERY = ui._cc_pid, 0.1
+ui._cc_pid = lambda cc: cc_proc.pid if cc == CC else None
+live[0] = None
+r = ui.LITE_POST["/api/lite/call"]({"cc": CC, "cwd": work})
+sid = r["session"]
+ended.clear()
+time.sleep(0.6)
+check("a call's Claude Code is watched by its process: running, the call stays",
+      ui.LITE_CALLS.get(sid, {}).get("cc_pid") == cc_proc.pid and ended == [] and sid in ui.LITE_CALLS, ended)
+cc_proc.kill(); cc_proc.wait()
+check("  it quits: the call ends as End ends it, the stream saying so", wait(lambda: ended == [sid]) and sid not in ui.LITE_CALLS
+      and any(e.get("call") == "state" and e.get("phase") == "ended" for _c, e in out), ended)
+ui._cc_pid = lambda cc: None
+live[0] = None
+r = ui.LITE_POST["/api/lite/call"]({"cc": CC, "cwd": work})
+sid = r["session"]
+ended.clear()
+time.sleep(0.4)
+check("  a Claude Code it can't find (no registry): never ended for it", ended == [] and sid in ui.LITE_CALLS, ended)
+ui.lite_ended(sid)
+ui._cc_pid = real_cc_pid
+
 # ---------------------------------------------------------------- Claude starting one itself: it rings on the band
 evs = []
 was_ev = ui.MSG.get("event")

@@ -3292,6 +3292,35 @@ def _lite_watchdog(sid, c):
             _lite_set(sid, c, t, "stalled")
 
 
+def _cc_pid(cc):
+    """The process of the running Claude Code that holds this conversation (Claude Code's own registry of its
+    sessions), or None when it can't be told."""
+    try:
+        import sbagents
+        entry = sbagents.holders().get(cc)
+        return int(entry["pid"]) if entry else None
+    except Exception:
+        return None
+
+
+def _cc_gone(c):
+    """The call's Claude Code has quit (Ctrl+C, its window closed): its process is gone. Watched by
+    process, not conversation id, so a /clear in that Claude Code (a new id, the same process) is no end."""
+    pid = c.get("cc_pid")
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return False
+    except ProcessLookupError:
+        return True
+    except OSError:                                # someone else's process: still running
+        return False
+
+
+CC_CHECK_EVERY = 2.0      # s between looks at the call's Claude Code
+
+
 def _lite_voices():
     return read_json(LITE_VOICES) or {}
 
@@ -3378,7 +3407,7 @@ def lite_call(b):
     if r.get("error"):
         return r
     sid = r["id"]
-    LITE_CALLS[sid] = {"cc": cc, "cwd": folder, "running": False, "doing": "", "said": "", "turn": None, "gist": None,
+    LITE_CALLS[sid] = {"cc": cc, "cc_pid": _cc_pid(cc), "cwd": folder, "running": False, "doing": "", "said": "", "turn": None, "gist": None,
                        "fresh": fresh, "voice": voice, "since": time.time()}
     started = session_info(sid).get("started") or time.time()
     # Bound like a Lite meeting ("lite:<cc>"), as a call: the card (keep or forget) is served as theirs.
@@ -3408,6 +3437,13 @@ def _lite_watch(sid):
             seen["cap"] = cap
             _lite_out(c["cc"], {"call": "caption", "session": sid, "you": cap[0], "said": cap[1]})
         _lite_watchdog(sid, c)
+        # the Claude Code the call is with has quit: the call ends as End ends it (its card follows)
+        if time.time() - seen.get("cc_at", 0) > CC_CHECK_EVERY:
+            seen["cc_at"] = time.time()
+            if _cc_gone(c):
+                log("lite: call %s: its Claude Code (pid %s) has quit; the call ends" % (sid, c.get("cc_pid")))
+                lite_call_end({"session": sid})
+                break
         # what the band says under the call: the voice's phase, work taken deeper, the voice failing
         state = (phase, bool(c.get("running")), st.get("notice") or "", st.get("retrying_since"), lite_waiting(sid, st))
         if state != seen.get("state"):
