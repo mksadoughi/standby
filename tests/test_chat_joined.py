@@ -75,7 +75,8 @@ def fake_ask(question, err=None, on_progress=None, on_queued=None, session=None,
 
 shown = []                                          # what the page would show as the ask's steps
 agentctl.ask = fake_ask
-agentctl.cancel = lambda qid, where=None, keep=False: cancelled.append(qid)
+calls = []                                          # each cancel: (qid, keep, dropped)
+agentctl.cancel = lambda qid, where=None, keep=False, dropped=False: (cancelled.append(qid), calls.append((qid, keep, dropped)))
 chat = lambda: [(r["role"], r["text"]) for r in ui.read_jsonl(ui.SESSIONS / SID / "chat.jsonl")]
 
 
@@ -116,8 +117,9 @@ ask("And who owns it?", got)
 check("an early question answered: in the chat for now", chat()[-2:] == [("me", "And who owns it?"),
                                                                      ("ai", "The answer to And who owns it?")])
 ui.cancel_voice(SID, got[0], quiet=True)
-check("  they went on after all: both its rows go, and nothing is cancelled in the agent",
-      chat() == before and got[0] not in cancelled, (chat(), cancelled))
+check("  they went on after all: both its rows go, and the agent is told it was dropped (its notes leave the "
+      "voice's next turn), never that it was cut off", chat() == before
+      and [c for c in calls if c[0] == got[0]] == [(got[0], False, True)], (chat(), calls))
 ui.cancel_voice(SID, got[0], quiet=True)
 check("  and a second word of it changes nothing", chat() == before, chat())
 
