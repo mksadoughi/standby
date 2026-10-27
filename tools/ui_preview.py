@@ -418,7 +418,7 @@ SCENES = r"""
 # The orb's window, then the words' window (the "words-" scenes, at /companion#words).
 CMP_SCENES = ["idle", "recording", "recording-roll", "recording-hover", "left-hover",
               "listening", "hearing", "thinking", "thinking-steps", "thinking-steps-hover", "holding", "speaking", "muted", "muted-waiting", "muted-waiting-hover", "voice-hover", "left-voice-hover",
-              "preparing", "down", "down-hover", "micdenied", "words-micdenied", "words-speaking"]
+              "preparing", "down", "down-hover", "micdenied", "words-micdenied", "words-speaking", "words-tab-hover"]
 CMP_FAKE = r"""
 const SCENE = new URLSearchParams(location.search).get("s") || "idle";
 // A live call: the orb is for calls only (a meeting never has one).
@@ -439,7 +439,9 @@ const DATA = { idle: { live: null, voice: V("off") }, recording: { live: LIVE(),
   "words-micdenied": { live: Object.assign(LIVE(), { mic_denied: true }), voice: V("off") },
   "recording-roll": { live: LIVE(), voice: V("off") },
   // on a call, just the orb: no time or captions above it
-  "words-speaking": { live: LIVE(), voice: V("speaking", { claude: "Running them now." }) } };
+  "words-speaking": { live: LIVE(), voice: V("speaking", { claude: "Running them now." }) },
+  // pointed at: the call's tab above the orb, its session's name and time
+  "words-tab": { live: Object.assign(LIVE(), { call: { agent: "a-planner", name: "Guest TTL fix for the fares cache", started: Date.now() / 1000 - 252 } }), voice: V("listening") } };
 // ?live=1: your voice moves while it hears you, so a page can show the real orb moving
 const LIVEV = new URLSearchParams(location.search).get("live");
 const SAID = t => (Math.sin(t * 2.1) > -.35 ? 1 : 0) * Math.max(0, Math.abs(Math.sin(t * 19.5)) * .7 + Math.abs(Math.sin(t * 33 + 1)) * .3) * .35;

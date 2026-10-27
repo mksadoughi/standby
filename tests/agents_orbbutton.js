@@ -1,5 +1,5 @@
 // Mini window is a button you can see (the user, 2026-10-22: hidden in ⋯ it was lost), in a live call's
-// header, in words (2026-10-23; Pause and End moved to the row at the bottom, 2026-10-25); it sends the call to the mini window, which is
+// header, an icon named in its tip (2026-10-27; Pause and End moved to the row at the bottom, 2026-10-25); it sends the call to the mini window, which is
 // only for calls: a meeting has none.
 const fs = require("fs"), path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "..", "mac", "agents.js"), "utf8");
@@ -10,13 +10,13 @@ var MX = {}, esc = s => String(s == null ? "" : s), MXW = {}, MXI = {back: "", m
   mxDay = () => "Today", clock = () => "10:00", mxMin = () => "4 min";
 eval(src.match(/const MXMARKS = [^\n]*\n/)[0].replace("const", "var")); eval(src.match(/const mxLiveMark = [^\n]*\n/)[0].replace("const", "var"));
 eval(pick("function mxOpenHead(m)"));
-const orb = /<button class="vtxt" onclick="mxToOrb\(\)">Mini window<\/button>/;
+const orb = /<button class="iconbtn" onclick="mxToOrb\(\)" title="Mini window" aria-label="Mini window"><svg/;
 const live = mxOpenHead({id: "m1", session: "s1", kind: "meeting", live: true});
 check("a live meeting's header: no Mini window (it is only for calls), nor Pause or Stop (they're in its row at the bottom)", !/mxToOrb|Mini window|mxPause|mxEndMeeting/.test(live), live);
 check("  an ended one: none", !/mxToOrb/.test(mxOpenHead({id: "m2", session: "s2", kind: "meeting", live: false, duration_s: 240})));
 check("  nor its ⋯", !/Orb|orb\(/.test(pick("function mxWinMenu(e, id)")));
 const head = ui.slice(ui.indexOf('<header class="vhead"'), ui.indexOf("</header>", ui.indexOf('<header class="vhead"')));
-check("a call's header: Mini window, in words; Pause and End are in its row at the bottom (2026-10-25)", orb.test(head) && !/voiceMute|closeVoice/.test(head), head);
+check("a call's header: Mini window, an icon with its tip; Pause and End are in its row at the bottom (2026-10-25)", orb.test(head) && !/voiceMute|closeVoice/.test(head), head);
 const stage = ui.slice(ui.indexOf('<div class="vstage">'), ui.indexOf("</main>"));
 check("  the row at the bottom: the orb, the words, then Pause and End", /id="orb"[\s\S]*class="vwords"[\s\S]*id="vmute"[\s\S]*onclick="closeVoice\(\)"/.test(stage) && ui.indexOf('id="mxcalllog"') < ui.indexOf('<div class="vstage">'), stage.slice(0, 400));
 check("  and ⋯ no longer hides it", !/Mini window|Minimize to orb/.test(pick("function mxCallMenu(e)")));
