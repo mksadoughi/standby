@@ -1780,7 +1780,7 @@ else:
     c._deliver("testing one two", None, None)
     m = c.setup.model
     check("  words: in the box, never pasted into an app, and it's done",
-          m["title"] == d.SETUP_DONE and m["steps"][3]["box"] == "testing one two" and m["steps"][3]["button"] == "Done"
+          m["title"] == d.SETUP_DONE and m["count"] == "All done" and m["steps"][3]["box"] == "testing one two" and m["steps"][3]["button"] == "Done"
           and m["steps"][3]["note"] == "Dictation is on. Use F5 in any app." and len(c.inserter.got) == pasted, m["steps"][3])
     c.setupAction_(Tag(4))
     check("  Done closes the window", c.setup.visible is False)
