@@ -134,6 +134,10 @@ check("  with the voice's hand-off on, and no earlier voice yet", v.get("handoff
       and "Claude Code" in v.get("name", "") and v.get("folder") == work and not v.get("brief"), v)
 check("  the voice speaks first: the call opens with its greeting turn (who it is: the agent's call prelude)",
       getattr(ui.VOICE[sid], "opening", None) == ui.LITE_OPENING, v)
+_title, ui.cc_title = ui.cc_title, lambda cc: "Planner" if cc == CC else ""
+check("  the band names the session the call is with, by its own name", (ui.lite_call_live(CC) or {}).get("name") == "Planner",
+      ui.lite_call_live(CC))
+ui.cc_title = _title
 answers.append("Hey, what are we working on?")
 check("  that first turn goes to the voice as it is (what to pick up is in the session's summary), nothing handed on",
       ui.ask_spoken(sid, ui.LITE_OPENING, None, None) == "Hey, what are we working on?"

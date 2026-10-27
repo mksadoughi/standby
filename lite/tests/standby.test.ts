@@ -257,6 +257,16 @@ test('on a call: one line, p pause · e end, and the latest words under it, the 
   expect(await band.find({ type: 'Text', text: '\u273b On it.' })).toMatchObject({ props: { dimColor: true, wrap: 'truncate-end' } })    // the voice speaking: its line
 })
 
+test('on a call: the band names the session it is with, by its own name, so it is clear where the work goes', async ($, on) => {
+  const seen: any = { posts: [] as any[], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1, phase: 'listening', name: 'Planner' } }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Text', text: 'On a call with Planner' })).toBeDefined()
+})
+
 test('VS Code while live: quiet links beside Full window, Pause and End, short (the user, 2026-10-21)', async ($, on) => {
   const seen: any = { posts: [] as any[], submitted: [], aborted: [], status: [], can: { listen: true, window: true } }
   mock.clock(on)

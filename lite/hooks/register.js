@@ -776,9 +776,11 @@ async function band($, e, next) {
     ? keyset([['end', 'e', 'end', 'endCall'], DIV, ...orbKey, ...winKey(), ...setKey], [['end', 'End', 'endCall', true], DIV, ...orbWord, ...winWord, ...setWord])
     : keyset([['mute', 'p', paused ? 'resume' : 'pause', 'mute', held], ['end', 'e', 'end', 'endCall'], DIV, ...orbKey, ...winKey(), ...setKey],
       [['mute', paused ? 'Resume' : 'Pause', 'mute', true, held], ['end', 'End', 'endCall', true], DIV, ...orbWord, ...winWord, ...setWord])
+  // which session it's with, by its own name: the hand-offs go there, whichever panel is watched
+  const who = live.name || 'Claude'
   const top = paused
-    ? line([...mark, fixed('‖'), fit('Paused · on a call with Claude'), time, ...keys])
-    : line([...mark, fixed('◉', { color: MARK }), fit('On a call with Claude'), time, ...keys])
+    ? line([...mark, fixed('‖'), fit('Paused · on a call with ' + who), time, ...keys])
+    : line([...mark, fixed('◉', { color: MARK }), fit('On a call with ' + who), time, ...keys])
   // the voice's words after Claude Code's own ✻, the user's plain
   const said = S.last ? (S.last.voice ? '✻ ' : '') + S.last.text : ''
   const sub = cs.retrying ? belowSlow('The voice isn’t answering. Trying again', cs.retrying, { dimColor: false, color: WARN })
