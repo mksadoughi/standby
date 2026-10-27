@@ -6078,9 +6078,11 @@ background:var(--rec);box-shadow:0 0 0 2px var(--bg)}
    lines of words, Pause and End; one height whatever is said, so the conversation above never moves */
 .vstage{flex:none;width:100%;display:flex;align-items:center;gap:10px;height:78px;padding:10px 12px 12px;background:var(--dock);border-top:1px solid var(--line)}
 .vrow{display:flex;align-items:center;gap:7px;height:18px;min-width:0;overflow:hidden}
-.vwords{height:38px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;transition:height .2s ease}
-/* no words yet: the status row sits level with the orb, and moves up as the words come */
-.vtext:not(:has(.vcap:not(:empty))):not(:has(.vprep:not([hidden]))) .vwords{height:0}
+/* the words sit level with the orb, not at the row's bottom (the user, 2026-10-27): the text is only as
+   tall as it is, up to its newest two lines, and the block is centred beside the orb; the status row
+   above it shows only when it has something to say */
+.vwords{max-height:38px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.vrow:not(:has(.vstate:not(:empty))):not(:has(.vbusy:not([hidden]))):not(:has(.vsteps:not(:empty))){display:none}
 .vtext{flex:1;min-width:0}
 .vlog{flex:1;min-height:0;overflow:auto;width:100%;max-width:680px;margin:0 auto;padding:8px 16px 40px;
 -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 28px),transparent)}
