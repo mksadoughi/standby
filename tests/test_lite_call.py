@@ -85,7 +85,7 @@ ui.start_talk = fake_talk
 real_begin_ask, real_run_ask = ui._begin_ask, ui._run_ask
 begun = []
 ui._begin_ask = lambda sid, q, voice=False, own=False: begun.append((q, own))
-ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None: (asked.append(q), answers.pop(0))[1]
+ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None, commit=None: (asked.append(q), answers.pop(0))[1]
 chat = []
 ui.append_chat = lambda *a, **k: chat.append((a, k))
 real_voice_action = ui.voice_action
@@ -221,6 +221,7 @@ def handoff_of(words, task, received=True):
 
 
 hand = lambda task: handoff_of(task, task)
+
 tasks_txt = lambda: (ui.SESSIONS / sid / "tasks.txt").read_text() if (ui.SESSIONS / sid / "tasks.txt").exists() else ""
 ev, said = handoff_of("run the tests and fix what fails", "run the tests and fix what fails", received=False)
 check("real work: handed to the session with the voice's words, marked as from the call, the app saying nothing",
@@ -250,6 +251,26 @@ check("\"stop\" while it works: the session's turn is stopped, no model asked; t
       (out, said, tasks_txt()))
 answers.append("Okay.")
 check("  \"stop\" with nothing running is just a turn", ui.ask_spoken(sid, "stop", None, None) == "Okay." and "abort" not in kinds()[1:])
+
+# Asked early, and they went on: what its answer does never goes; the turn that is theirs carries
+# what the early one would have (a [SUMMARY], the return from a pause, words they typed).
+out.clear()
+answers.append("[HANDOFF] Write a file.")
+ui.LITE_CALLS[sid]["rang"] = True
+said = ui.ask_spoken(sid, "Write a file.", None, None, commit=lambda: False)
+check("asked early on \"Write a file.\", and they went on: nothing handed to the session, nothing said",
+      "handoff" not in kinds() and said == "" and ui.LITE_CALLS[sid].get("rang") is True, (out, said))
+answers.append("Sure, what should it be called?")
+ui.ask_spoken(sid, "Write a file. But before you write it, confirm the name with me.", None, None)
+check("  their whole turn is asked, with what the dropped one carried", ui.LITE_RESUMED in asked[-1]
+      and asked[-1].endswith("confirm the name with me.") and "handoff" not in kinds(), asked[-1])
+answers.append("[HANDOFF] Run the tests.")
+ui.ask_spoken(sid, "Run the tests.", None, None, commit=lambda: True)
+check("  an early question that was their turn: its hand-off goes", kinds() == ["handoff"], out)
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "id": [e for _c, e in out if e.get("call") == "handoff"][-1]["id"], "kind": "received"})
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Tests pass."})
+for t in ui.LITE_CALLS[sid]["tasks"].values():
+    t["seen"] = True
 
 # ---------------------------------------------------------------- what came back: told when both are quiet, worded then
 import agentctl  # noqa: E402
@@ -759,6 +780,7 @@ ui.lite_ended(r["session"])
 
 # ---------------------------------------------------------------- the voice ends the call
 # Through the real ask (only the voice's model stands in): its goodbye is said, then the call ends as End ends it.
+
 ui._begin_ask, ui._run_ask = real_begin_ask, real_run_ask
 ui.claude_on = lambda s: True
 live[0] = None

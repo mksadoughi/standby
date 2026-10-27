@@ -838,6 +838,41 @@ check("  the turn went on to say something else: the early one is cancelled, nev
       wait(lambda: cancelled == ["q2"], 2) and early.worker.join(3) is None and spk3.said[2:] == [], (cancelled, spk3.said))
 mode["slow"] = False
 
+# What an early answer does waits for the turn: "Write a file." (pause) "But before you write it,
+# confirm the name with me." handed "Write a file." on before they'd finished. The app acts on an
+# answer only once commit() says the turn is theirs (ui.ask_spoken), as this ask does.
+acted, acting_asked = [], []
+
+
+def acting_ask(text, on_event, on_queued, heard=None, commit=None):
+    acting_asked.append(text)
+    on_queued("qa%d" % len(acting_asked))
+    if commit is None or commit():
+        acted.append(text)
+    return "[HANDOFF] " + text
+
+
+g = voice.VoiceSession("m1", sdir, ask=acting_ask, cancel=lambda *a, **k: None, speaker=FakeSpeaker())
+g.state = "listening"
+g._ask_early({"text": "Write a file.", "turn": 5})
+first = g._early
+check("asked early on \"Write a file.\": Claude is asked, and its hand-off waits for the turn",
+      wait(lambda: acting_asked == ["Write a file."], 2) and (time.sleep(0.3) or True) and acted == [], (acting_asked, acted))
+whole = "Write a file. But before you write it, confirm the name with me."
+check("  they went on: the early question is dropped", g._take_early(whole) is None)
+check("    and its hand-off never goes", first.worker.join(3) is None and not first.worker.is_alive() and acted == [], acted)
+q = g._start_ask(whole)
+q.worker.join(5)
+check("  their whole turn: its hand-off goes at once, with both sentences", acted == [whole], acted)
+g.state = "listening"
+g._ask_early({"text": "Run the tests.", "turn": 6})
+early_q = g._early
+wait(lambda: len(acting_asked) == 3, 2)
+t0 = time.time()
+check("an early question that was their turn: taken, and its hand-off goes at once",
+      g._take_early("Run the tests.") is early_q and wait(lambda: acted[-1:] == ["Run the tests."], 2)
+      and time.time() - t0 < 1.0, acted)
+
 # The recorder's likely_turn rows drive it: asked early, then taken or dropped.
 recorder["on"] = True
 threading.Thread(target=fake_recorder, daemon=True).start()
