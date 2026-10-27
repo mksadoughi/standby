@@ -152,6 +152,12 @@ check("  then the sound refused: at Screen & System Audio Recording", opened.rea
 heard()
 check("  nothing refused: nothing opens", ui.lite_permission({"session": SID}) == {"ok": True, "allowed": True} and len(opened.read_text().split()) == 2)
 check("  a session that isn't live: refused", "error" in ui.lite_permission({"session": "meeting-20200101-000000"}))
+(ui.SESSIONS / SID / "refused.json").write_text(json.dumps({"folder": "Desktop", "at": time.time()}))
+check("a folder macOS refuses the meeting's Claude: named, for the band", access_now() == {"meeting_audio": "allowed", "mic": "allowed"}
+      and L.state(CC)["live"].get("folder_denied") == "Desktop", L.state(CC)["live"])
+ui.lite_permission({"session": SID})
+check("  Open Settings: at Files & Folders", opened.read_text().split()[-1] == ui.FOLDERS_PANE, opened.read_text())
+(ui.SESSIONS / SID / "refused.json").unlink()
 (ui.SESSIONS / SID / ui.addmac.AGENT_FILE).write_text(json.dumps(bound))
 (ui.SESSIONS / SID / "live.json").unlink()
 

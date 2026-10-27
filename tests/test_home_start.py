@@ -64,5 +64,18 @@ sa.start_dir(HOME, ["claude", "--resume", OWN])
 check("the agent's own conversation, resumed: copied only once, its newer turns kept",
       json.loads(open(mine(OWN)).read())["n"] == "newer, the agent's")
 
+# A read macOS refuses in a guarded folder (Don't Allow, once): noted for the band, in the session's folder
+SID = "talk-20261027-050000"
+sdir = os.path.join(sa.ROOT, "sessions", SID)
+os.makedirs(sdir, exist_ok=True)
+refused = lambda: json.load(open(os.path.join(sdir, "refused.json"))) if os.path.exists(os.path.join(sdir, "refused.json")) else None
+ev = lambda text: {"type": "user", "message": {"content": [{"type": "tool_result", "is_error": True, "content": text}]}}
+sa.note_refused(SID, ev("EPERM: operation not permitted, scandir '/tmp/x'"))
+check("a read refused outside the guarded folders: nothing said", refused() is None)
+sa.note_refused(SID, ev([{"type": "text", "text": "Error: EPERM: operation not permitted, open '%s/Desktop/app/README.md'" % HOME}]))
+check("one refused in Desktop: noted, by the folder's name", (refused() or {}).get("folder") == "Desktop", refused())
+sa.note_refused(SID, ev("File does not exist: %s/Documents/x" % HOME))
+check("  another error there (not a refusal): the note stays as it was", (refused() or {}).get("folder") == "Desktop")
+
 print("ALL PASS" if not fails else "%d FAILED" % len(fails))
 sys.exit(1 if fails else 0)

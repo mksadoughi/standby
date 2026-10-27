@@ -76,6 +76,9 @@ function access(live) {
     const text = ACCESS[what][live[what]]
     if (text) return { text, refused: live[what] === 'denied' }
   }
+  // a folder macOS refuses the call's Claude (its project is in it, and Don't Allow was chosen)
+  if (live.folder_denied) return { refused: true,
+    text: 'Standby can\u2019t read your ' + live.folder_denied + ' folder \u00b7 allow it in Privacy & Security > Files & Folders' }
   return null
 }
 
