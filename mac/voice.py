@@ -1388,6 +1388,8 @@ class VoiceSession(object):
         question = question.strip()
         if not question:
             return
+        if ask is not None:
+            ask.decide(True)                       # the turn takes it: what its answer does goes now
         seen = time.time()
         mic = not (self.muted or self.dictating())   # the mic stays the user's while Claude thinks
         if not mic:
