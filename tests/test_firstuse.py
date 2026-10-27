@@ -68,6 +68,9 @@ check("all done: You're all set, All done, ticks, Starting your meeting…",
       (v["title"], v["count"], [x["state"] for x in v["steps"]], v["go"]) == ("You're all set", "All done", ["done", "done"], "Starting your meeting…"), v)
 v = fu.view("meeting", ["mic", "sound"], {"mic": "allowed", "sound": "ask"}, skip=True)
 check("  skipped: the sound marked skipped, still starting", v["go"] and v["steps"][1]["state"] == "skipped", v)
+check("a failed start's cause, as a sentence: no doubled colons, the recorder's fallback said plainly",
+      (fu.cause("Standby is busy with another call or meeting: end it first"), fu.cause("Your Mac didn't start"), fu.cause(None))
+      == ("Standby is busy with another call or meeting. End it first.", "Standby couldn't start listening.", "Standby couldn't start listening."))
 check("complete: all allowed, or the sound skipped", fu.complete(["mic", "sound"], {"mic": "allowed", "sound": "ask"}, True)
       and not fu.complete(["mic", "sound"], {"mic": "allowed", "sound": "ask"}))
 
@@ -188,7 +191,7 @@ ui.lite = lambda: types.SimpleNamespace(listen=lambda b: {"error": "Your Mac did
 ui.setup_hold("meeting", {"cc": "cc-1", "capture": "mic"})
 STATES.update(mic="allowed")
 check("a start that fails after setup: the window says so, with Close", wait(lambda: (ui.setup_for("cc-1") or {}).get("phase") == "failed")
-      and ui.setup_view()["error"] == "The meeting didn't start: Your Mac didn't start" and ui.setup_view()["button"] == "Close"
+      and ui.setup_view()["error"] == "Standby couldn't start listening." and ui.setup_view()["button"] == "Close"
       and ui.setup_view()["retry"] == "Try again from Claude Code.", ui.setup_view())
 check("  Close: gone", ui.setup_act({"do": "close"}) == {"ok": True} and ui.setup_for("cc-1") is None)
 

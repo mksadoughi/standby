@@ -78,6 +78,17 @@ def complete(steps, states, skip=False):
     return all(settled(k, states, skip and can_skip(steps)) for k in steps)
 
 
+def cause(error):
+    """Why a start failed, as the window says it under "Couldn't start your ...": a sentence of the
+    start's own error ("Standby is busy with another call or meeting. End it first."); the recorder
+    not starting, said plainly."""
+    text = str(error or "").strip().rstrip(".")
+    if not text or text == "Your Mac didn't start":
+        return "Standby couldn't start listening."
+    text = ". ".join(p[:1].upper() + p[1:] for p in text.split(": "))
+    return text + "."
+
+
 def view(kind, steps, states, pressed=(), skip=False, phase="open", error=None):
     """What the window shows: {title, sub, count, steps: [{key, n, name, why, state, button, do, note,
     waiting, how, skip}], go, error, retry}. state: done, skipped, current or later; only the current step has
@@ -111,7 +122,7 @@ def view(kind, steps, states, pressed=(), skip=False, phase="open", error=None):
     many = len(steps) > 1
     if phase == "failed":
         return {"title": "Couldn't start your %s" % what, "sub": "", "count": "", "steps": out, "go": None,
-                "error": "The %s didn't start: %s" % (what, error or "something went wrong"), "retry": RETRY, "button": "Close"}
+                "error": cause(error), "retry": RETRY, "button": "Close"}
     if current is None or phase == "starting":
         for st in out:
             if st["state"] == "current":
