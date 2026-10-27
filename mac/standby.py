@@ -549,6 +549,17 @@ def embed(audio, extractor=None):
         return None
 
 
+# Claude's own voice, its print made from what it played here (VoiceIO.learn_own): an utterance
+# that sounds more like it than like the user is its own voice heard back, whatever its words
+# were heard as (talk-20261026-232015: "Did check one of the things actually." for "let me check
+# where things actually stand" was answered as the user's). Measured on made-up echo (another
+# voice through a room, clipped, thinned, -25 dB): its echo scored -0.08 to 0.35 on "like Claude
+# minus like the user", a person talking over it -0.17 to -0.73, from 0.5 s of speech.
+CLAUDE_PRINT = {"emb": None, "voice": None}
+CLAUDE_MARGIN = -0.12
+OWN_PRINT_SECS = 3.0      # of its voice played, before its print is made
+
+
 # What the voice said lately, (when, sentence), as played here: in a talk, an utterance that
 # repeats it and doesn't sound like the user is the voice heard back, never a turn.
 VOICE_SAID = deque(maxlen=12)
@@ -2057,6 +2068,10 @@ class VoiceIO(object):
     # isn't learnt from.
     LEARNING = 12.0       # seconds of Claude's voice played before the echo cancelling has it
     BARGE_LEARNING = 0.8
+    # The last resort (echo_heard): its own voice heard back this often in this much of its voice
+    # played, and the mic is held while it speaks for the rest of that answer: an echo cancelling
+    # that isn't working never has it talk over itself.
+    ECHO_HOLD, ECHO_WINDOW = 3, 10.0
     # A sentence still "playing" after this long is an engine that stopped (a route
     # change, a voice that hung): about twice as slow as any voice speaks, plus a start.
     STUCK_BASE, STUCK_PER_CHAR = 5.0, 0.15
@@ -2092,6 +2107,9 @@ class VoiceIO(object):
         self._warm = False    # a sentence has played in full: Standby's voice is warm
         self.ducked = None    # since when it is paused under the user's voice (duck), or None
         self.played = 0.0         # seconds of its voice played in this voice mode (learning)
+        self._echoes = deque()    # when (in voice played) its own voice was heard back (echo_heard)
+        self.echo_hold = False    # this answer: the mic held while it speaks (echo_heard)
+        self._hold_turn = None    # ...the answer's turn, as the app wrote it: a sentence of another ends it
         self._played_at = None    # the last step's time, while a sentence played
         self._turn_of = {}    # a sentence's turn, as the app wrote it (the trace's)
 
@@ -2156,6 +2174,21 @@ class VoiceIO(object):
         with self._lock:
             return self.current is not None or bool(self._queue)
 
+    def echo_heard(self):
+        """Its own voice was heard back over it (dropped as echo, or a duck it went on from).
+        ECHO_HOLD of them in ECHO_WINDOW of its voice: the mic held for the rest of this answer."""
+        with self._lock:
+            self._echoes.append(self.played)
+            while self._echoes and self.played - self._echoes[0] > self.ECHO_WINDOW:
+                self._echoes.popleft()
+            if self.echo_hold or len(self._echoes) < self.ECHO_HOLD:
+                return
+            self.echo_hold = True
+            self._hold_turn = self._turn_of.get(self.current[0]) if self.current else None
+        self.log("voice %s: its own voice heard back %d times in %.0fs of it: the mic held while it speaks,"
+                 " for this answer" % (self.seq, self.ECHO_HOLD, self.ECHO_WINDOW))
+        trace(TRACE["sid"], "echo_hold", None, played=round(self.played, 1))
+
     @property
     def learning(self):
         """Its first seconds of voice: the echo cancelling still learns it (LEARNING). On
@@ -2204,6 +2237,7 @@ class VoiceIO(object):
                       id=cur[0] if cur else None, at_ms=int((time.time() - self.since) * 1000) if cur and self.since else None,
                       dropped=len(self._queue))
             self.ducked = None
+            self.echo_hold = False
             for item in list(self._queue) + ([self.current] if self.current else []):
                 self.done = max(self.done, item[0])
             self._queue.clear()
@@ -2306,6 +2340,7 @@ class VoiceIO(object):
                       synth_ms=int((b.first_sound - b.said_at) * 1000)
                       if getattr(b, "first_sound", None) and getattr(b, "said_at", None) else None)
                 self.done, self.current, self._warm = max(self.done, self.current[0]), None, True
+                self.learn_own()
             elif self.current is not None and self.ducked is None and time.time() - self.since > (
                     self.STUCK_BASE + self.STUCK_PER_CHAR * len(self.current[1])
                     + (0.0 if self._warm else self.STUCK_COLD)):
@@ -2313,6 +2348,8 @@ class VoiceIO(object):
             nxt = self._queue.popleft() if self.current is None and self._queue else None
             if nxt is not None:
                 self.current, self.since = nxt, time.time()
+                if self.echo_hold and self._turn_of.get(nxt[0]) != self._hold_turn:
+                    self.echo_hold = False           # another answer: talked over as ever
         if stuck is not None:
             return self.fail("a sentence was still playing after %.0fs" % stuck)
         if nxt is not None:
@@ -2321,6 +2358,36 @@ class VoiceIO(object):
                 self.backend.say(nxt[1])
             except Exception as exc:
                 self.fail("speaking: %r" % exc)
+
+    def learn_own(self):
+        """Claude's own voice print (CLAUDE_PRINT), from its first seconds as played here, once per
+        voice: made on a thread of its own (an embedding, tens of ms), never in the voice's way."""
+        b = self.backend
+        voice = getattr(b, "neural", None)
+        if not voice or (CLAUDE_PRINT["voice"] == voice and CLAUDE_PRINT["emb"] is not None):
+            return
+        if getattr(b, "own_secs", 0.0) < OWN_PRINT_SECS or getattr(self, "_learning_own", False):
+            return
+        self._learning_own = True
+        audio = list(b.own_audio)
+
+        def make():
+            import numpy as np
+            try:
+                import tts
+                x = np.concatenate(audio)
+                n = int(len(x) * SAMPLE_RATE / float(tts.RATE))       # 24 kHz to the recorder's 16 kHz
+                x16 = np.interp(np.linspace(0, len(x) - 1, n), np.arange(len(x)), x).astype("float32")
+                emb = EMBED(x16) if EMBED is not None else embed(x16)     # the same prints as the user's (print_of)
+                if emb is not None:
+                    import myvoice
+                    CLAUDE_PRINT.update(emb=myvoice._unit(emb), voice=voice)
+                    self.log("voice: its own voice print made (%s, %.1fs)" % (voice, len(x16) / float(SAMPLE_RATE)))
+            except Exception as exc:
+                self.log("voice: its own voice print failed (%r)" % exc)
+            finally:
+                self._learning_own = False
+        threading.Thread(target=make, name="voice-own-print", daemon=True).start()
 
     def fail(self, why):
         """The engine stopped working: nothing more is played by it, what it held counts as
@@ -2345,6 +2412,7 @@ class VoiceIO(object):
             return {"speaks": False, "failed": self.failed, "done": self.done}
         with self._lock:
             st = {"speaks": True, "aec": self.aec, "duplex": self.duplex, "played": round(self.played, 1),
+                  "echo_hold": self.echo_hold,
                   "saying": self.current[1] if self.current else "",
                   "since": self.since if self.current else None, "done": self.done,
                   "ducked": self.ducked is not None}
@@ -2926,8 +2994,22 @@ class VoiceIdentity(object):
         key = (c.speaker, uid)
         if key not in self.open_ids:
             self.open_ids.clear()
-            self.open_ids[key] = myvoice.who(self.mine().match(self.print_of(audio)), len(audio) / float(SAMPLE_RATE)) or "unsure"
+            self.open_ids[key] = ("other" if self.claude_echo(audio) else       # its own voice, heard back
+                                  myvoice.who(self.mine().match(self.print_of(audio)), len(audio) / float(SAMPLE_RATE)) or "unsure")
         return self.open_ids[key]
+
+    def claude_echo(self, audio):
+        """This utterance sounds more like Claude's own voice (CLAUDE_PRINT) than like the user:
+        its echo. Only with both prints known."""
+        import myvoice
+        own, me = CLAUDE_PRINT["emb"], self.mine()
+        if own is None or me is None or not me.trusted or audio is None or len(audio) / float(SAMPLE_RATE) < myvoice.SHORT:
+            return False
+        emb = self.print_of(audio)
+        if emb is None:
+            return False
+        x = myvoice._unit(emb)
+        return float(x @ own) - float(x @ me.emb) > CLAUDE_MARGIN
 
     def not_the_user(self, audio):
         """The user's print, once trusted, says this utterance is someone else's."""
@@ -3167,9 +3249,17 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
                 log("voice: someone else heard, ignored")
                 trace(TRACE["sid"], "heard", turn, text=text, a=round(start, 2), b=round(end, 2), fate="someone_else")
                 return
+            if mode == "voice" and kind == "talk" and ident.claude_echo(audio):
+                log("voice: its own voice heard back, not a turn")
+                trace(TRACE["sid"], "heard", turn, text=text, a=round(start, 2), b=round(end, 2), fate="echo", by="print")
+                if voice["io"] is not None:
+                    voice["io"].echo_heard()
+                return
             if mode == "voice" and kind == "talk" and echoes_voice(text) and ident.not_the_user(audio):
                 log("voice: its own words heard back, not a turn")
                 trace(TRACE["sid"], "heard", turn, text=text, a=round(start, 2), b=round(end, 2), fate="echo")
+                if voice["io"] is not None:
+                    voice["io"].echo_heard()
                 return
             row = {"t": round(start, 2), "end": round(end, 2), "text": text}
             if mode == "voice":
@@ -3657,7 +3747,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         vio = voice["io"]
         if voice.get("overlap") is not None:
             return overlap_step(vio)
-        if (dictation["mode"] != "hold" or vio is None or not vio.duplex or not vio.talking
+        if (dictation["mode"] != "hold" or vio is None or not vio.duplex or not vio.talking or vio.echo_hold
                 or not any(c.onset >= VoiceIO.BARGE_MIN for c in mics())):
             return
         over = [c for c in mics() if c.onset >= VoiceIO.BARGE_MIN]
@@ -3736,6 +3826,8 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         if act == overlap.COMMIT:
             return give_way(vio, why, ov["turn"], since)
         vio.unduck()
+        if why == "its own words":
+            vio.echo_heard()
         dictation_row({"overlap": "resume", "turn": ov["turn"], "why": why, "after": round(since, 2)})
         dictation["mode"] = "hold"
         for c in mics():

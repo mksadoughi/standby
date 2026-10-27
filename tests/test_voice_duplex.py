@@ -374,6 +374,29 @@ wait(lambda: vlive().get("mode") == "hold")
 speak(stop=True)
 wait(lambda: not vlive().get("saying"))
 
+# The last resort: its own voice heard back over it again and again in one answer (an echo
+# cancelling that isn't working): the mic is held while it speaks, for the rest of that answer.
+ducks = FakeEngine.ducks
+for _ in range(sb.VoiceIO.ECHO_HOLD):
+    unducks = FakeEngine.unducks
+    talked_over("Uh, long answer, about the hiring")
+    ticks()
+    Script.talking, Script.voiced = None, 0.0
+    wait(lambda: FakeEngine.unducks > unducks)
+check("its own voice heard back %d times in one answer: the mic held while it speaks (live.json says so)"
+      % sb.VoiceIO.ECHO_HOLD, wait(lambda: vlive().get("echo_hold") is True), vlive())
+ducks = FakeEngine.ducks
+Script.talking, Script.voiced = "wait, what about the EU region", 1.0
+ticks()
+check("  then sound over it doesn't duck it, for that answer", FakeEngine.ducks == ducks and vlive().get("ducked") is not True,
+      (FakeEngine.ducks, vlive()))
+Script.talking, Script.voiced = None, 0.0
+speak(stop=True)
+wait(lambda: not vlive().get("saying"))
+check("  the answer over: the next one is talked over as ever", wait(lambda: vlive().get("echo_hold") is False, 3), vlive())
+(sdir / "dictate").write_text("hold 7\n")
+wait(lambda: vlive().get("mode") == "hold")
+
 halts = eng.halts
 talked_over("wait, what about the EU region")
 Script.voiced = 0.8                               # a person goes on speaking under the duck (its echo would stop)
