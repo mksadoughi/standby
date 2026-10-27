@@ -3342,8 +3342,7 @@ def lite_call(b):
         return r
     sid = r["id"]
     LITE_CALLS[sid] = {"cc": cc, "cwd": folder, "running": False, "doing": "", "said": "", "turn": None, "gist": None,
-                       "fresh": fresh, "voice": voice, "since": time.time(),
-                       "last": _cc_last_message(cc)}     # what they said to the session before the call, for its hello
+                       "fresh": fresh, "voice": voice, "since": time.time()}
     started = session_info(sid).get("started") or time.time()
     # Bound like a Lite meeting ("lite:<cc>"), as a call: the card (keep or forget) is served as theirs.
     write_json(SESSIONS / sid / "agent.json", {"agent": "lite:" + cc, "kind": "call", "name": "Claude Code",
@@ -3413,9 +3412,7 @@ def lite_ask(sid, question, on_event, on_queued, heard=None):
             row = (PENDING.get(sid) or {}).get("row")
         if row is not None:
             drop_chat_row(sid, row)
-        last = c.pop("last", None)                 # its hello picks up from what they last said to the session
-        told = "%s\nTheir last message to you, before the call:\n%s" % (question, last) if last else question
-        return _run_ask(sid, told, voice=True, on_event=on_event, on_queued=on_queued)
+        return _run_ask(sid, question, voice=True, on_event=on_event, on_queued=on_queued)
     # What the voice knows before their words, for it alone: never part of the user's line (chat, window, export)
     notes = []
     fresh = c.get("fresh") or {}
@@ -3885,35 +3882,6 @@ def _cc_transcript(cc):
     else:
         _CC_MISSES[cc] = time.time()
     return found
-
-
-CC_LAST_TAIL = 262144                   # the transcript's end read for the last message: the newest rows
-
-
-def _cc_last_message(cc):
-    """The user's last message typed to a Claude Code session (not a command, a note of Standby's or a
-    tool's result), from the end of its transcript; "" if there's none."""
-    path = _cc_transcript(cc)
-    try:
-        with open(path, "rb") as fh:
-            fh.seek(max(0, fh.seek(0, 2) - CC_LAST_TAIL))
-            lines = fh.read().decode("utf-8", "replace").splitlines()
-    except (OSError, TypeError):
-        return ""
-    for line in reversed(lines):
-        try:
-            r = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(r, dict) or r.get("type") != "user" or r.get("isMeta") or r.get("isSidechain"):
-            continue
-        content = (r.get("message") or {}).get("content") if isinstance(r.get("message"), dict) else None
-        text = content if isinstance(content, str) else " ".join(
-            b.get("text", "") for b in content or [] if isinstance(b, dict) and b.get("type") == "text")
-        text = " ".join(str(text).split())
-        if text and not text.startswith(("<command-", "<local-command", "[Standby", LITE_FROM_CALL.strip(), "[Request interrupted")):
-            return text[:1500]
-    return ""
 
 
 # A Claude Code session's name, as Claude Code shows it: the user's own (/rename), else Claude's
