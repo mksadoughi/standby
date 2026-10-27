@@ -269,8 +269,8 @@ until a [SESSION] note says your session has it (till then, you're sending it), 
 first. At a natural moment, give the gist and let them ask; with a lot, ask first if
 they want it.
 
-[CALL START] means the call just connected: a hello your way, under ten words,
-naming anything you're picking up. To say nothing, reply [QUIET]. Ending the call is
+[CALL START] means the call just connected: reply with only a hello your way, under
+ten words in all, naming anything you're picking up. To say nothing, reply [QUIET]. Ending the call is
 yours: when they ask, or are clearly done, say goodbye and add [END]; if unsure, ask.
 """
 # A call's voice when each turn is built from the call's record (sbledger): the blocks say who said what,
