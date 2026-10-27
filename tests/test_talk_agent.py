@@ -335,21 +335,25 @@ try:
     # folder walked into Contacts and OneDrive, and macOS asked the user in Standby's name.
     perms = json.loads(argv[argv.index("--settings") + 1]).get("permissions") or {}
     dirs = [argv[i + 1] for i, x in enumerate(argv) if x == "--add-dir"]
-    check("the voice reads only its folder and ~/.standby: reads elsewhere refused, the guarded folders denied",
-          perms.get("blockReadsOutsideWorkingDirectories") is True and sa.ROOT in dirs
-          and {"Read(~/Library/**)", "Read(~/Desktop/**)", "Read(~/Downloads/**)", "Read(~/Pictures/**)"} <= set(perms.get("deny") or []),
+    check("the voice reads only its folder and ~/.standby: reads elsewhere refused, no guarded folder named "
+          "(Claude Code looks each one up as it starts, and macOS then asks the user)",
+          perms.get("blockReadsOutsideWorkingDirectories") is True and sa.ROOT in dirs and not perms.get("deny"),
           (perms, dirs))
     sa._CAPS.update(auto=False, dont_ask=True)
     talk = sa.build_argv(TALK, "haiku", True, "00000000-0000-4000-8000-000000000002", stream=False, kind="meeting")
     tperms = json.loads(talk[talk.index("--settings") + 1]).get("permissions") or {} if "--settings" in talk else {}
     tdirs = [talk[i + 1] for i, x in enumerate(talk) if x == "--add-dir"]
-    check("  the meeting's agent too: ~/.claude and ~/.standby added, nothing else readable, Library denied",
-          tperms.get("blockReadsOutsideWorkingDirectories") is True and "Read(~/Library/**)" in (tperms.get("deny") or [])
+    check("  the meeting's agent too: ~/.claude and ~/.standby added, nothing else readable, no guarded folder named",
+          tperms.get("blockReadsOutsideWorkingDirectories") is True and not tperms.get("deny")
           and os.path.expanduser("~/.claude") in tdirs and sa.ROOT in tdirs, (tperms, tdirs))
     home = os.path.expanduser("~")
     f = sa.fence([os.path.join(home, "Documents", "projects", "orion"), sa.ROOT])
-    check("  a folder inside a guarded one: that one isn't denied (the fence still keeps the rest of it out)",
-          "Read(~/Documents/**)" not in f["deny"] and "Read(~/Library/**)" in f["deny"] and "Read(~/Desktop/**)" in f["deny"], f)
+    check("  a folder inside a guarded one: nothing named, reads outside its folders still refused",
+          f == {"blockReadsOutsideWorkingDirectories": True, "deny": []}, f)
+    f = sa.fence([home, sa.ROOT])
+    check("  a working dir that holds the home folder (never, since run_dir): its guarded folders denied",
+          {"Read(~/Library/**)", "Read(~/Desktop/**)", "Read(~/Documents/**)"} <= set(f["deny"]), f)
+    check("  and the home folder is never one: it runs in the agent's own", sa.run_dir(home) == sa.AGENT and sa.run_dir(os.path.join(home, "x")) == os.path.join(home, "x"))
     # A call's voice reads where its session works (the Mac lists those folders in voice.json "dirs"): the
     # snake game the session built in its own folder (talk-20261024-232831), not only the Standby repo.
     snake, qa = tempfile.mkdtemp(prefix="sbsnake-"), tempfile.mkdtemp(prefix="sbqa-")
@@ -358,9 +362,9 @@ try:
     argv = sa.build_argv(TALK, "haiku", True, "00000000-0000-4000-8000-000000000003", stream=False, kind="voice")
     adds = [argv[i + 1] for i, x in enumerate(argv) if x == "--add-dir"]
     cperms = json.loads(argv[argv.index("--settings") + 1]).get("permissions") or {}
-    check("a call's voice reads where its session works: each of its folders added, reads elsewhere still refused, guarded ones denied",
+    check("a call's voice reads where its session works: each of its folders added, reads elsewhere still refused",
           snake in adds and qa in adds and "/no/such/folder" not in adds and sa.ROOT in adds
-          and cperms.get("blockReadsOutsideWorkingDirectories") is True and "Read(~/Library/**)" in (cperms.get("deny") or []), (adds, cperms))
+          and cperms.get("blockReadsOutsideWorkingDirectories") is True and not cperms.get("deny"), (adds, cperms))
     # Its voice was warmed up before the call said where the session works (talk-20261025-010306: "I can't open
     # the snake folder"): its next turn starts it again, with those folders, the conversation going on
     n_before = len([r for r in records() if "argv" in r])
