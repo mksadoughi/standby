@@ -132,6 +132,10 @@ bound = ui.addmac.bound(ui.SESSIONS / SID)
 (ui.SESSIONS / SID / ui.addmac.AGENT_FILE).write_text(json.dumps(dict(bound, mic=True)))
 MAC["mic"] = "undetermined"
 check("the mic in it too: never asked, \"ask\"", access_now() == {"mic": "ask", "meeting_audio": "allowed"}, access_now())
+(ui.SESSIONS / SID / "live.json").write_text(json.dumps({"at": time.time(), "sources": [{"kind": "mic", "ok": True, "heard": True}]}))
+check("  the recorder has heard the mic, though this process is still told \"not asked\": \"allowed\"",
+      access_now()["mic"] == "allowed", access_now())
+heard()
 MAC["mic"] = "denied"
 check("  macOS says denied: \"denied\"", access_now()["mic"] == "denied", access_now())
 MAC["mic"] = "authorized"
