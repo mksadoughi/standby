@@ -14,7 +14,7 @@ const mk = id => (els[id] = { id, textContent: "", innerHTML: "", hidden: false,
   classList: { t: new Set(), add(c) { this.t.add(c) }, remove(c) { this.t.delete(c) },
     toggle(c, on) { on === undefined ? (this.t.has(c) ? this.t.delete(c) : this.t.add(c)) : (on ? this.t.add(c) : this.t.delete(c)) },
     contains(c) { return this.t.has(c) } },
-  addEventListener() {}, setAttribute() {}, offsetWidth: 104, getBoundingClientRect: () => ({ width: 180, height: 44, left: 10, right: 190, top: 10, bottom: 54 }),
+  addEventListener(t) { (this.on = this.on || []).push(t) }, setAttribute() {}, offsetWidth: 104, getBoundingClientRect: () => ({ width: 180, height: 44, left: 10, right: 190, top: 10, bottom: 54 }),
   get firstChild() { return this.innerHTML ? {} : null },
   // the orb's window keeps its orb and the pill's rail: each its own element here
   querySelector(sel) { return { ".talk": els.talk, ".rail": els.rail, ".ctls": els.ctls }[sel] || els.orb } });
@@ -127,6 +127,8 @@ const ORB_CHECKS = `
   await fresh();
   ok("  not paused: no bell, whatever the flag", !els.cmp.className.includes("waiting"), els.cmp.className);
 
+  ok("in the panel, hover is the panel's own: no page mouseover (WebKit replays one at a stale spot, and the pill never went)",
+     !(els.cmp.on || []).includes("mouseover") && !(els.cmp.on || []).includes("mouseleave"), els.cmp.on);
   // The peek: the panel says when the pointer is over the orb; 120 ms in, 150 ms out.
   STATE = LIVE(); await fresh(); open = false; render();
   hover(true); await tick(160);
