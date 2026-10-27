@@ -127,14 +127,14 @@ const ORB_CHECKS = `
   await fresh();
   ok("  not paused: no bell, whatever the flag", !els.cmp.className.includes("waiting"), els.cmp.className);
 
-  // The peek: the panel says when the pointer is over the orb; 120 ms in, 600 ms out.
+  // The peek: the panel says when the pointer is over the orb; 120 ms in, 150 ms out.
   STATE = LIVE(); await fresh(); open = false; render();
   hover(true); await tick(160);
   ok("pointed at: the orb stays 52, and the buttons roll out", open && last("orb").glyph === 52 && els.rail.classList.contains("out")
      && shown().includes("Full window") && !shown().includes("Open Standby"), [open, last("orb"), shown()]);
-  hover(false); await tick(200);
+  hover(false); await tick(60);
   ok("  a moment after leaving, still there", open);
-  await tick(500);
+  await tick(160);
   ok("  then back to the orb alone, the same 52", !open && last("orb").glyph === 52 && last("orb").glass === null, last("orb"));
   posts = []; await menu(5, 5);
   ok("  the menu: just where, nothing of the voice or a meeting", (m => m && !("voice" in m) && !("meeting" in m))(posts.find(m => m.type === "menu")), posts);

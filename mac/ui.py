@@ -4715,7 +4715,9 @@ def companion_state():
         out["live"] = {"id": live, "kind": "talk"}
         info = _call_info(live)
         if info.get("agent"):                                          # the orb names the agent
-            out["live"]["call"] = {"agent": info["agent"], "name": info.get("name") or "Claude",
+            # a call from Claude Code: its session's own name (its /rename, else its title), not "Claude Code"
+            name = (str(info["agent"]).startswith("lite:") and cc_title(str(info["agent"])[5:])) or info.get("name") or "Claude"
+            out["live"]["call"] = {"agent": info["agent"], "name": name,
                                    "copy": bool(info.get("copy")), "started": _call_info(call_first(live)).get("started")}
         # macOS refuses the mic: the recorder's source for it says cause "permission" (see POST /api/mic/permission)
         out["live"]["mic_denied"] = any(src.get("kind") == "mic" and src.get("cause") == "permission"

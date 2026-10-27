@@ -197,7 +197,7 @@ document.documentElement.style.setProperty("--w", W + "px");
 document.documentElement.style.setProperty("--h", H + "px");
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const ICON = {
-  window: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/><path d="M10 15l4-4m-3.2 0H14v3.2"/></svg>',
+  window: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/><path d="M10 16l4-4m-3.2 0H14v3.2"/></svg>',
   gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>' };
 const clock = s => { s = Math.max(0, Math.floor(s)); const m = Math.floor(s / 60); return (m >= 60 ? Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") : String(m).padStart(2, "0")) + ":" + String(s % 60).padStart(2, "0") };
 const SBT = "__SB_TOKEN__";        // this launch's token (the app puts it here): every request carries it
@@ -253,7 +253,8 @@ function render() {
   el.style.setProperty("--g", g + "px");
   const rail = el.querySelector(".rail"), c = el.querySelector(".ctls");
   if (rail && c) pillTo(rail, c, inner, g, card);
-  const ctm = $("ctm"), at = card && l.call.started ? clock(Date.now() / 1000 - l.call.started) : "";
+  // only while it's out: rolling back, the panel keeps its words, so it never narrows mid-roll
+  const ctm = card && $("ctm"), at = ctm && l.call.started ? clock(Date.now() / 1000 - l.call.started) : "";
   if (ctm && ctm.textContent !== at) ctm.textContent = at;
   el.style.setProperty("--pp", pp === null ? 25 : Math.max(3, pp));
   const lv = vs === "listening" ? Math.min(1, Math.sqrt((v.level || 0) * 5)) : 0;
@@ -341,12 +342,12 @@ function full() { post({ type: "expand" }) }
 function callSettings() { post({ type: "settings", pane: "call" }) }
 function say(t) { flash = t.length > 40 ? t.slice(0, 39) + "…" : t; render(); setTimeout(() => { flash = ""; render() }, 2500) }
 
-// Hover: the pill comes after 120 ms and goes 600 ms after the pointer leaves. Over other apps
+// Hover: the pill comes after 120 ms and goes 150 ms after the pointer leaves (the user, 2026-10-27: 600 was slow). Over other apps
 // only the panel sees the pointer (judged against the hit areas), so hover() is what counts;
 // the page's own events do the same in a preview, or while Standby itself is in front.
 let want = false;
 function hover(on) { on = !!on; if (on === want) return; want = on; clearTimeout(hoverT);
-  hoverT = setTimeout(() => { if (open !== want) { open = want; render() } }, on ? 120 : 600) }
+  hoverT = setTimeout(() => { if (open !== want) { open = want; render() } }, on ? 120 : 150) }
 window.hover = hover;
 if (!WORDS) {
   const pill = $("cmp");
