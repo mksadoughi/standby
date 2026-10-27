@@ -443,11 +443,12 @@ try:
           in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
     # An early question the user went on from: answered with a hand-off, then dropped (agentctl.cancel's
     # .x). The hand-off never went, so the voice's next turn has no note that it's working on it.
-    models = lambda: [r for r in map(json.loads, open(tpath)) if r["ev"] == "model"]
-    n_models = len(models())
+    # its question's id from the trace, which is written behind: the new hand-off, not an earlier turn's row
+    handed = lambda: [r["q"] for r in map(json.loads, open(tpath)) if r["ev"] == "model" and r.get("outcome") == "handed"]
+    handed_before = set(handed())
     got = ask("[VOICE] can you ask the agent to create a new text file, just a sample text file?")
-    wait(lambda: len(models()) > n_models, 10)
-    qid = models()[-1]["q"]
+    wait(lambda: set(handed()) - handed_before, 10)
+    qid = sorted(set(handed()) - handed_before)[-1]
     open(os.path.join(root, "agent", "spool", qid + ".x"), "w").close()
     ask("[VOICE] what time is it there")
     check("a hand-off whose early question they went on from: the voice keeps no note it's working on it",
