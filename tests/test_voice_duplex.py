@@ -394,6 +394,27 @@ check("a sound with no words: it goes on, a moment later",
 speak(stop=True)
 wait(lambda: not vlive().get("saying"))
 
+# Its first seconds of voice (VoiceIO.LEARNING): the echo cancelling still learns it, and a
+# faint echo gets through. A moment of sound doesn't duck it then (a second's gap mid-greeting,
+# talk-20261026-212951); more speech over it does.
+sb.VoiceIO.LEARNING = 3600.0
+halts, ducks = eng.halts, FakeEngine.ducks
+speak(say="A long answer, about the hiring budget.")
+wait(lambda: vlive().get("saying"))
+Script.talking, Script.voiced = "", 0.4
+ticks()
+check("its first seconds of voice: a moment of sound over it (its echo) doesn't duck it",
+      FakeEngine.ducks == ducks and eng.halts == halts and vlive().get("ducked") is not True, (FakeEngine.ducks, vlive()))
+Script.voiced = 1.0
+check("  speech that goes on over it: it ducks, as before", wait(lambda: vlive().get("ducked") is True), vlive())
+Script.talking, Script.voiced = None, 0.0
+sb.VoiceIO.LEARNING = 4.0
+wait(lambda: vlive().get("ducked") is not True)
+speak(stop=True)
+wait(lambda: not vlive().get("saying"))
+(sdir / "dictate").write_text("hold 7\n")
+wait(lambda: vlive().get("mode") == "hold")
+
 halts = eng.halts
 talked_over("uh, yeah, um", 0.4)
 Script.voiced = 1.6                               # they keep talking
