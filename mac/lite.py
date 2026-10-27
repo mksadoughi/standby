@@ -190,6 +190,10 @@ class Lite(object):
         if who:
             self.ui.log("lite: %s's listen refused: the Mac is with %s (live: %s)" % (cc[:8], who, self.ui.live_session()))
             return {"error": "Your Mac is with %s: stop it there first" % who}
+        hold = getattr(self.ui, "setup_hold", None)        # a first meeting: Standby's setup window asks first
+        held = hold("meeting", dict(b, capture=mode)) if hold else None
+        if held:
+            return held
         r = self.ui.start_session(kind="meeting", capture=mode, no_claude=True)
         if not r.get("started"):
             return {"error": r.get("error") or "Your Mac didn't start"}

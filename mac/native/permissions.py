@@ -13,6 +13,12 @@ def mic_status():
     return _os.mic_status()
 
 
+def ask_mic(answered):
+    """The OS's own microphone prompt: answered(granted) once the user chooses (at once when
+    it asked before)."""
+    return _os.ask_mic(answered)
+
+
 def screen_available():
     """(True, "") if this computer can record what it plays, else (False, what to do),
     under 60 characters for a tooltip."""

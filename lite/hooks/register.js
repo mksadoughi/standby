@@ -343,6 +343,8 @@ async function startListening($, how) {
   void listen($)
   let r = await app($, '/api/lite/listen', { cc: S.cc, cwd: await $.session.cwd(), ...(how ? { pass: how } : {}) })
   if (r.error === DOWN) { const live = await stillStarting($, 'listen'); if (live) r = { session: live.session, pass: live.pass } }
+  if (r.setup) r = await setupDone($, 'listen')
+  if (r.cancelled) return setupCancelled($, 'listen')
   if (r.error) return startFailed($, 'listen', r.error)
   const cancelled = S.starting && S.starting.cancel
   S.starting = null
@@ -472,6 +474,8 @@ async function startCall($) {
   void listen($)
   let r = await app($, '/api/lite/call', { cc: S.cc, cwd: await $.session.cwd() })
   if (r.error === DOWN) { const live = await stillStarting($, 'call'); if (live) r = { session: live.session } }
+  if (r.setup) r = await setupDone($, 'call')
+  if (r.cancelled) return setupCancelled($, 'call')
   if (r.error) return startFailed($, 'call', r.error)
   const cancelled = S.starting && S.starting.cancel
   const since = (S.starting && S.starting.since) || Date.now()
@@ -502,6 +506,38 @@ async function stillStarting($, kind) {
     await $.process.run(['/bin/sleep', '0.5']).catch(() => {})
   }
   return null
+}
+
+// A first call or meeting: Standby holds the start and asks in its own setup window (the mic, a meeting's
+// sound), then starts it itself, after a Quit & Reopen too. The band says to finish there, and the start
+// goes on once it's live; the window closed, or End here, cancels it.
+const SETUP_MS = 15 * 60 * 1000          // as long as Standby holds a start for its setup
+async function setupDone($, kind) {
+  if (!S.starting) startingNow($, kind)
+  S.starting.setup = true
+  $.ui.invalidate('ui.render')
+  const want = kind === 'call' ? 'call' : 'meeting', end = Date.now() + SETUP_MS
+  while (Date.now() < end) {
+    if (!S.starting) return { cancelled: true }
+    if (S.starting.cancel) { await app($, '/api/setup', { do: 'cancel' }); return { cancelled: true } }
+    await refresh($)
+    if (!(S.st && S.st.app)) await where($)         // Standby reopening (Quit & Reopen): its new port and token
+    else {
+      const live = S.st.live, held = S.st.setup
+      if (live && live.kind === want) return { session: live.session, pass: live.pass }
+      if (held && held.phase === 'failed') { void app($, '/api/setup', { do: 'close' }); return { error: held.error || 'it didn\u2019t start' } }
+      if (!held) return { cancelled: true }         // the window closed (or Cancel): nothing is held now
+    }
+    // waited in a $ call: a hook's own time (10 s) would run out on clock sleeps
+    await $.process.run(['/bin/sleep', '0.5']).catch(() => {})
+  }
+  return { error: 'setup wasn\u2019t finished' }
+}
+function setupCancelled($, kind) {
+  S.starting = null
+  S.ending = null
+  flash($, '\u25c9', null, (kind === 'call' ? 'Call cancelled' : 'Listening cancelled') + ' \u00b7 setup wasn\u2019t finished', 6000)
+  return kind === 'call' ? 'Call cancelled: setup wasn\u2019t finished.' : 'Listening cancelled: setup wasn\u2019t finished.'
 }
 
 const VOICE_READY_MS = 45000            // the most Connecting waits for the voice's greeting before showing the call
@@ -721,8 +757,12 @@ async function band($, e, next) {
   // connecting (or starting to listen), until it's live; End stops it
   if (S.starting && !S.ending) {
     const call = S.starting.kind === 'call'
-    return line([...mark, fixed(call ? '◉' : '●', { color: call ? MARK : 'red' }), ...slow(call ? 'Connecting' : 'Starting to listen', S.starting.since),
+    const top = line([...mark, fixed(call ? '◉' : '●', { color: call ? MARK : 'red' }), ...slow(call ? 'Connecting' : 'Starting to listen', S.starting.since),
       ...keyset([['end', 'e', 'end', 'cancelStart']], [['end', 'End', 'cancelStart', true]])])
+    // waiting on Standby's setup window (a first call or meeting): where to go, dim, under it
+    if (!S.starting.setup) return top
+    return Box({ flexDirection: 'column', rowGap: 0, children: [top,
+      ...below(call ? 'Allow the mic in Standby\u2019s window to start' : 'Finish setup in Standby\u2019s window')] })
   }
   // Standby not answering (it quit, or the Mac is too busy to): the band stays, and comes back by itself
   if (S.unreach) return line([...mark, fixed('◉', { color: WARN }), ...slow('Standby isn’t answering · trying again', S.unreach)])
