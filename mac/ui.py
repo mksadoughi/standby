@@ -6313,13 +6313,21 @@ let S={sessions:[],live:null,starting:null,agent:{}},voice=null;     // the app'
 const $=id=>document.getElementById(id);
 // A freeze in the page itself: a 250 ms timer that fires more than 500 ms late means its JavaScript was
 // busy. Said to ui.log (/api/stall) with the view it was on, and in the first minute also every request
-// that took over 1 s. Not while hidden: macOS slows a hidden page's timers.
+// that took over 1 s. Not while hidden: macOS slows a hidden page's timers. Nor WebKit's once a second for
+// a window it thinks idle, which it does with the page still visible: each tick then comes 0.75 s late,
+// steadily, and that was logged as busy every second (the past list's paint takes 3 ms). See stallTick.
 const T0=performance.now();
 const SBT="__SB_TOKEN__";   // this launch's token: every request carries it (the app checks)
 const SETWIN="__SB_SETWIN__"==="1";   // this page is the Settings window's (/settings): Settings alone, nothing else of the app
 function stallSay(ms,where){fetch("/api/stall",{method:"POST",headers:{"Content-Type":"application/json","X-Standby-Token":SBT},body:JSON.stringify({ms:Math.round(ms),where})}).catch(()=>{})}
+// How late the tick was -> the busy time to say, or 0. One tick late between ticks on time: busy (said one
+// tick on). Later than WebKit's once a second can make it: busy. Late tick after late tick: the once a second.
+const STALL={prev:0,prev2:0};
+function stallTick(late,st){const say=late>1250?late:late<500&&st.prev>500&&st.prev<=1250&&st.prev2<500?st.prev:0;
+  st.prev2=st.prev;st.prev=late;return say}
 (()=>{let last=performance.now(),shown=!document.hidden;setInterval(()=>{const n=performance.now(),late=n-last-250;last=n;
-  if(late>500&&late<600000&&shown&&!document.hidden)stallSay(late,(typeof MX!=="undefined"&&MX.view?JSON.stringify(MX.view):"page")+(n-T0<60000?", at start":""));
+  const say=shown&&!document.hidden?stallTick(late,STALL):(STALL.prev=STALL.prev2=0);
+  if(say&&say<600000)stallSay(say,(typeof MX!=="undefined"&&MX.view?JSON.stringify(MX.view):"page")+(n-T0<60000?", at start":""));
   shown=!document.hidden},250)})();
 const setHTML=(el,h)=>{if(el&&el._h!==h){el.innerHTML=h;el._h=h}};
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
