@@ -1810,6 +1810,44 @@ else:
         check("  long recordings: chunks merge back into the same words",
               "Git repository" in chunked and "tests on Opus" in chunked, chunked)
 
+# The mic granted while the app runs: AVCaptureDevice's status stays what it read first (the setup
+# window kept Microphone unticked until a restart: a VM run, macOS 26). macOS's answer to an ask
+# is what it is now, and mic_status follows it.
+class StaleDevice(object):
+    status, granted, asks, held = 0, True, 0, False
+    @classmethod
+    def authorizationStatusForMediaType_(cls, kind):
+        return cls.status
+    @classmethod
+    def requestAccessForMediaType_completionHandler_(cls, kind, done):
+        cls.asks += 1
+        if not cls.held:
+            done(cls.granted)
+real_device = list(da._capture_device)
+da._capture_device[:] = [StaleDevice]
+da._mic_answer.update(said=None, pending=False)
+check("mic: not decided yet, and nothing asked: ask", da.mic_status() == "ask")
+StaleDevice.held = True                           # the user hasn't answered macOS's ask yet
+da.mic_access()
+da.mic_access()
+check("  asked once while macOS waits on the user: still ask, one ask", da.mic_status() == "ask" and StaleDevice.asks == 1,
+      (da.mic_status(), StaleDevice.asks))
+da._mic_answer["pending"], StaleDevice.held = False, False
+da.mic_access()
+check("  allowed, its status still the old one: allowed", da.mic_status() == "allowed", da.mic_status())
+da._mic_answer.update(said=None, pending=False)
+StaleDevice.status, StaleDevice.granted = 2, False
+da.mic_access()
+check("  denied: denied", da.mic_status() == "denied")
+StaleDevice.granted = True                        # turned on in System Settings, the app still running
+da.mic_access()
+check("  then turned on in System Settings: allowed, no restart", da.mic_status() == "allowed")
+StaleDevice.status = 3
+check("  its own status allowed: allowed", da.mic_status() == "allowed")
+da._capture_device[:] = real_device
+da._mic_answer.update(said=None, pending=False)
+check("  the real AVFoundation is never asked from a test", da.mic_access() is False and da._mic_answer["pending"] is False)
+
 shutil.rmtree(root, ignore_errors=True)
 print()
 if fails:

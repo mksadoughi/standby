@@ -642,17 +642,47 @@ def ax_trusted():
     except Exception:
         return False
 _capture_device = []
-def mic_status():
-    """"allowed", "denied" or "ask" (not decided yet), for this app."""
-    try:
-        if not _capture_device:
+# macOS's own answer for the mic (mic_access): AVCaptureDevice's status is read once per run, so a
+# grant given while the app runs showed only after a restart (the setup window kept Microphone
+# unticked: a VM run, macOS 26). Asked again, macOS answers at once, as it stands now.
+_mic_answer = {"said": None, "pending": False}
+def _capture_class():
+    if not _capture_device:
+        try:
+            from AVFoundation import AVCaptureDevice
+        except ImportError:
             import objc
             objc.loadBundle("AVFoundation", {}, bundle_path="/System/Library/Frameworks/AVFoundation.framework")
-            _capture_device.append(objc.lookUpClass("AVCaptureDevice"))
-        st = _capture_device[0].authorizationStatusForMediaType_("soun")    # AVMediaTypeAudio
-        return {0: "ask", 3: "allowed"}.get(int(st), "denied")
+            AVCaptureDevice = objc.lookUpClass("AVCaptureDevice")
+        _capture_device.append(AVCaptureDevice)
+    return _capture_device[0]
+def mic_status():
+    """"allowed", "denied" or "ask" (not decided yet), for this app: macOS's latest answer
+    (mic_access) over the status read when the app started."""
+    try:
+        st = {0: "ask", 3: "allowed"}.get(int(_capture_class().authorizationStatusForMediaType_("soun")), "denied")
     except Exception:
-        return "ask"
+        st = "ask"
+    return st if st == "allowed" else (_mic_answer["said"] or st)
+def mic_access():
+    """Ask macOS for the mic: the first time it asks the user; after that it answers at once,
+    as things stand now (a grant in System Settings too). One ask at a time. False if it
+    couldn't be asked."""
+    if _mic_answer["pending"]:
+        return True
+    def answered(granted):
+        _mic_answer.update(said="allowed" if granted else "denied", pending=False)
+    try:
+        device = _capture_class()
+        if os.environ.get("STANDBY_NO_DEVICES") and device.__name__ == "AVCaptureDevice":
+            return False                        # a test never asks macOS
+        _mic_answer["pending"] = True
+        device.requestAccessForMediaType_completionHandler_("soun", answered)
+        return True
+    except Exception as exc:
+        _mic_answer["pending"] = False
+        core.log("mic: couldn't ask macOS (%r)" % exc)
+        return False
 def apple_dictation_on():
     try:
         from CoreFoundation import CFPreferencesAppSynchronize, CFPreferencesCopyAppValue
@@ -1513,6 +1543,8 @@ class Controller(NSObject):
             if self.perm["mic"] == "ask" and "mic" not in self.asked and not self.listening:
                 self.asked.add("mic")
                 self.ask_mic()
+            elif self.perm["mic"] != "allowed" and "mic" in self.asked:
+                mic_access()                        # granted meanwhile: the next check has it
             elif not self.perm["listen"] and "listen" not in self.asked:
                 self.asked.add("listen")
                 Quartz.CGRequestListenEventAccess()
@@ -1608,8 +1640,11 @@ class Controller(NSObject):
 
     @python_method
     def ask_mic(self):
-        """Opening the mic for a moment is what makes macOS ask, and it is better
-        asked now than on the first dictation, which would record silence."""
+        """Asked now, not on the first dictation, which would record silence. Through
+        AVFoundation (mic_access), whose answer the next checks read; else opening the mic for
+        a moment, which makes macOS ask too."""
+        if mic_access():
+            return
         try:
             self.capture.start(room=False)
             self.capture.stop()
