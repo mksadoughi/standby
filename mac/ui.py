@@ -54,6 +54,7 @@ import transport  # noqa: E402
 from native import app, permissions, window, workspace  # noqa: E402  (this build, Screen & System Audio Recording, the window, an app's icon)
 import vocabulary  # noqa: E402  (the words the meetings teach dictation)
 import addmac  # noqa: E402  (Add your Mac: an agent's meeting)
+import firstuse  # noqa: E402  (the setup window before a first call or meeting)
 import forget  # noqa: E402  (a session gone for good: the window's delete and `standby purge`)
 import watchdog  # noqa: E402  (a freeze leaves its stack in ui.log)
 from native import qos  # noqa: E402  (a call's threads ahead of a busy Mac's other work)
@@ -2260,6 +2261,9 @@ def access(sid, capture):
     sources = (live_status(sid) or {}).get("sources") or []
     refused = {src.get("kind") for src in sources if src.get("cause") == "permission"}
     heard = any(src.get("kind") == "mic" and src.get("heard") for src in sources)
+    if heard and not _MIC_CHECK.get("noted"):
+        _MIC_CHECK["noted"] = True
+        app.note_grant("mic")                      # this build hears the mic: the setup window never asks for it
     playing = any(src.get("kind") == "meeting" for src in sources)
     out = {}
     if capture in ("auto", "mic"):
@@ -3351,6 +3355,9 @@ def lite_call(b):
         if c and c["cc"] == cc:
             return {"session": live, "already": True}     # this session's call, already on
         return {"error": "Standby is busy with another call or meeting: end it first", "busy": {"session": live}}
+    held = setup_hold("call", b)                   # a first call: Standby's setup window asks for the mic first
+    if held:
+        return held
     cwd = str(b.get("cwd") or "").strip()
     folder = cwd if cwd and os.path.isdir(os.path.expanduser(cwd)) else None
     # Who the voice is and what Claude Code is to it: standby-agent's call prelude, with the folder.
@@ -4197,6 +4204,318 @@ def close_settings_window():
             pass
 
 
+# Standby's setup window before a first call or meeting (firstuse): while the mic, or an online meeting's
+# sound, is still undecided, the start is held and the window asks, one step at a time; once all is allowed
+# Standby starts it itself, and the band (waiting on /api/lite/state) carries on as for any start. Allowing
+# the meeting's sound ends in macOS's Quit & Reopen: the held start is in SETUP_FILE, and the next launch
+# takes it up. Allowed already: no window, no wait.
+SETUP = {}                         # "held": the held start; "win": its window, while it's up
+SETUP_FILE = ROOT / "setup-held.json"
+SOUND_SKIPPED = ROOT / "meeting-sound-skipped"
+SETUP_WIDTH = 440
+_SETUP_LOCK = threading.RLock()
+
+
+def setup_states(steps):
+    """What macOS says now of each step: allowed, ask or denied (firstuse). A test has no devices:
+    all allowed, unless it puts its own here."""
+    if os.environ.get("STANDBY_NO_DEVICES"):
+        return {k: "allowed" for k in steps}
+    g, build = app.grants(), app.build_mark()
+    mine = lambda what: bool(build) and (g.get(what) or {}).get("build") == build
+    out = {}
+    if firstuse.MIC in steps:
+        out[firstuse.MIC] = firstuse.mic_state(mic_access(), mine("mic"))
+    if firstuse.SOUND in steps:
+        out[firstuse.SOUND] = firstuse.sound_state(_snap_permitted(), mine("heard"), SNAP_ASKED.exists())
+    return out
+
+
+def _sound_skipped_at():
+    try:
+        return float(_read_text(SOUND_SKIPPED).split()[0])
+    except (ValueError, IndexError):
+        return None
+
+
+def setup_hold(kind, body):
+    """A call's or meeting's start, before it starts: None to go on (nothing undecided, or no window
+    to ask in), else {"setup": kind}, the start held and the window up; or {error} while another
+    Claude Code session's start is held."""
+    if body.get("setup_done") or APP_WINDOW.get("win") is None:
+        return None
+    cc = str(body.get("cc") or "")
+    with _SETUP_LOCK:
+        held = SETUP.get("held")
+        if held and held["phase"] in ("open", "starting"):
+            if held["cc"] != cc:
+                return {"error": "Standby is setting up for another call or meeting: finish it first"}
+            _show_setup()
+            return {"setup": held["kind"]}
+        steps = firstuse.needed(kind, body.get("capture"), setup_states(firstuse.steps_for(kind, body.get("capture"))),
+                                _sound_skipped_at(), time.time())
+        if not steps:
+            return None
+        held = {"kind": kind, "cc": cc, "body": dict(body), "steps": steps, "pressed": [], "skip": False,
+                "phase": "open", "error": None, "at": time.time(), "id": uuid.uuid4().hex[:8]}
+        SETUP["held"] = held
+        _save_held(held)
+    log("setup: %s held for %s (%s)" % (kind, ", ".join(steps), cc[:8]))
+    _show_setup()
+    threading.Thread(target=_setup_watch, args=(held,), name="setup", daemon=True).start()
+    return {"setup": kind}
+
+
+def _save_held(held):
+    try:
+        write_json(SETUP_FILE, {k: held[k] for k in ("kind", "cc", "body", "steps", "pressed", "skip", "at", "id")})
+    except Exception as exc:
+        log("setup: couldn't keep the held start (%r)" % exc)
+
+
+def _drop_held(held, phase, error=None):
+    with _SETUP_LOCK:
+        held["phase"], held["error"] = phase, error
+        if SETUP.get("held") is held and phase != "failed":
+            SETUP.pop("held", None)
+        try:
+            SETUP_FILE.unlink()
+        except OSError:
+            pass
+
+
+def setup_resume():
+    """At launch: a start held over a Quit & Reopen (its meeting's sound just allowed), taken up again,
+    its window up; anything else held (Standby quit by hand, or long ago) is dropped. True if taken up."""
+    data = read_json(SETUP_FILE)
+    try:
+        SETUP_FILE.unlink()
+    except OSError:
+        pass
+    if not (isinstance(data, dict) and data.get("kind") in ("call", "meeting") and isinstance(data.get("body"), dict)
+            and firstuse.SOUND in (data.get("pressed") or []) and 0 <= time.time() - float(data.get("at") or 0) < firstuse.HELD_FOR):
+        return False
+    held = dict(data, phase="open", error=None)
+    with _SETUP_LOCK:
+        SETUP["held"] = held
+        _save_held(held)
+    log("setup: %s taken up again after Standby reopened" % held["kind"])
+    return True
+
+
+def setup_start_after_launch():
+    """The held start's window and watcher, once the app is up (main's after_start)."""
+    held = SETUP.get("held")
+    if held:
+        _show_setup()
+        threading.Thread(target=_setup_watch, args=(held,), name="setup", daemon=True).start()
+
+
+def _setup_watch(held):
+    """Until the held start's steps are all allowed (then it starts), it's cancelled, or it waited too long."""
+    while held["phase"] == "open":
+        if time.time() - held["at"] > firstuse.HELD_FOR:
+            log("setup: %s not finished in %d minutes: cancelled" % (held["kind"], firstuse.HELD_FOR // 60))
+            _drop_held(held, "cancelled")
+            _hide_setup()
+            return
+        if firstuse.complete(held["steps"], setup_states(held["steps"]), held["skip"]):
+            held["phase"] = "starting"
+            break
+        time.sleep(0.4)
+    if held["phase"] != "starting":
+        return
+    body = dict(held["body"], setup_done=True)
+    if held["skip"] and firstuse.can_skip(held["steps"]):
+        body["capture"] = "mic"                        # skipped: this meeting records the mic only
+    log("setup: done, starting the %s" % held["kind"])
+    try:
+        r = lite_call(body) if held["kind"] == "call" else lite().listen(body)
+    except Exception as exc:
+        log("setup: the %s didn't start (%r)" % (held["kind"], exc))
+        r = {"error": "It didn't start: try again"}
+    if r.get("error"):
+        log("setup: the %s didn't start: %s" % (held["kind"], r["error"]))
+        _drop_held(held, "failed", r["error"])
+        return
+    _drop_held(held, "started")
+    time.sleep(1.2)                                    # "Starting your call…" seen, then the window goes
+    _hide_setup()
+
+
+def setup_view():
+    """GET /api/setup: what the setup window shows now."""
+    held = SETUP.get("held")
+    if not held:
+        return {"gone": True}
+    states = setup_states(held["steps"])
+    return firstuse.view(held["kind"], held["steps"], states, held["pressed"], held["skip"],
+                         "starting" if held["phase"] in ("starting", "started") else held["phase"], held["error"])
+
+
+def setup_act(b):
+    """POST /api/setup {do}: the window's button (macOS asks only here), Skip, or Cancel."""
+    held, do = SETUP.get("held"), str(b.get("do") or "")
+    if not held:
+        return {"error": "Nothing is waiting for setup"}
+    if do == "cancel" or (do == "close" and held["phase"] == "failed"):
+        if held["phase"] in ("open", "failed"):
+            log("setup: %s cancelled" % held["kind"])
+            _drop_held(held, "cancelled")
+            with _SETUP_LOCK:
+                if SETUP.get("held") is held:
+                    SETUP.pop("held", None)
+        _hide_setup()
+        return {"ok": True}
+    if held["phase"] != "open":
+        return {"ok": True}
+    if do not in ("allow_mic", "settings_mic", "allow_sound", "settings_sound", "skip_sound"):
+        return {"error": "No such step"}
+    key = firstuse.SOUND if do.endswith("sound") else firstuse.MIC
+    if do == "skip_sound":
+        if not firstuse.can_skip(held["steps"]):
+            return {"error": "This meeting records only the meeting's sound"}
+        SOUND_SKIPPED.write_text("%d\n" % time.time())
+        held["skip"] = True
+        log("setup: the meeting's sound skipped: this meeting records the mic only")
+        return {"ok": True}
+    if key not in held["pressed"]:
+        held["pressed"].append(key)
+    _save_held(held)                                   # before macOS's Quit & Reopen, so the next launch takes it up
+    try:
+        if do == "allow_mic":
+            log("setup: asking macOS for the microphone")
+            permissions.ask_mic(_mic_answered)
+        elif do == "allow_sound":
+            SNAP_ASKED.parent.mkdir(parents=True, exist_ok=True)
+            SNAP_ASKED.write_text("%d\n" % time.time())
+            _SNAP_CHECKS.pop("permission", None)
+            log("setup: asking macOS for Screen & System Audio Recording")
+            permissions.ask_screen()
+        else:
+            pane = MIC_PANE if key == firstuse.MIC else SCREEN_PANE
+            subprocess.run(OPEN + [pane], stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
+            log("setup: System Settings opened at %s" % ("Microphone" if key == firstuse.MIC else "Screen Recording"))
+    except Exception as exc:
+        log("setup: %s failed (%r)" % (do, exc))
+        return {"error": "macOS didn't answer: try again"}
+    return {"ok": True}
+
+
+def _mic_answered(granted):
+    """macOS's answer to the setup window's Allow Microphone: kept for this build, as a mic heard
+    is (this process may go on being told "not asked yet")."""
+    _MIC_CHECK.pop("status", None)
+    if granted:
+        app.note_grant("mic")
+    log("setup: the microphone %s" % ("allowed" if granted else "refused"))
+
+
+def setup_for(cc):
+    """The held start for /api/lite/state: {kind, phase, error?} while this session's is held."""
+    held = SETUP.get("held")
+    if not held or held["cc"] != str(cc or "") or held["phase"] not in ("open", "starting", "failed"):
+        return None
+    return dict({"kind": held["kind"], "phase": held["phase"]}, **({"error": held["error"]} if held["error"] else {}))
+
+
+class SetupApi(object):
+    """The setup window's bridge: it fits its window to what it shows, and its top drags it."""
+    window = titlebar = None
+
+    def window_drag(self):
+        if self.titlebar is not None:
+            window.on_main(self.titlebar.drag)
+
+    def fit(self, height):
+        try:
+            h = max(160, min(720, int(height)))
+        except (TypeError, ValueError):
+            return {"error": "no height"}
+        if self.window is not None:
+            self.window.resize(SETUP_WIDTH, h)
+        return {"ok": True}
+
+
+def setup_page():
+    try:
+        page = (HERE / "firstuse.html").read_text()      # read each time: an edit shows on reload
+    except OSError:
+        page = "<!doctype html><title>Standby</title><p>Run ./install.sh again.</p>"
+    return page.replace("__SB_TOKEN__", TOKEN)
+
+
+def _show_setup():
+    """The setup window, made or brought up, in front even with Claude Code in front: Standby opened
+    in the background has no window of its own up (P.16), and this one is what the start waits on."""
+    if threading.current_thread() is threading.main_thread():
+        threading.Thread(target=_show_setup, name="setup-window", daemon=True).start()
+        return
+    import webview
+    with _SETUP_LOCK:
+        win = SETUP.get("win")
+        if win is None:
+            api = SetupApi()
+            win = webview.create_window("Standby", "http://127.0.0.1:%d/setup?token=%s" % (PORT, TOKEN), js_api=api,
+                                        width=SETUP_WIDTH, height=300, resizable=False)
+            api.window = win
+            SETUP["win"] = win
+            _dress_setup(win, api)
+            log("setup: its window, opened")
+            return
+    win.show()
+    _to_front(win)
+    win.evaluate_js("setupNow()")
+
+
+def _dress_setup(win, api):
+    """No title bar (the page keeps the traffic lights' corner clear), centred where the person works,
+    in front; its red light is Cancel."""
+    def before_show():
+        try:
+            api.titlebar = window.titlebar(win.native)
+        except Exception as exc:
+            log("setup: kept the standard title bar (%r)" % exc)
+        try:
+            x, y, w, h = _working_screen()
+            window.place(win.native, [x + (w - SETUP_WIDTH) / 2.0, y + (h - 300) / 2.0, SETUP_WIDTH, 300])   # it fits itself, its top kept
+        except Exception as exc:
+            log("setup: couldn't place its window (%r)" % exc)
+    win.events.before_show += before_show
+    win.events.shown += lambda: _to_front(win)
+
+    def closing():
+        if SETUP.get("quitting"):
+            return True
+        held = SETUP.get("held")
+        if held and held["phase"] in ("open", "failed"):
+            setup_act({"do": "cancel"})
+        else:
+            win.hide()
+        return False
+    win.events.closing += closing
+
+
+def _hide_setup():
+    win = SETUP.get("win")
+    if win is not None:
+        try:
+            win.hide()
+        except Exception:
+            pass
+
+
+def close_setup_window():
+    """Standby quits: the setup window goes too (a held start stays in SETUP_FILE for a Quit & Reopen)."""
+    win = SETUP.get("win")
+    if win is not None:
+        SETUP["quitting"] = True
+        try:
+            win.destroy()
+        except Exception:
+            pass
+
+
 def open_window(b):
     """POST /api/window {cc, session?}: Standby focused on that Claude Code session's call or meeting
     (what's live there, else its last), by its session id, in front: an ordinary window, never kept above
@@ -4243,6 +4562,10 @@ def _lite_state(q):
     out = _meeting_state(q)
     if isinstance(out, dict) and not out.get("live") and not out.get("error"):
         out["live"] = lite_call_live(str(q.get("cc") or ""))
+    if isinstance(out, dict) and not out.get("live") and not out.get("error"):
+        held = setup_for(q.get("cc"))              # a start waiting on the setup window: the band says so
+        if held:
+            out["setup"] = held
     return out
 
 
@@ -5383,6 +5706,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(main_page(), "text/html; charset=utf-8")
         if path == "/settings":                   # the Settings window's: the same page, Settings alone
             return self._send(main_page(settings=True), "text/html; charset=utf-8")
+        if path == "/setup":                      # the setup window's, before a first call or meeting
+            return self._send(setup_page(), "text/html; charset=utf-8")
+        if path == "/api/setup":
+            return self._json(setup_view())
         if path in ("/agents.js", "/agents.css"):   # Standby's view, beside today's page
             try:
                 body = (HERE / path[1:]).read_text()       # read each time: an edit shows on reload
@@ -5478,6 +5805,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(watchdog.page_stall(self._body()))
         if self.path == "/api/window":
             return self._json(open_window(self._body()))
+        if self.path == "/api/setup":                  # the setup window's buttons
+            return self._json(setup_act(self._body()))
         if self.path.startswith("/api/lite/") and self.path in LITE_POST:
             return self._json(LITE_POST[self.path](self._body()))
         if self.path.startswith("/api/msg/") and self.path in MSG_POST:
@@ -5767,6 +6096,9 @@ def main():
         return 1
     if server is None:           # this Standby already serves there (an earlier launch): its window
         log("port %d: this Standby is already running there, reusing it" % PORT)
+    # reopened by macOS (Quit & Reopen) while a meeting waited on the setup window: held again before
+    # the band can ask, and that window shows, not this one
+    resumed = window_mode and server is not None and setup_resume()
     if server is not None:                    # the one app that serves: one watcher, one pass per session
         if not window_mode:                   # with a window, it watches the main thread too (after_start)
             watchdog.Watchdog(log).start()
@@ -5790,6 +6122,7 @@ def main():
     background = "--background" in sys.argv
     if background:
         log("started in the background, by Claude Code: the window opens when asked for")
+    background = background or resumed
     win = webview.create_window("Standby", "http://127.0.0.1:%d/?token=%s" % (PORT, TOKEN), js_api=api,
                                 width=WINDOW[0], height=WINDOW[1], min_size=WINDOW_MIN, hidden=background)
     api.window = win
@@ -5830,6 +6163,7 @@ def main():
         if p is not None and p.closing() is False:
             return False
         close_settings_window()                  # the window really goes: the hidden Settings one with it
+        close_setup_window()
         stop_voice()
         if live_session():
             log("window closed while recording: stopping the recording")
@@ -5845,6 +6179,7 @@ def main():
 
     def after_start():
         window.on_main(start_companion)          # the orb's work, on the main thread
+        setup_start_after_launch()               # a start held over a Quit & Reopen: its window again
         # A freeze leaves its stack in ui.log: the main thread, a slow request, or the page
         watchdog.Watchdog(log, on_main=window.on_main, main_ident=threading.main_thread().ident).start()
     webview.start(after_start)

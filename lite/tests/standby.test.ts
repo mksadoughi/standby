@@ -23,6 +23,8 @@ function fakeApp(on: any, events: any[], seen: any) {
   on('process.run', ($: any, e: any) => {
     const argv = (e && (e.argv || e.args || e.command)) || []
     if (Array.isArray(argv) && argv[0] === 'open') { (seen.launched ||= []).push(argv.join(' ')); seen.down = false }
+    // the mod's waits sleep here: a real moment, so a test's own timers run while it waits
+    if (Array.isArray(argv) && argv[0] === '/bin/sleep') return new Promise(r => setTimeout(() => r({ value: { exitCode: 0, stdout: '', stderr: '' } }), 25))
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
   })
   on('turn.abort', ($: any, e: any) => { seen.aborted.push(e.turnId); return { value: undefined } })
@@ -38,7 +40,10 @@ function fakeApp(on: any, events: any[], seen: any) {
     if (seen.slowStart && /\/api\/lite\/(call|listen)$/.test(url.split('?')[0]) && e.init && e.init.body) { seen.slowStart(); throw new Error('timed out') }
     const body = e.init && e.init.body ? JSON.parse(e.init.body) : null
     if (body) seen.posts.push({ path: url.replace(/^http:\/\/127\.0\.0\.1:\d+/, ''), body })
-    const answer = url.includes('/api/lite/state') ? { app: '1.0', can: seen.can ?? { listen: true }, live: seen.idle || (seen.liveFor !== undefined && seen.liveFor-- <= 0) ? null : seen.live ?? { kind: 'meeting', session: 'm1', recorded_s: 64 } }
+    const answer = url.includes('/api/lite/state') ? { app: '1.0', can: seen.can ?? { listen: true }, live: seen.idle || (seen.liveFor !== undefined && seen.liveFor-- <= 0) ? null : seen.live ?? { kind: 'meeting', session: 'm1', recorded_s: 64 },
+          ...(seen.setup ? { setup: seen.setup } : {}) }
+      // a first call or meeting: Standby holds it for its setup window (seen.setup on the state while it's up)
+      : seen.setupReply && /\/api\/lite\/(call|listen)$/.test(url.split('?')[0]) ? { setup: seen.setupReply }
       : url.includes('/api/lite/call') && !url.includes('/end') ? { session: 'c1', ...(seen.already ? { already: true } : {}) }
       : url.includes('/api/lite/listen') ? { session: 'm1', pass: seen.pass ?? 'live' }
       : url.includes('/api/lite/transcript') ? { session: 'm1', text: '[Standby · meeting · Planning · 10:00-10:01]\n10:00 Nadia: We ship Friday.' }
@@ -1519,6 +1524,52 @@ test('a first call the app takes long to start (macOS asking for the mic): Conne
   const r = await $.command.run({ command: 'standby', args: 'call' })
   expect(r.text).toBe('On a call. Talk; real work comes here.')
   expect(seen.status.some((t: string) => t.includes('isn’t running'))).toBe(false)
+})
+
+test('a first call waits on Standby’s setup window: the band says where, and the call goes on once Standby starts it', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, setupReply: 'call', setup: { kind: 'call', phase: 'open' }, waitMore: true }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  expect(((await $.tool.call({ tool: 'mcp__standby__call' } as any)) as any).result).toBe('Accepted: the call is starting')
+  await settle()
+  const band = await bandOf($)
+  expect(await textOn(band, 'Connecting .')).toBeDefined()
+  expect(await textOn(band, 'Allow the mic in Standby\u2019s window to start')).toMatchObject({ props: { dimColor: true } })
+  // allowed: Standby starts the call itself, and the band goes on as for any start
+  seen.setup = null; seen.setupReply = null; seen.idle = false; seen.live = { kind: 'call', session: 'c9', started: 1, phase: 'listening' }
+  await settle(); await settle()
+  expect(await textOn(await bandOf($), 'Allow the mic in Standby\u2019s window to start')).toBeUndefined()
+  expect(seen.posts.filter((p: any) => p.path === '/api/lite/call').length).toBe(1)     // asked once: the start was held, not dropped
+  expect(seen.status.some((t: string) => /cancelled|Couldn/.test(t))).toBe(false)
+})
+
+test('a first meeting’s setup window closed: listening is cancelled, and the band says why', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, setupReply: 'meeting', setup: { kind: 'meeting', phase: 'open' }, waitMore: true }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  expect(((await $.tool.call({ tool: 'mcp__standby__listen' } as any)) as any).result).toBe('Accepted: listening is starting')
+  await settle()
+  expect(await textOn(await bandOf($), 'Finish setup in Standby\u2019s window')).toBeDefined()
+  seen.setup = null                                  // Cancel, or its red light
+  await settle(); await settle()
+  expect(await textOn(await bandOf($), 'Listening cancelled \u00b7 setup wasn\u2019t finished')).toBeDefined()
+  expect(seen.posts.some((p: any) => p.path === '/api/lite/listen/stop')).toBe(false)
+})
+
+test('End on the band while the setup window waits: the held start is cancelled in Standby too', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, setupReply: 'call', setup: { kind: 'call', phase: 'open' }, waitMore: true }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await $.tool.call({ tool: 'mcp__standby__call' } as any)
+  await settle()
+  await (await bandOf($)).press({ key: 'end' })
+  await (await bandOf($)).press({ key: 'confirmYes' })
+  await settle(); await settle()
+  expect(seen.posts.some((p: any) => p.path === '/api/setup' && p.body.do === 'cancel')).toBe(true)
+  expect(await textOn(await bandOf($), 'Call cancelled \u00b7 setup wasn\u2019t finished')).toBeDefined()
 })
 
 test('a start that fails while the app really is down still says so', async ($, on) => {

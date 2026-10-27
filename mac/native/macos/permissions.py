@@ -18,6 +18,15 @@ def mic_status():
         return None
 
 
+def ask_mic(answered):
+    """AVFoundation's prompt, as Standby: answered(granted) on the user's choice. Only on the
+    user's click (Standby's setup window)."""
+    no_devices(None)
+    import AVFoundation
+    AVFoundation.AVCaptureDevice.requestAccessForMediaType_completionHandler_(
+        AVFoundation.AVMediaTypeAudio, lambda granted: answered(bool(granted)))
+
+
 def screen_available():
     import platform
     try:

@@ -4,6 +4,7 @@
     python3 tools/ui_preview.py [out_dir] [--dark | --both] [--only=chat,transcript]
     python3 tools/ui_preview.py [out_dir] [--dark | --both] --companion        (mac/companion.html, every state)
     python3 tools/ui_preview.py [out_dir] [--dark | --both] --settings-window  (the Settings window, at its size)
+    python3 tools/ui_preview.py [out_dir] [--dark | --both] --setup-window     (the setup before a first call or meeting)
 
 Renders mac/ui.py's page in headless Chrome against a fake /api: no recorder,
 no Claude, and nothing from ~/.standby is read. One PNG per state in out_dir
@@ -460,6 +461,29 @@ def companion_page():
         "</body>", "<script>" + CMP_AFTER + "</script></body>")
 
 
+# The setup window before a first call or meeting (mac/firstuse.html), each state as firstuse.view makes it.
+SETUP_SCENES = [("call", "call", ["mic"], {"mic": "ask"}, [], False, "open"),
+                ("call-refused", "call", ["mic"], {"mic": "denied"}, ["mic"], False, "open"),
+                ("call-done", "call", ["mic"], {"mic": "allowed"}, [], False, "starting"),
+                ("meeting-1", "meeting", ["mic", "sound"], {"mic": "ask", "sound": "ask"}, [], False, "open"),
+                ("meeting-2", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "ask"}, [], False, "open"),
+                ("meeting-2-asked", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "denied"}, ["sound"], False, "open"),
+                ("meeting-done", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "allowed"}, [], False, "starting"),
+                ("meeting-skipped", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "ask"}, [], True, "starting"),
+                ("meeting-failed", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "allowed"}, [], False, "failed")]
+
+
+def setup_page(scene):
+    sys.path.insert(0, str(ROOT / "mac"))
+    import firstuse
+    _, kind, steps, states, pressed, skip, phase = next(x for x in SETUP_SCENES if x[0] == scene)
+    view = firstuse.view(kind, steps, states, pressed, skip, phase, "Your Mac didn't start" if phase == "failed" else None)
+    html = (ROOT / "mac" / "firstuse.html").read_text()
+    fake = "<script>window.fetch = async p => ({ json: async () => (%s) })</script>" % json.dumps(view)
+    head = ROUNDED + LIGHTS.replace("left:20px;top:20px", "left:16px;top:16px")
+    return html.replace("</head>", head + "</head>", 1).replace("<script>", fake + "<script>", 1)
+
+
 def page(settings_window=False):
     src = (ROOT / "mac" / "ui.py").read_text()
     html = src[src.index('PAGE = r"""') + len('PAGE = r"""'):]
@@ -602,6 +626,15 @@ def main():
                     png = out / ("settings-window-%s%s.png" % (name, sfx))
                     url = "%s?%s" % (set_path.as_uri(), "pane=" + pane if pane else "s=list")
                     ok = chrome.shoot(url, png, dark, size=(500, 640), settle=1.5)
+                    print(("ok   " if ok else "FAIL ") + str(png))
+                continue
+            if "--setup-window" in sys.argv:
+                # The setup window, at its width, as tall as each state (it fits its window to its page)
+                for scene in [x[0] for x in SETUP_SCENES]:
+                    path = out / ("setup-%s.html" % scene)
+                    path.write_text(setup_page(scene))
+                    png = out / ("setup-%s%s.png" % (scene, sfx))
+                    ok = chrome.shoot(path.as_uri(), png, dark, size=(440, 640), settle=0.8, clip="html")
                     print(("ok   " if ok else "FAIL ") + str(png))
                 continue
             if "--companion" in sys.argv:

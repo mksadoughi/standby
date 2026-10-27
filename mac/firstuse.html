@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Standby</title>
+<style>
+/* Standby's setup window, before a first call or meeting (firstuse.py):
+   one step at a time, a button on the current step only, live ticks; the start waits and goes by itself. */
+:root{color-scheme:light dark;--bg:#ffffff;--line:#ebebf3;--text:#121226;--muted:#696a80;--faint:#b4b4c6;--soft:#f3f3f9;
+--accent:#5046e5;--on-accent:#ffffff;--ok:#1f9d55;--rec:#e5484d;--warn:#b54708;--focus:rgba(80,70,229,.5)}
+@media (prefers-color-scheme:dark){:root{--bg:#17172a;--line:#262640;--text:#ebebf7;--muted:#9a9ab8;--faint:#55557a;--soft:#22223c;
+--accent:#8b87ff;--on-accent:#16153a;--ok:#3ccf7a;--rec:#f2555a;--warn:#f0a35e;--focus:rgba(139,135,255,.5)}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  -webkit-user-select:none;user-select:none;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+#head{height:44px}
+#body{padding:0 24px 20px}
+.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin:0 0 4px}
+.top b{font-size:18px}.top span{font-size:12px;color:var(--muted);flex:none}
+.sub{font-size:13px;color:var(--muted);margin:0 0 16px}
+.sub:empty{display:none}
+.st{display:grid;grid-template-columns:26px 1fr;column-gap:12px;padding:12px;border-radius:12px;margin-bottom:6px}
+.st .n{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+  border:1.5px solid var(--faint);color:var(--faint)}
+.st .t{font-size:14.5px;font-weight:600;color:var(--faint);padding-top:2px}
+.st .w{grid-column:2;font-size:13px;color:var(--muted);margin-top:2px}
+.st .act{grid-column:2;display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+.st.done .n{background:var(--ok);border-color:var(--ok);color:#fff}.st.done .t{color:var(--text);font-weight:500}
+.st.skipped .t{color:var(--muted);font-weight:500}.st.skipped .w{display:none}
+.st.cur{background:var(--soft)}.st.cur .n{border-color:var(--accent);color:var(--accent)}.st.cur .t{color:var(--text)}
+.btn{height:30px;padding:0 14px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-size:13px;font-weight:600;display:inline-flex;align-items:center}
+.btn:disabled{opacity:.6;cursor:default}
+.note{font-size:12px;color:var(--muted)}
+.lk{font-size:12.5px;color:var(--accent);font-weight:500}
+.wait{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.wait i{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--faint);border-top-color:var(--accent);display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.wait i{animation:none}}
+.how{grid-column:2;margin-top:10px;font-size:12.5px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 10px}
+.how b{color:var(--text)}
+.err{font-size:12.5px;color:var(--warn);margin:4px 0 0}
+.foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12.5px;color:var(--muted)}
+.foot button{color:var(--muted)}
+.go{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-top:10px}
+.go i{width:8px;height:8px;border-radius:50%;background:var(--rec);box-shadow:0 0 0 3px rgba(229,72,77,.15)}
+</style></head>
+<body>
+<div id="head" data-drag></div>
+<div id="body" data-drag>
+  <div class="top"><b id="title"></b><span id="count"></span></div>
+  <p class="sub" id="sub"></p>
+  <div id="steps"></div>
+  <p class="err" id="err" hidden></p>
+  <div class="go" id="go" hidden><i></i><span></span></div>
+  <div class="foot" id="foot"><button type="button" id="cancel" data-nodrag>Cancel</button><span></span></div>
+</div>
+<script>
+const TOKEN = "__SB_TOKEN__";
+const $ = id => document.getElementById(id);
+const TICK = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const bold = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");     // the how-to's **Standby**
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? { headers: { "x-standby-token": TOKEN } }
+    : { method: "POST", headers: { "content-type": "application/json", "x-standby-token": TOKEN }, body: JSON.stringify(body) });
+  return r.json();
+}
+let busy = false, shown = "";
+function step(s) {
+  const done = s.state === "done";
+  let act = "";
+  if (s.button) act = '<div class="act"><button type="button" class="btn" data-do="' + esc(s.do) + '">' + esc(s.button) + "</button>"
+    + (s.waiting ? '<span class="wait"><i></i>' + esc(s.note) + "</span>" : s.note ? '<span class="note">' + esc(s.note) + "</span>" : "")
+    + (s.skip ? '<button type="button" class="lk" data-do="skip_sound">' + esc(s.skip) + "</button>" : "") + "</div>"
+    + (s.how ? '<div class="how">' + bold(s.how) + "</div>" : "");
+  else if (s.state === "skipped" && s.note) act = '<span class="w" style="display:block">' + esc(s.note) + "</span>";
+  return '<div class="st ' + ({ current: "cur", done: "done", skipped: "skipped" }[s.state] || "") + '" data-nodrag="' + (s.button ? "1" : "") + '">'
+    + '<span class="n">' + (done ? TICK : s.n) + '</span><span class="t">' + esc(s.name) + "</span>"
+    + (done || s.state === "skipped" ? "" : '<span class="w">' + esc(s.why) + "</span>") + act + "</div>";
+}
+function paint(v) {
+  const key = JSON.stringify(v);
+  if (key === shown) return;
+  shown = key;
+  $("title").textContent = v.title || "";
+  $("count").textContent = v.count || "";
+  $("sub").textContent = v.sub || "";
+  $("steps").innerHTML = (v.steps || []).map(step).join("");
+  $("err").hidden = !v.error; $("err").textContent = v.error || "";
+  $("go").hidden = !v.go; $("go").querySelector("span").textContent = v.go || "";
+  // Cancel while it waits; Close once it couldn't start; nothing once it's starting
+  $("cancel").textContent = v.button || "Cancel";
+  $("foot").hidden = !!v.go;
+  $("cancel").dataset.do = v.button ? "close" : "cancel";
+  fit();
+}
+function fit() {
+  const w = window.pywebview && window.pywebview.api;
+  if (w && w.fit) w.fit(Math.ceil($("body").getBoundingClientRect().bottom));     // the content's own height, never the viewport's
+}
+async function setupNow() {
+  try { const v = await api("/api/setup"); if (!v.gone) paint(v) } catch (e) {}
+}
+window.setupNow = setupNow;
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-do]");
+  if (!b || busy) return;
+  busy = true; b.disabled = true;
+  try { await api("/api/setup", { do: b.dataset.do }) } catch (e) {}
+  busy = false;
+  await setupNow();
+});
+// The window moves by its top and its empty parts
+document.addEventListener("mousedown", e => {
+  const w = window.pywebview && window.pywebview.api;
+  if (!w || !w.window_drag || e.button !== 0 || !e.target.closest("[data-drag]")) return;
+  if (e.target.closest("button,a,.how,[data-nodrag='1']")) return;
+  w.window_drag();
+});
+window.addEventListener("pywebviewready", fit);
+setupNow();
+setInterval(setupNow, 500);                      // ticks follow System Settings live
+</script>
+</body></html>
