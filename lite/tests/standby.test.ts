@@ -225,7 +225,7 @@ test('/standby listen live starts it live; the meeting tool reads the transcript
 const BAND = { plugin: 'standby', component: 'AbovePrompt', requestId: 'band', viewport: { columns: 120, rows: 40 },
   props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120, scroll: { offset: 0, bodyRows: 4 }, view: {} } } as const
 
-test('the band while a meeting records: one line that never wraps, the minutes, 1 pause · 2 end, and the latest line under it', async ($, on) => {
+test('the band while a meeting records: one line that never wraps, the minutes, p pause · e end, and the latest line under it', async ($, on) => {
   const seen: any = { posts: [] as any[], submitted: [], aborted: [], status: [], opened: [] }
   mock.clock(on)
   fakeApp(on, [{ meet: 'line', i: 1, t: 1760700000, speaker: 1, name: 'Speaker 1', text: 'We ship Friday.' }], seen)
@@ -248,7 +248,7 @@ test('the band while a meeting records: one line that never wraps, the minutes, 
   expect(await panel.find({ type: 'Text', text: 'Speaker 1: We ship Friday.' })).toBeDefined()
 })
 
-test('on a call: one line, 1 pause · 2 end, and the latest words under it, the voice after ✻', async ($, on) => {
+test('on a call: one line, p pause · e end, and the latest words under it, the voice after ✻', async ($, on) => {
   const seen: any = { posts: [] as any[], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1, phase: 'listening' } }
   mock.clock(on)
   fakeApp(on, [{ call: 'caption', session: 'c1', you: 'run the tests', said: '' }, { call: 'caption', session: 'c1', you: 'run the tests', said: 'On it.' },
@@ -1020,38 +1020,40 @@ test('Full window brings Standby to the front on every click, not only the first
   expect(seen.launched).toEqual(['open -a Standby', 'open -a Standby', 'open -a Standby'])
 })
 
-// ---------------------------------------------------------------- the terminal's numbers: pressed alone in an empty prompt
+// ---------------------------------------------------------------- the terminal's letters: typed alone, then Enter
 const typed = async ($: any, text: string) => $.prompt.submit({ text })
-// the terminal band's Button by its key, pressed as its number does: it must have one, as drawn beside it
-const key = async ($: any, k: string) => {
-  const band = await bandOf($)
-  const b = await band.find({ key: k })
-  expect(b.props.hotkey).toMatch(/^[1-9]$/)
-  return band.press({ key: k })
-}
 const posted = (seen: any, path: string) => seen.posts.some((p: any) => p.path === path)
 
-test('numbers · a live meeting: 1 pause · 2 end, 1 pauses, nothing reaches Claude; a typed "1" or "p" is a prompt as ever', async ($, on) => {
+test('letters · a live meeting: p pauses, nothing reaches Claude; "p" with more words is a prompt', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [] }
   mock.clock(on)
   fakeApp(on, [], seen)
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   const band = await bandOf($)
-  expect(await band.find({ type: 'Text', text: '1', weight: 'bold' } as any)).toBeDefined()
+  expect(await textOn(band, 'p')).toMatchObject({ props: { weight: 'bold' } })
   expect(await textOn(band, ' pause')).toMatchObject({ props: { weight: 'bold' } })
-  expect(await band.find({ key: 'pause' })).toMatchObject({ props: { hotkey: '1' } })
-  expect(await band.find({ key: 'stop' })).toMatchObject({ props: { hotkey: '2' } })
   expect(await textOn(band, 'Listening · the meeting')).toBeDefined()
-  await key($, 'pause')
+  await typed($, 'p')
   expect(posted(seen, '/api/lite/pause')).toBe(true)
-  expect(seen.submitted.length).toBe(0)
-  for (const t of ['1', 'p', 'p nfjlsndfj']) await typed($, t)
-  expect(seen.submitted.map((s: any) => s.text)).toEqual(['1', 'p', 'p nfjlsndfj'])
+  expect(seen.submitted.some((s: any) => s.text === 'p')).toBe(false)
+  await typed($, 'p nfjlsndfj')
+  expect(seen.submitted.some((s: any) => s.text === 'p nfjlsndfj')).toBe(true)
   expect(seen.posts.filter((p: any) => p.path === '/api/lite/pause').length).toBe(1)
 })
 
-test('numbers · a paused meeting: the state in normal brightness, 1 resumes', async ($, on) => {
+test('letters · one the band doesn\'t show now is a prompt: "a" during a meeting, "x"', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [] }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  await bandOf($)
+  for (const t of ['a', 'x']) await typed($, t)
+  expect(seen.submitted.map((s: any) => s.text)).toEqual(['a', 'x'])
+})
+
+test('letters · a paused meeting: the state in normal brightness, p resumes', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'meeting', session: 'm1', started: 1, paused: true } }
   mock.clock(on)
   fakeApp(on, [], seen)
@@ -1060,61 +1062,62 @@ test('numbers · a paused meeting: the state in normal brightness, 1 resumes', a
   const band = await bandOf($)
   expect((await textOn(band, 'Paused · the meeting')).props.dimColor).toBeFalsy()
   expect(await band.find({ key: 'pause' })).toMatchObject({ props: { label: 'resume' } })
-  await key($, 'pause')
+  await typed($, 'p')
   expect(posted(seen, '/api/lite/resume')).toBe(true)
 })
 
 for (const keep of [true, false])
-  test('numbers · end on a meeting: the band asks "Stop listening?"; ' + (keep ? 'keep listening keeps it' : 'stop stops'), async ($, on) => {
+  test('letters · e on a meeting: the band asks "Stop listening?"; ' + (keep ? 'k keeps listening' : 'e stops'), async ($, on) => {
     const seen: any = { posts: [], submitted: [], aborted: [], status: [] }
     mock.clock(on)
     fakeApp(on, [], seen)
     await $.command.run({ command: 'standby', args: '' })
     await settle()
-    await key($, 'stop')
+    await bandOf($)
+    await typed($, 'e')
     const band = await bandOf($)
     expect(await textOn(band, 'Stop listening?')).toBeDefined()
     expect(await band.find({ key: 'confirmYes' })).toMatchObject({ props: { label: 'stop' } })
     expect(await band.find({ key: 'confirmNo' })).toMatchObject({ props: { label: 'keep listening' } })
     expect(posted(seen, '/api/lite/stop')).toBe(false)
-    await key($, keep ? 'confirmNo' : 'confirmYes')
+    await typed($, keep ? 'k' : 'e')
     expect(posted(seen, '/api/lite/stop')).toBe(!keep)
     if (keep) expect(await textOn(await bandOf($), 'Listening · the meeting')).toBeDefined()
     expect(seen.submitted.length).toBe(0)
   })
 
 for (const keep of [true, false])
-  test('numbers · end on a call: the band asks "End the call?", 1 end in red; ' + (keep ? '2 keeps talking, then 1 pauses' : '1 ends it'), async ($, on) => {
+  test('letters · e on a call: the band asks "End the call?", e end in red; ' + (keep ? 'k keeps talking, then p pauses' : 'e ends it'), async ($, on) => {
     const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1, phase: 'listening' } }
     mock.clock(on)
     fakeApp(on, [], seen)
     await $.command.run({ command: 'standby', args: '' })
     await settle()
-    await key($, 'end')
+    await bandOf($)
+    await typed($, 'e')
     const band = await bandOf($)
     expect(await textOn(band, 'End the call?')).toBeDefined()
     expect(await band.find({ key: 'confirmYes' })).toMatchObject({ props: { label: 'end' } })
     expect(await band.find({ key: 'confirmNo' })).toMatchObject({ props: { label: 'keep talking' } })
-    expect(await band.find({ type: 'Text', text: '1', color: 'red' } as any)).toBeDefined()
-    expect(await band.find({ key: 'confirmYes' })).toMatchObject({ props: { hotkey: '1' } })
-    expect(await band.find({ key: 'confirmNo' })).toMatchObject({ props: { hotkey: '2' } })
-    await key($, keep ? 'confirmNo' : 'confirmYes')
+    expect(await band.find({ type: 'Text', text: 'e', color: 'red' } as any)).toBeDefined()
+    await typed($, keep ? 'k' : 'e')
     expect(posted(seen, '/api/lite/call/end')).toBe(!keep)
     if (keep) {
       expect(await textOn(await bandOf($), 'On a call with Claude')).toBeDefined()
-      await key($, 'mute')
+      await typed($, 'p')
       expect(seen.posts.find((p: any) => p.path === '/api/lite/mute').body).toEqual({ session: 'c1', muted: true })
     }
     expect(seen.submitted.length).toBe(0)
   })
 
-test('numbers · the question goes by itself after 10 s: the band as it was, and nothing ended', async ($, on) => {
+test('letters · the question goes by itself after 10 s: the band as it was, and nothing ended', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1, phase: 'listening' } }
   const clock = mock.clock(on)
   fakeApp(on, [], seen)
   await $.command.run({ command: 'standby', args: '' })
   await settle()
-  await key($, 'end')
+  await bandOf($)
+  await typed($, 'e')
   expect(await textOn(await bandOf($), 'End the call?')).toBeDefined()
   await clock.advance(9000); await settle()
   expect(await textOn(await bandOf($), 'End the call?')).toBeDefined()
@@ -1122,11 +1125,11 @@ test('numbers · the question goes by itself after 10 s: the band as it was, and
   const band = await bandOf($)
   expect(await textOn(band, 'End the call?')).toBeUndefined()
   expect(await textOn(band, 'On a call with Claude')).toBeDefined()
-  await key($, 'end')
-  expect(posted(seen, '/api/lite/call/end')).toBe(false)                // end asks again, never ends at once
+  await typed($, 'e')
+  expect(posted(seen, '/api/lite/call/end')).toBe(false)                // e asks again, never ends at once
 })
 
-test('numbers · VS Code\'s End asks on the band too: End and Keep talking as links; Keep talking keeps the call', async ($, on) => {
+test('letters · VS Code\'s End asks on the band too: End and Keep talking as links; Keep talking keeps the call', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1, phase: 'listening' } }
   mock.clock(on)
   fakeApp(on, [], seen)
@@ -1142,32 +1145,32 @@ test('numbers · VS Code\'s End asks on the band too: End and Keep talking as li
   expect(await textOn(await bandOf($, 'vscode'), 'On a call with Claude')).toBeDefined()
 })
 
-test('numbers · window opens the window', async ($, on) => {
+test('letters · o opens the window', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], can: { listen: true, window: true } }
   mock.clock(on)
   fakeApp(on, [], seen)
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   expect(await (await bandOf($)).find({ key: 'window' })).toMatchObject({ props: { label: 'full window' } })
-  await key($, 'window')
+  await typed($, 'o')
   expect(posted(seen, '/api/window')).toBe(true)
   expect(seen.submitted.length).toBe(0)
 })
 
-test('numbers · the hint under the actions the first time; gone once one is used', async ($, on) => {
+test('letters · the hint under the actions the first time; gone once a letter is used', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [] }
   mock.clock(on)
   fakeApp(on, [], seen)
   await $.command.run({ command: 'standby', args: '' })
   await settle()
-  expect(await textOn(await bandOf($), '  press a number')).toMatchObject({ props: { dimColor: true } })
-  expect(await textOn(await bandOf($, 'vscode'), '  press a number')).toBeUndefined()
-  await key($, 'pause')
-  expect(await textOn(await bandOf($), '  press a number')).toBeUndefined()
+  expect(await textOn(await bandOf($), '  type a letter and press Enter')).toMatchObject({ props: { dimColor: true } })
+  expect(await textOn(await bandOf($, 'vscode'), '  type a letter and press Enter')).toBeUndefined()
+  await typed($, 'p')
+  expect(await textOn(await bandOf($), '  type a letter and press Enter')).toBeUndefined()
 })
 
-for (const [k, answer] of [['accept', 'accept'], ['decline', 'decline'], ['always', 'always']] as const)
-  test('numbers · the ring: ' + k + ' answers ' + answer, async ($, on) => {
+for (const [key, answer] of [['a', 'accept'], ['d', 'decline'], ['y', 'always']] as const)
+  test('letters · the ring: ' + key + ' answers ' + answer, async ($, on) => {
     const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, hold: true }
     mock.clock(on)
     ENGINE(on)
@@ -1176,31 +1179,32 @@ for (const [k, answer] of [['accept', 'accept'], ['decline', 'decline'], ['alway
     const waiting = $.tool.call({ tool: 'mcp__standby__call' } as any)
     await settle()
     expect(await textOn(await bandOf($), 'Incoming call')).toBeDefined()
-    await key($, k)
+    await typed($, key)
     const r: any = await waiting
     expect(r.result).toBe(answer === 'decline' ? 'Declined' : 'Accepted: the call is starting')
     expect(seen.submitted.length).toBe(0)
     await settle()                                 // the call starts on the band, after the tool's answer
   })
 
-test('numbers · Connecting: end asks, then ends the call as it starts', async ($, on) => {
+test('letters · Connecting: e asks, then ends the call as it starts', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, holdPath: '/api/lite/call' }
   mock.clock(on)
   fakeApp(on, [], seen)
   await $.command.run({ command: 'standby', args: '' })
   void $.command.run({ command: 'standby', args: 'call' })
   await settle()
-  await key($, 'end')
+  await bandOf($)
+  await typed($, 'e')
   expect(await textOn(await bandOf($), 'End the call?')).toBeDefined()
-  await key($, 'confirmYes')
+  await typed($, 'e')
   expect(await textOn(await bandOf($), 'Ending the call .')).toBeDefined()
   seen.idle = false; seen.live = { kind: 'call', session: 'c1', started: 1 }
   seen.holdPath = null; seen.release(); await settle(); await settle()
   expect(posted(seen, '/api/lite/call/end')).toBe(true)
 })
 
-for (const [k, add] of [['add', true], ['forget', false]] as const)
-  test('numbers · a call\'s summary: ' + k + (add ? ' adds it to Claude Code' : ' forgets it'), async ($, on) => {
+for (const [key, add] of [['a', true], ['f', false]] as const)
+  test('letters · a call\'s summary: ' + key + (add ? ' adds it to Claude Code' : ' forgets it'), async ($, on) => {
     const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, cardKind: 'call' }
     mock.clock(on)
     fakeApp(on, [{ call: 'card', session: 'c1' }], seen)
@@ -1208,13 +1212,13 @@ for (const [k, add] of [['add', true], ['forget', false]] as const)
     await $.command.run({ command: 'standby', args: '' })
     await settle()
     expect(await (await bandOf($)).find({ key: 'add' })).toMatchObject({ props: { label: 'add to Claude Code' } })
-    await key($, k)
+    await typed($, key)
     expect(posted(seen, '/api/lite/card/add')).toBe(add)
     if (!add) expect(await (await bandOf($)).find({ key: 'forget' })).toBeUndefined()
     expect(seen.submitted.length).toBe(0)
   })
 
-test('numbers · a meeting\'s summary: close closes it, nothing to Claude', async ($, on) => {
+test('letters · a meeting\'s summary: c closes it, nothing to Claude', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true }
   mock.clock(on)
   fakeApp(on, [{ meet: 'card', session: 'm1' }], seen)
@@ -1222,7 +1226,7 @@ test('numbers · a meeting\'s summary: close closes it, nothing to Claude', asyn
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   expect(await textOn(await bandOf($), 'Summary · Planning')).toBeDefined()
-  await key($, 'close')
+  await typed($, 'c')
   expect(await textOn(await bandOf($), 'Summary · Planning')).toBeUndefined()
   expect(seen.submitted.length).toBe(0)
 })
@@ -1251,7 +1255,7 @@ test('a paused call with nothing waiting: no dot', async ($, on) => {
 })
 
 // ---------------------------------------------------------------- a call into the mini window, first on the band
-test('a call: 1 pause · 2 end | 3 mini window · 4 full window; 3 sends the call to the mini window', async ($, on) => {
+test('a call: p pause · e end | m mini window · o full window; m then Enter sends the call to the mini window', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], can: { listen: true, window: true, orb: true },
     live: { kind: 'call', session: 'c1', started: 1, phase: 'listening' } }
   mock.clock(on)
@@ -1266,8 +1270,7 @@ test('a call: 1 pause · 2 end | 3 mini window · 4 full window; 3 sends the cal
   expect(keys.filter((k: any) => order.includes(k))).toEqual(order)
   expect(await textOn(band, ' | ')).toMatchObject({ props: { dimColor: true } })          // the quiet divider, once
   expect((await band.findAll({ type: 'Text' })).filter((t: any) => (t.text ?? t.props.children) === ' | ').length).toBe(1)
-  expect(keys.length && (await Promise.all(order.map(async k => (await band.find({ key: k })).props.hotkey)))).toEqual(['1', '2', '3', '4'])
-  await key($, 'mini')
+  await typed($, 'm')
   expect(seen.posts.find((p: any) => p.path === '/api/lite/orb').body).toEqual({ cc: 'cc-1' })
   expect(seen.submitted.length).toBe(0)
   expect(seen.status).not.toContain('The call is in the mini window.')
@@ -1338,7 +1341,7 @@ test('on a call: the voice\'s own hand-off and a band key are never "typed"; ima
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   await bandOf($)
-  await key($, 'mute')                                      // a band key: pause
+  await typed($, 'p')                                       // a band key: pause
   const kinds = () => seen.posts.filter((p: any) => p.path === '/api/lite/progress').map((p: any) => p.body.kind)
   expect(kinds()).not.toContain('typed')
   expect(seen.submitted.some((s: any) => s.text === 'From your call: run the tests')).toBe(true)
@@ -1422,7 +1425,7 @@ const MIC_ASK = 'macOS will ask for your microphone · choose Allow'
 const SOUND_ASK = 'macOS will ask for Screen & System Audio Recording · choose Allow; Standby takes only the sound'
 const meetingWith = (more: any) => ({ kind: 'meeting', session: 'm1', started: 1, capture: 'auto', ...more })
 
-test('access · the mic refused: said in the warning colour in place of the words, settings opens its pane', async ($, on) => {
+test('access · the mic refused: said in the warning colour in place of the words, s settings opens its pane', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], can: { listen: true, window: true },
     live: meetingWith({ mic: 'denied', meeting_audio: 'denied' }) }
   mock.clock(on)
@@ -1435,9 +1438,9 @@ test('access · the mic refused: said in the warning colour in place of the word
   expect(await textOn(band, 'Speaker 1: We ship Friday.')).toBeUndefined()
   const keys = (await band.findAll({ type: 'Button' })).map((b: any) => b.props.key ?? b.key)
   expect(keys).toEqual(['pause', 'stop', 'window', 'settings'])
-  await key($, 'settings')
+  await typed($, 's')
   expect(seen.posts.find((p: any) => p.path === '/api/lite/permission').body).toEqual({ session: 'm1' })
-  expect(seen.submitted.length).toBe(0)
+  expect(seen.submitted.some((s: any) => s.text === 's')).toBe(false)
   expect(seen.status).toEqual(['Standby is on for this session'])     // no toast for it: System Settings opens
 })
 
@@ -1509,7 +1512,7 @@ test('access · a folder macOS refuses the call’s Claude: said plainly, with S
   const band = await bandOf($)
   expect(await textOn(band, 'Standby can’t read your Desktop folder · allow it in Privacy & Security > Files & Folders'))
     .toMatchObject({ props: { color: '#d29922' } })
-  await key($, 'settings')
+  await typed($, 's')
   expect(posted(seen, '/api/lite/permission')).toBe(true)
 })
 

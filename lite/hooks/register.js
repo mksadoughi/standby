@@ -52,9 +52,9 @@ const S = {
   callState: { phase: '', since: 0, working: false, workingSince: 0, notice: '', retrying: 0, waiting: false },   // the call's voice
   unreach: 0,
   confirm: null,        // End asked on the band: { what, question, yes, no, until }
-  keysNow: [],          // the terminal band's actions as last drawn: [[number, what]]
-  hintAt: 0,            // when the "press a number" hint first showed (once per session)
-  keyUsed: false,       // one of them was pressed: the hint has done its job           // since when Standby hasn't answered while something was going on, or 0
+  keysNow: [],          // the terminal band's actions as last drawn: [[letter, what]], what a typed letter runs
+  hintAt: 0,            // when the "type a letter and press Enter" hint first showed (once per session)
+  keyUsed: false,       // a letter typed with Enter ran an action: the hint has done its job           // since when Standby hasn't answered while something was going on, or 0
 }
 
 // ---------------------------------------------------------------- the app
@@ -433,7 +433,7 @@ const ENDS = { endCall: ['End the call?', 'End', 'Keep talking'], cancelStart: [
   stopListening: ['Stop listening?', 'Stop', 'Keep listening'] }
 const CONFIRM_MS = 10000
 const DIV = '|'                         // in a band's actions: a quiet divider, the call's own from the windows
-const HINT_MS = 60000                   // how long the "press a number" hint shows, the first time
+const HINT_MS = 60000                   // how long the "type a letter and press Enter" hint shows, the first time
 
 async function press($, what, sure) {
   if (ENDS[what] && !sure) {
@@ -700,20 +700,19 @@ async function band($, e, next) {
   const fit = (text, props) => Box({ flexGrow: 1, flexShrink: 1, minWidth: 0, overflow: 'hidden',
     children: [Text(Object.assign({ wrap: 'truncate-end', children: text }, props || {}))] })
   const line = kids => Box({ flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', columnGap: 1, children: kids })
-  // the terminal's actions: "1 pause · 2 end | 3 window", each number in Standby's colour and the word bold,
-  // only the separators dim. Each is its number pressed in an empty prompt, no Enter: Claude Code's own band
-  // hotkey, so nothing is typed and nothing reaches the chat (or Enter on it with the band focused)
+  // the terminal's keys: "p pause · e end | o full window", dim, the letters in the accent
+  // the terminal's actions: "p pause · e end · o window", each letter in Standby's colour and the word bold,
+  // only the separators dim. Each is a letter typed alone, then Enter (or Enter on it with the band focused)
   // a list's groups, the call's own actions then the windows: DIV between them, dropped where nothing follows
   const groups = list => list.filter((x, i) => x !== DIV || (i > 0 && i < list.length - 1 && list[i - 1] !== DIV))
   const digits = list => {
     list = groups(list)
-    const num = new Map()                // numbered across the whole band, in the order drawn
-    for (const k of list) if (k !== DIV) { S.keysNow.push([String(S.keysNow.length + 1), k[3]]); num.set(k, S.keysNow.length) }
+    for (const k of list) if (k !== DIV) S.keysNow.push([k[1], k[3]])
     return Box({ flexDirection: 'row', flexWrap: 'nowrap', flexShrink: 0, children:
       list.flatMap((k, i) => k === DIV ? [Text({ dimColor: true, children: ' | ' })]
         : [...(i && list[i - 1] !== DIV ? [Text({ dimColor: true, children: ' \u00b7 ' })] : []),
-          Button({ key: k[0], label: k[2], plain: true, hotkey: String(num.get(k)), onPress: async () => { S.keyUsed = true; await press($, k[3]) },
-            children: [Text({ color: k[5] ? 'red' : MARK, weight: 'bold', children: String(num.get(k)) }), Text({ weight: 'bold', children: ' ' + k[2] }),
+          Button({ key: k[0], label: k[2], plain: true, onPress: async () => { await press($, k[3]) },
+            children: [Text({ color: k[5] ? 'red' : MARK, weight: 'bold', children: k[1] }), Text({ weight: 'bold', children: ' ' + k[2] }),
               ...(k[4] ? [Text({ key: k[0] + '-dot', color: 'red', children: ' \u2022' })] : [])] })]) })
   }
   // VS Code and the desktop draw a Button as a box: a quiet link instead, which the mod answers itself
@@ -723,7 +722,7 @@ async function band($, e, next) {
     Markdown({ key, dimColor: !!quiet,
     text: '[' + word + '](' + KEY_LINK + key + ')', pressableLinks: [KEY_LINK + key], onLinkPress: async () => { await press($, what) } }),
     ...(dot ? [Text({ key: key + '-dot', color: 'red', children: ' \u2022' })] : [])] })
-  // the same actions: number keys in the terminal, quiet links elsewhere (links on the top line only)
+  // the same actions: letter keys in the terminal, quiet links elsewhere (links on the top line only)
   const keyset = (keys, words) => term ? [digits(keys)]
     : [Box({ flexDirection: 'row', flexWrap: 'nowrap', flexShrink: 0, columnGap: 1, children: groups(words).map(w => w === DIV ? Text({ dimColor: true, children: '|' }) : link(...w)) })]
   const now = Date.now(), secsOf = t => Math.max(0, Math.floor((now - t) / 1000))
@@ -945,7 +944,16 @@ export function register(on) {
   // What the person types during a meeting carries the lines Claude hasn't had yet: on ask, all of
   // the transcript the first time, then what's new; set to live, the lines since the last batch
   on('prompt.submit', async ($, e, next) => {
+    // A letter on the terminal band, typed alone, then Enter: its action runs and nothing goes to Claude. Any
+    // other prompt (that letter with more text, a letter the band doesn't show now) is a prompt as ever
+    const typed = String(e.text || '').trim().toLowerCase()
     const mine = e.origin && e.origin.kind === 'plugin' && e.origin.name === 'standby'      // a hand-off of the voice's
+    const hit = S.on && !e.command && !mine && /^[a-z]$/.test(typed) ? S.keysNow.find(k => k[0] === typed) : null
+    if (hit && (await $.session.surfaces()).includes('terminal')) {
+      S.keyUsed = true
+      const r = await press($, hit[1])
+      return { drop: r === 'closed' ? 'Done.' : r === 'asked' ? S.confirm.question : r }
+    }
     if (summaryShown() && !choosing()) { S.card.seen = true; $.ui.invalidate('ui.render') }
     const live = S.st && S.st.live
     // On a call, what the person types or pastes here (never the voice's own hand-offs, a band key, a
@@ -966,7 +974,7 @@ export function register(on) {
   // latest of it, so you can see it's working: a meeting's last finished line, a call's last exchange
   // (each changes only when a line or a turn is done). In VS Code and the desktop, quiet text links beside
   // Full window: Pause (Resume while paused) and End, short (the user, 2026-10-21); the
-  // terminal keeps its number keys; /standby and plain words do the same. After a meeting or a
+  // terminal keeps its letter keys; /standby and plain words do the same. After a meeting or a
   // call, its summary, the one time the band takes more room: its points, until the next prompt or
   // about 30 s (everything is kept in Standby; nothing to choose), then nothing.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -978,7 +986,7 @@ export function register(on) {
     S.hintAt = S.hintAt || Date.now()
     if (Date.now() - S.hintAt > HINT_MS) return tree
     const { Box, Text } = $.ui.resolve(e)
-    return Box({ flexDirection: 'column', children: [tree, Box({ flexDirection: 'row', children: [Text({ dimColor: true, children: '  press a number' })] })] })
+    return Box({ flexDirection: 'column', children: [tree, Box({ flexDirection: 'row', children: [Text({ dimColor: true, children: '  type a letter and press Enter' })] })] })
   })
 
 
