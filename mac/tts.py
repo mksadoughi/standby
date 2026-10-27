@@ -2,8 +2,8 @@
 
     a sentence --> the voice process --> its sound, 80 ms at a time --> played as it comes
 
-The user picked it, and the voice Jean, from the candidates measured on this
-Mac: the first sound is ready about
+The user picked it from the candidates measured on this Mac, and the voice
+Alba as the default: the first sound is ready about
 20 ms after the text, whatever its length, and it speaks 5-8x faster than
 real time.
 
@@ -15,7 +15,7 @@ Face (about 240 MB, pinned revisions); until it is ready, sentences wait in
 its process; if it fails, it is opened again (native.duplex's engine), never macOS's
 voice instead.
 
-    python tts.py [--voice jean] [--engine pocket|fake]
+    python tts.py [--voice alba] [--engine pocket|fake]
 
 reads JSON lines on stdin: {"id": n, "say": text}; {"stop": n}, drop all up
 to n; {"quit": true}. Stdin closing is a quit too, so it never outlives the
@@ -45,7 +45,7 @@ RATE = 24000
 REPO, REVISION = "mlx-community/pocket-tts", "cbf71d5f6657bbc3f4bc02f85ee408261225bec7"
 VOICES_REPO, VOICES_REVISION = "kyutai/pocket-tts-without-voice-cloning", "d4fdd22ae8c8e1cb3634e150ebeff1dab2d16df3"
 VOICES = ["alba", "marius", "javert", "jean", "fantine", "cosette", "eponine", "azelma"]
-DEFAULT_VOICE = "jean"                   # the user's pick, 2026-10-07
+DEFAULT_VOICE = "alba"                   # the user's pick, 2026-10-26 (Jean before)
 MODEL_FILES = ["config.json", "model.safetensors"]
 VOICE_FILES = ["tokenizer.model"] + ["embeddings/%s.safetensors" % v for v in VOICES]
 MODEL_BYTES = 235739497                  # model.safetensors; the rest is about 0.6 MB a file at most
@@ -71,7 +71,7 @@ def available():
 
 def voice_for(chosen, installed=None):
     """The Pocket voice voice mode speaks in, from config.json's voice_mode.voice:
-    automatic (None) is Jean, "pocket:<name>" that one. None for a macOS voice,
+    automatic (None) is the default (Alba), "pocket:<name>" that one. None for a macOS voice,
     or when the packages are not installed (then macOS's voice, as before)."""
     if not (available() if installed is None else installed):
         return None
@@ -84,7 +84,7 @@ def voice_for(chosen, installed=None):
 
 
 def voices():
-    """Settings > Voice: Standby's own voices, Jean first."""
+    """Settings > Voice: Standby's own voices, the default first."""
     order = [DEFAULT_VOICE] + [v for v in VOICES if v != DEFAULT_VOICE]
     return [{"id": "pocket:" + v, "name": v.capitalize(), "quality": "standby", "lang": "en"} for v in order]
 

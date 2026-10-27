@@ -1986,7 +1986,7 @@ def voice_backend(voice=None):
 
 def backend_voices(wanted, cfg, installed=None):
     """(macOS voice, Pocket voice, why it's the Mac's) for voice mode's engine: Standby's own voice
-    (Jean, the chosen Pocket voice, or the agent's), unless a macOS voice is the one chosen.
+    (the default, the chosen Pocket voice, or the agent's), unless a macOS voice is the one chosen.
     `why` is "" unless the Mac's voice speaks although the user didn't choose it."""
     import tts
     chosen = wanted or (cfg.get("voice_mode") or {}).get("voice")

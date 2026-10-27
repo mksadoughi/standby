@@ -71,8 +71,9 @@ a, b = tts.read_frame(buf), tts.read_frame(buf)
 check("frames: kind, id and body, back as written; then the end",
       a[:2] == (b"PCM ", 7) and np.frombuffer(a[2], "<f4").tolist() == [0, 1, 2] and b == (b"END ", 7, b"")
       and tts.read_frame(buf) is None, (a, b))
-check("the voice: automatic is Jean, a Pocket one by name, a macOS one is not ours",
-      tts.voice_for(None, installed=True) == "jean" and tts.voice_for("pocket:alba", installed=True) == "alba"
+check("the voice: automatic is Alba, a Pocket one by name (Jean, chosen, stays Jean), a macOS one is not ours",
+      tts.voice_for(None, installed=True) == "alba" and tts.voice_for("pocket:jean", installed=True) == "jean"
+      and tts.voice_for("pocket:marius", installed=True) == "marius"
       and tts.voice_for("com.apple.voice.premium.en-US.Ava", installed=True) is None
       and tts.voice_for("pocket:nobody", installed=True) is None)
 check("  not installed: macOS's, as before", tts.voice_for(None, installed=False) is None)
@@ -80,8 +81,8 @@ os.environ["HF_HUB_OFFLINE"] = "1"               # as the recorder sets it, once
 check("the voice process is not kept offline by the recorder's own setting: its first download can happen",
       "HF_HUB_OFFLINE" not in tts._env() and tts._env()["PYTHONUTF8"] == "1")
 os.environ.pop("HF_HUB_OFFLINE")
-check("Settings lists Standby's voices, Jean first",
-      [v["id"] for v in tts.voices()][:2] == ["pocket:jean", "pocket:alba"] and len(tts.voices()) == 8
+check("Settings lists Standby's voices, Alba (the default) first",
+      [v["id"] for v in tts.voices()][:1] == ["pocket:alba"] and len(tts.voices()) == 8
       and all(v["quality"] == "standby" for v in tts.voices()))
 check("getting ready: said while it first downloads, with how far",
       tts.getting_ready("downloading", True, 60, 240) == "Getting the voice ready… 25%"
@@ -531,8 +532,8 @@ check("  the one from before macOS 26 where it does not, or there is no such fil
 real_available = tts.available
 tts.available = lambda: True
 vi = ui.voices_info()
-check("Settings > Voice: Standby's voices, automatic is Jean, with its credit",
-      vi["standby"][0]["id"] == "pocket:jean" and vi["current"]["id"] == "pocket:jean" and vi["chosen"] is None
+check("Settings > Voice: Standby's voices, automatic is Alba, with its credit",
+      vi["standby"][0]["id"] == "pocket:alba" and vi["current"]["id"] == "pocket:alba" and vi["chosen"] is None
       and "Pocket TTS by Kyutai" in vi["credit"], vi)
 r = ui.voices_action({"id": "pocket:alba"})
 check("  choosing one of them saves it", r.get("ok") and r["voices"]["current"]["name"] == "Alba", r)
@@ -606,17 +607,17 @@ def tried(r):
 
 try:
     AutoProcess.plan = "ready"
-    r = ui.voices_action({"action": "try", "id": "pocket:jean"})
-    check("Try: it answers at once, and goes on in the background", r.get("ok") and r["trying"]["voice"] == "Jean"
+    r = ui.voices_action({"action": "try", "id": "pocket:alba"})
+    check("Try: it answers at once, and goes on in the background", r.get("ok") and r["trying"]["voice"] == "Alba"
           and r["trying"]["state"] in ("starting", "playing"), r)
     states = tried(r)
     pr = AutoProcess.made[-1]
     check("  Playing only once it is ready, then done: the line in that voice, its process gone",
-          states[-2:] == ["playing", "done"] and pr.voice == "jean" and "I'm Jean" in pr.said[0][1]
+          states[-2:] == ["playing", "done"] and pr.voice == "alba" and "I'm Alba" in pr.said[0][1]
           and wait(lambda: pr.closed == 1), (states, pr.said))
 
     AutoProcess.plan = "downloading"
-    r = ui.voices_action({"action": "try", "id": "pocket:jean"})
+    r = ui.voices_action({"action": "try", "id": "pocket:alba"})
     pr = got(lambda: AutoProcess.made[-1] if AutoProcess.made[-1].plan == "downloading" and AutoProcess.made[-1].opened else None)
     pr.done, pr.total = 100, 400
     check("  the first time: downloading, and how far, not Playing",
@@ -625,7 +626,7 @@ try:
     vi = ui.voices_info()
     check("  Settings meanwhile: getting ready, and how far",
           vi.get("preparing") == "Getting the voice ready… 25%" and vi.get("preparing_pct") == 25, vi)
-    r2 = ui.voices_action({"action": "try", "id": "pocket:alba"})
+    r2 = ui.voices_action({"action": "try", "id": "pocket:jean"})
     check("  Try again during it: the same one goes on, no second download",
           r2["trying"]["n"] == r["trying"]["n"] and AutoProcess.made[-1] is pr, r2)
     pr.state = "ready"
@@ -634,7 +635,7 @@ try:
           wait(lambda: pr.closed == 1) and "preparing" not in ui.voices_info())
 
     AutoProcess.plan = "downloading"
-    r = ui.voices_action({"action": "try", "id": "pocket:jean"})
+    r = ui.voices_action({"action": "try", "id": "pocket:alba"})
     pr = got(lambda: AutoProcess.made[-1] if AutoProcess.made[-1] is not pr and AutoProcess.made[-1].opened else None)
     real_gone, ui.TRY_GONE = ui.TRY_GONE, 0.2
     time.sleep(0.4)                       # Settings closed: nobody asks
@@ -644,16 +645,16 @@ try:
     ui.TRY_GONE = real_gone
 
     AutoProcess.plan = "downloading"
-    r = ui.voices_action({"action": "try", "id": "pocket:jean"})
+    r = ui.voices_action({"action": "try", "id": "pocket:alba"})
     pr = got(lambda: AutoProcess.made[-1] if AutoProcess.made[-1] is not pr and AutoProcess.made[-1].opened else None)
-    ui.voices_action({"id": "pocket:alba"})            # another voice picked during it
+    ui.voices_action({"id": "pocket:jean"})            # another voice picked during it
     pr.state = "ready"
     check("  ready after another voice was picked: downloaded, not played",
           wait(lambda: ui.TRY.get("state") == "skipped") and pr.said == [], ui.TRY)
     ui.voices_action({"id": None})
 
     AutoProcess.plan = "failed"
-    r = ui.voices_action({"action": "try", "id": "pocket:jean"})
+    r = ui.voices_action({"action": "try", "id": "pocket:alba"})
     t = got(lambda: (lambda x: x if x and x["state"] == "failed" else None)(ui.voices_info().get("trying")))
     check("  a voice that fails: why, in a few words, and nothing left running",
           t and t["error"] == "no model here" and t["downloaded"] is False and wait(lambda: AutoProcess.made[-1].closed == 1), t)

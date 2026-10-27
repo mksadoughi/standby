@@ -662,15 +662,16 @@ check("a test never gets the real engine (STANDBY_NO_DEVICES, from the guard)",
       os.environ.get("STANDBY_NO_DEVICES") == "1" and sb.voice_backend() is None)
 
 # ---------------------------------------------------------------- which voice a call speaks in
-check("a call's voice: automatic is Standby's own (Jean), never the Mac's, when it's installed",
-      sb.backend_voices(None, {}, installed=True) == (None, "jean", ""))
+check("a call's voice: automatic is Standby's own (Alba), never the Mac's, when it's installed",
+      sb.backend_voices(None, {}, installed=True) == (None, "alba", ""))
+check("  a user who chose Jean keeps Jean", sb.backend_voices(None, {"voice_mode": {"voice": "pocket:jean"}}, installed=True)[1] == "jean")
 check("  the chosen Pocket voice, or the agent's own", sb.backend_voices("pocket:alba", {}, installed=True)[1] == "alba"
       and sb.backend_voices(None, {"voice_mode": {"voice": "pocket:alba"}}, installed=True)[1] == "alba")
 check("  a macOS voice only when that's the one chosen", sb.backend_voices("Samantha", {}, installed=True) == ("Samantha", None, ""))
 check("  not installed: the Mac's voice, and it says why",
       sb.backend_voices(None, {}, installed=False) == (None, None, "Standby's voice isn't installed"))
 # The engine as voice mode makes it (no devices: the engine is a fake): a session with no voice of its
-# own must get Jean. It got the Mac's when `import voice` in make() shadowed the session's voice.
+# own must get Standby's (Alba). It got the Mac's when `import voice` in make() shadowed the session's voice.
 import tts  # noqa: E402
 made_with, real = [], (duplex.AVFBackend, tts.available, sb.load_config, os.environ.pop("STANDBY_NO_DEVICES"))
 duplex.AVFBackend = lambda **kw: made_with.append(kw) or types.SimpleNamespace(**kw)
@@ -683,7 +684,7 @@ finally:
     duplex.AVFBackend, tts.available, sb.load_config = real[0], real[1], real[2]
     os.environ["STANDBY_NO_DEVICES"] = real[3]
 check("voice mode's engine for a call with an automatic voice: Standby's voice, not the Mac's",
-      made_with and made_with[-1]["neural"] == "jean" and made_with[-1]["voice"] is None, made_with)
+      made_with and made_with[-1]["neural"] == "alba" and made_with[-1]["voice"] is None, made_with)
 # The call's voice loop looks at Settings between sentences: a change reaches the engine; an agent's own
 # voice is kept. A config.json of its own (sb.CONFIG): never the user's.
 import json, tempfile, time  # noqa: E402
