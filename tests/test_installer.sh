@@ -121,7 +121,7 @@ check "standby-ctx linked" "[[ -x $H/.local/bin/standby-ctx ]]"
 check "no standalone meeting skill linked any more" "[[ ! -e $H/.claude/skills/meeting-standby ]]"
 P="$H/Applications/Standby.app/Contents"
 check "app bundle: Info.plist valid, asks for the microphone, says why for the Desktop and Documents" \
-  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$P/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby' and d['CFBundleIdentifier']=='dev.standby.app' and d.get('NSMicrophoneUsageDescription') and 'project you work on' in d.get('NSDesktopFolderUsageDescription', '') and d.get('NSDocumentsFolderUsageDescription') == d['NSDesktopFolderUsageDescription']))\""
+  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$P/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby' and d['CFBundleIdentifier']=='dev.standby.app' and d.get('NSMicrophoneUsageDescription') and 'read the project you' in d.get('NSDesktopFolderUsageDescription', '') and d.get('NSDocumentsFolderUsageDescription') == d['NSDesktopFolderUsageDescription']))\""
 E="$H/.standby/app-build/Standby.py"
 check "app built in alias mode from the generated entry point, with icon" \
   "[[ \"\$(cat $P/build.txt)\" == '$E|True|$ICON_STANDBY' ]]"
