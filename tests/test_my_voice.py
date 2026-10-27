@@ -200,6 +200,12 @@ check("  someone else's words the voice never said: kept, as before",
 check("  only what it said lately counts, as whole words in order",
       sb.echoes_voice("sure", said=[(time.time(), "Sure.")]) and not sb.echoes_voice("sure", said=[(time.time() - 60, "Sure.")])
       and not sb.echoes_voice("ensure it", said=[(time.time(), "Sure.")]) and sb.echoes_voice("talk soon", said=[(time.time(), "Okay, talk soon!")]))
+hi = [(time.time(), "Hi, good to hear you.")]
+check("  heard back a little off, as an echo is: still its own (talk-20261026-195509)",
+      sb.echoes_voice("Uh good to hear you.", said=hi) and sb.echoes_voice("Hey, good to hear you.", said=hi))
+check("  but not the user's own close words: one word off in four, a gap, a word left out",
+      not sb.echoes_voice("good to see you", said=hi) and not sb.echoes_voice("hi hear you", said=hi)
+      and not sb.echoes_voice("hi good hear you", said=hi))
 sb.VOICE_SAID.clear()
 end(th)
 
