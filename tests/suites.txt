@@ -119,6 +119,7 @@ test_lite_call             py    par
 test_past                  py    par
 test_delete                py    par
 test_settings_help         py    par
+test_settings_window       py    par
 test_live_box              py    par
 test_export_chat           py    par
 test_bottom_edge           py    par

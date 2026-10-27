@@ -3860,6 +3860,8 @@ def lite_call_live(cc):
 # row) it comes to the front on that session's call or meeting, above other windows while one is live.
 WINDOW = (500, 720)
 WINDOW_MIN = (360, 480)
+SETTINGS_SIZE = (500, 640)          # the Settings window: as wide as the main one, so its rows lay out the same
+SETTINGS_MIN = (400, 480)
 
 
 _CC_PATHS = {}                          # a Claude Code session -> where its transcript was found
@@ -4093,6 +4095,102 @@ def _to_front(w):
 def _redraw(win):
     """The window's web view laid out and drawn again at the window's size (after a show and a resize)."""
     window.redraw(win, log)
+
+
+def main_page(settings=False):
+    """The page, with this launch's token: the main window's, or the Settings window's (settings), which
+    opens Settings at once and runs nothing else of the app (no Standby view, no polling)."""
+    page = PAGE.replace("__SB_SETWIN__", "1" if settings else "0")
+    if settings:
+        page = page.replace('<script src="/agents.js"></script>', "")
+    return page.replace("__SB_TOKEN__", TOKEN)
+
+
+# Settings in a window of its own: one, made the first time it's opened and hidden when it's closed, so
+# opening it again brings it to the front. Neither the main window nor the mini one moves for it: a call
+# or a meeting stays where it is.
+SETTINGS_WIN = {}                  # "win": the Settings window, once made
+SETTINGS_PANES = ("call", "recording", "dictation", "usage")
+_SETTINGS_LOCK = threading.Lock()
+
+
+def _settings_default():
+    """The first time: centred on the screen the person is working on."""
+    try:
+        x, y, w, h = _working_screen()
+        width, height = SETTINGS_SIZE[0], min(SETTINGS_SIZE[1], h - 24)
+        return [x + (w - width) / 2.0, y + (h - height) / 2.0, width, height]
+    except Exception:
+        return [80, 120, SETTINGS_SIZE[0], SETTINGS_SIZE[1]]
+
+
+def open_settings_window(pane=None):
+    """Standby's Settings in its own window, on `pane` ("call") or at its list: made the first time, in
+    front after. {ok}, or {error} with no window to open it in (Standby running without one)."""
+    pane = pane if pane in SETTINGS_PANES else None
+    if APP_WINDOW.get("win") is None:
+        return {"error": "Settings needs the Standby app open"}
+    if threading.current_thread() is threading.main_thread():
+        # pywebview makes a window only from another thread once it's running (and evaluate_js waits on this one)
+        threading.Thread(target=open_settings_window, args=(pane,), name="settings-window", daemon=True).start()
+        return {"ok": True}
+    import webview
+    with _SETTINGS_LOCK:
+        win = SETTINGS_WIN.get("win")
+        if win is None:
+            api = SettingsApi()
+            url = "http://127.0.0.1:%d/settings?token=%s%s" % (PORT, TOKEN, "&pane=" + pane if pane else "")
+            win = webview.create_window("Standby Settings", url, js_api=api, width=SETTINGS_SIZE[0],
+                                        height=SETTINGS_SIZE[1], min_size=SETTINGS_MIN)
+            api.window = win
+            SETTINGS_WIN["win"] = win
+            _dress_settings(win, api)
+            log("settings: its window, opened%s" % (" on %s" % pane if pane else ""))
+            return {"ok": True}
+    win.show()
+    _to_front(win)
+    win.evaluate_js("showSettings(%s)" % json.dumps(pane))      # its values fresh, at that pane or the list
+    log("settings: its window, in front%s" % (" on %s" % pane if pane else ""))
+    return {"ok": True}
+
+
+def _dress_settings(win, api):
+    """The Settings window as the main one: no title bar (the page's header drags it, its corner kept
+    clear of the traffic lights), where it was left, and closing only hides it."""
+    def lights(on):
+        js = "document.documentElement.classList.%s('lights')" % ("add" if on else "remove")
+        threading.Thread(target=win.evaluate_js, args=(js,), daemon=True).start()
+
+    def before_show():
+        try:
+            api.titlebar = window.titlebar(win.native, on_fullscreen=lambda full: lights(not full))
+        except Exception as exc:
+            log("settings: kept the standard title bar (%r)" % exc)
+        try:
+            window.place(win.native, _frame("settings", _settings_default()))
+        except Exception as exc:
+            log("settings: couldn't place its window (%r)" % exc)
+    win.events.before_show += before_show
+    win.events.loaded += lambda: api.titlebar is not None and lights(not api.titlebar.fullscreen())
+
+    def closing():
+        if SETTINGS_WIN.get("quitting"):
+            return True
+        _save_frame(win, "settings")
+        win.hide()
+        return False                             # kept: the next open is at once, where it was
+    win.events.closing += closing
+
+
+def close_settings_window():
+    """The app's own window really closes (Standby quits): the hidden Settings window goes with it."""
+    win = SETTINGS_WIN.get("win")
+    if win is not None:
+        SETTINGS_WIN["quitting"] = True
+        try:
+            win.destroy()
+        except Exception:
+            pass
 
 
 def open_window(b):
@@ -4665,6 +4763,10 @@ class CompanionHooks(object):
     def stop_recording(self):
         stop_voice()
         threading.Thread(target=stop_session, daemon=True).start()     # it waits for the recorder
+
+    def open_settings(self, pane=None):
+        """The mini window's Settings: the Settings window, on that pane; the call stays in the mini window."""
+        return open_settings_window(pane)
 
     def stop_all(self):
         """Quit (asked first while a meeting records): nothing records once Standby is gone."""
@@ -5272,7 +5374,9 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/msg/"):
             return self._json(messenger_get(path, {k: v[-1] for k, v in urllib.parse.parse_qs(query).items()}))
         if path == "/":
-            return self._send(PAGE.replace("__SB_TOKEN__", TOKEN), "text/html; charset=utf-8")
+            return self._send(main_page(), "text/html; charset=utf-8")
+        if path == "/settings":                   # the Settings window's: the same page, Settings alone
+            return self._send(main_page(settings=True), "text/html; charset=utf-8")
         if path in ("/agents.js", "/agents.css"):   # Standby's view, beside today's page
             try:
                 body = (HERE / path[1:]).read_text()       # read each time: an edit shows on reload
@@ -5435,6 +5539,10 @@ class Handler(BaseHTTPRequestHandler):
 class Api(object):
     """Bridge for the native window (pywebview js_api)."""
 
+    def open_settings(self, pane=None):
+        """The page's Settings (its gear, ⋯ menu, Cmd-comma): in the Settings window."""
+        return open_settings_window(pane)
+
     def __init__(self):
         self.window = None
         self.titlebar = None                     # titlebar.Titlebar, once the window has one
@@ -5500,6 +5608,19 @@ class Api(object):
 WHOAMI = "standby"
 PORT_FILE = ROOT / "ui.port"          # the port this Standby serves on, for `standby app`
 
+
+
+
+class SettingsApi(Api):
+    """The Settings window's bridge: the main window's, and the window hiding itself."""
+
+    def settings_close(self):
+        """The dialog closed in the Settings window: the window goes (hidden, kept for the next open)."""
+        win = self.window
+        if win is not None:
+            _save_frame(win, "settings")
+            win.hide()
+        return {"ok": True}
 
 def root_mark():
     """This Standby's folder, as a mark that doesn't show the path."""
@@ -5700,6 +5821,7 @@ def main():
         _save_frame(win)
         if p is not None and p.closing() is False:
             return False
+        close_settings_window()                  # the window really goes: the hidden Settings one with it
         stop_voice()
         if live_session():
             log("window closed while recording: stopping the recording")
@@ -6112,7 +6234,7 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
 <div class="toast" id="toast"></div>
 <dialog id="settings" class="setwin"><form method="dialog" onsubmit="event.preventDefault();autosave()">
   <header class="sethead" id="sethead" data-drag>
-    <button type="button" class="iconbtn" onclick="setBack()" title="Back" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button type="button" class="iconbtn" id="setback" onclick="setBack()" title="Back" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
     <h3 id="settitle" tabindex="-1" autofocus>Settings</h3><span class="saved" id="ssaved">Saved</span></header>
   <nav class="setnav" id="setnav">
     <button type="button" data-p="call" onclick="setPane('call')"><span class="t"><b>Call</b><small>The voice and its model, talking over Claude, asking first</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
@@ -6198,6 +6320,7 @@ const $=id=>document.getElementById(id);
 // that took over 1 s. Not while hidden: macOS slows a hidden page's timers.
 const T0=performance.now();
 const SBT="__SB_TOKEN__";   // this launch's token: every request carries it (the app checks)
+const SETWIN="__SB_SETWIN__"==="1";   // this page is the Settings window's (/settings): Settings alone, nothing else of the app
 function stallSay(ms,where){fetch("/api/stall",{method:"POST",headers:{"Content-Type":"application/json","X-Standby-Token":SBT},body:JSON.stringify({ms:Math.round(ms),where})}).catch(()=>{})}
 (()=>{let last=performance.now(),shown=!document.hidden;setInterval(()=>{const n=performance.now(),late=n-last-250;last=n;
   if(late>500&&late<600000&&shown&&!document.hidden)stallSay(late,(typeof MX!=="undefined"&&MX.view?JSON.stringify(MX.view):"page")+(n-T0<60000?", at start":""));
@@ -6455,19 +6578,25 @@ function setHelp(id,t){const e=$(id);e.title=t||"";delete e.dataset.mxtip;e.setA
 // Settings' list of sections (setHome), or one section open in its place (setPane); back, and Esc, go from
 // a section to the list and from the list out of Settings
 let SETP=null;
-function setPane(p){if(p==="usage")loadUsage();SETP=p;const m=$("setmain");m.scrollTop=0;m.hidden=false;$("setnav").hidden=true;$("sethead").classList.remove("scrolled");
+function setPane(p){if(p==="usage")loadUsage();SETP=p;$("setback").style.display="";const m=$("setmain");m.scrollTop=0;m.hidden=false;$("setnav").hidden=true;$("sethead").classList.remove("scrolled");
   const b=document.querySelector('.setnav button[data-p="'+p+'"] b');$("settitle").textContent=b?b.textContent:"Settings";
   document.querySelectorAll(".pane").forEach(x=>x.classList.toggle("on",x.dataset.p===p))}
-function setHome(){SETP=null;$("setmain").hidden=true;$("setnav").hidden=false;$("setnav").scrollTop=0;$("sethead").classList.remove("scrolled");$("settitle").textContent="Settings"}
-function setBack(){if(SETP)setHome();else settings.close()}
+// In the Settings window the list is the top: no Back there, and Esc stays (closing is the window's own).
+function setHome(){SETP=null;$("setback").style.display=SETWIN?"none":"";$("setmain").hidden=true;$("setnav").hidden=false;$("setnav").scrollTop=0;$("sethead").classList.remove("scrolled");$("settitle").textContent="Settings"}
+function setBack(){if(SETP)setHome();else if(!SETWIN)settings.close()}
 let savedT=null;
 async function autosave(){const r=await api("/api/settings",formSettings());
   if(r.error){$("serr").textContent=r.error;$("serr").style.display="";return false}
   $("serr").style.display="none";const k=$("ssaved");k.classList.add("on");clearTimeout(savedT);savedT=setTimeout(()=>k.classList.remove("on"),1600);return true}
 settings.addEventListener("change",e=>{if(e.target.closest&&e.target.closest("[data-save]"))autosave().then(ok=>{if(ok&&e.target.id==="s_vmodel")watchModel()})});
-settings.addEventListener("close",()=>refresh());
-settings.addEventListener("cancel",e=>{if(SETP){e.preventDefault();setHome()}});
-async function openSettings(pane){const r=await api("/api/settings"),s=r.settings;
+settings.addEventListener("close",()=>{if(SETWIN&&window.pywebview&&pywebview.api.settings_close)pywebview.api.settings_close();else refresh()});
+settings.addEventListener("cancel",e=>{if(SETP||SETWIN){e.preventDefault();if(SETP)setHome()}});
+// Settings opens in a window of its own (one, brought to the front if it's open), so a call or a meeting
+// stays where it is; in a browser, or the Settings window itself, here in the page.
+async function openSettings(pane){if(!SETWIN&&window.pywebview&&pywebview.api&&pywebview.api.open_settings){
+    try{const r=await pywebview.api.open_settings(typeof pane==="string"?pane:null);if(r&&r.ok)return}catch(e){}}
+  return showSettings(pane)}
+async function showSettings(pane){const r=await api("/api/settings"),s=r.settings;
   $("s_vmodel").value=s.voice_model||"haiku";$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
   $("s_remember").checked=!!s.remember_voices;
   // Talking over Claude (the duplex engine): from the next voice mode; a quiet line when the mic chosen can't
@@ -6481,7 +6610,7 @@ async function openSettings(pane){const r=await api("/api/settings"),s=r.setting
     setSpeech(s.speech.size,true);paintSpeech(s.speech);pollSpeech()}
   const mics=r.mics||[];$("s_mic").innerHTML=`<option value="">Automatic (follows your Mac${s.mic_default?": "+esc(s.mic_default)+" now":""})</option>`+
     mics.filter(m=>!/zoomaudio|teams audio|blackhole|aggregate/i.test(m)).map(m=>`<option ${m===s.mic_device?"selected":""}>${esc(m)}</option>`).join("");
-  $("serr").style.display="none";$("ssaved").classList.remove("on");setHome();if(typeof pane==="string")setPane(pane);await Promise.all([loadDict(),loadVoices()]);settings.showModal()}
+  $("serr").style.display="none";$("ssaved").classList.remove("on");setHome();if(typeof pane==="string")setPane(pane);await Promise.all([loadDict(),loadVoices()]);if(!settings.open)settings.showModal()}
 // The voice's model in a call going on: it switches at the call's next reply, and this says how that went.
 let MODELT=null;
 function loadModels(){return api("/api/models").then(m=>{if(m.error)return;markModels(m.unavailable||[]);
@@ -6611,7 +6740,8 @@ async function editWords(){let r={};try{r=await api("/api/dictation-app",{action
 async function dictFix(key,action){const r=await api("/api/dictation-app",action==="open"?{action:"open",key}:{action:"setup"});
   if(r.error)toast(r.error);setTimeout(loadDict,800)}
 setInterval(()=>{if(settings.open&&!dictBusy)loadDict()},1500);
-refresh();setInterval(refresh,1500);      // what's live at launch: Standby's view opens it (agents.js)
+if(SETWIN){refresh();showSettings(new URLSearchParams(location.search).get("pane")||undefined)}     // Settings, at once
+else{refresh();setInterval(refresh,1500)}      // what's live at launch: Standby's view opens it (agents.js)
 </script><script src="/agents.js"></script></body></html>"""
 
 

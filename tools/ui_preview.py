@@ -3,6 +3,7 @@
 
     python3 tools/ui_preview.py [out_dir] [--dark | --both] [--only=chat,transcript]
     python3 tools/ui_preview.py [out_dir] [--dark | --both] --companion        (mac/companion.html, every state)
+    python3 tools/ui_preview.py [out_dir] [--dark | --both] --settings-window  (the Settings window, at its size)
 
 Renders mac/ui.py's page in headless Chrome against a fake /api: no recorder,
 no Claude, and nothing from ~/.standby is read. One PNG per state in out_dir
@@ -459,10 +460,12 @@ def companion_page():
         "</body>", "<script>" + CMP_AFTER + "</script></body>")
 
 
-def page():
+def page(settings_window=False):
     src = (ROOT / "mac" / "ui.py").read_text()
     html = src[src.index('PAGE = r"""') + len('PAGE = r"""'):]
     html = html[:html.index('"""')]
+    if settings_window:                       # as /settings serves it (ui.main_page): Settings alone
+        html = html.replace("__SB_SETWIN__", "1").replace('<script src="/agents.js"></script>', "")
     i = html.rindex("<script>")
     html = (ROUNDED + LIGHTS + html[:i]) + "<script>" + FAKE + "</script>" + html[i:].replace(
         "</body>", "<script>" + SCENES + "</script></body>")
@@ -591,6 +594,16 @@ def main():
     try:
         for dark in themes:
             sfx = "-dark" if dark else ""
+            if "--settings-window" in sys.argv:
+                # The Settings window, as the app opens it: its list, and a section (the mini window's: Call).
+                set_path = out / "settings-window-page.html"
+                set_path.write_text(page(settings_window=True))
+                for name, pane in (("list", ""), ("call", "call"), ("recording", "recording")):
+                    png = out / ("settings-window-%s%s.png" % (name, sfx))
+                    url = "%s?%s" % (set_path.as_uri(), "pane=" + pane if pane else "s=list")
+                    ok = chrome.shoot(url, png, dark, size=(500, 640), settle=1.5)
+                    print(("ok   " if ok else "FAIL ") + str(png))
+                continue
             if "--companion" in sys.argv:
                 # The real companion page, every state against a fake /api/companion.
                 cmp_path = out / "companion-page.html"
