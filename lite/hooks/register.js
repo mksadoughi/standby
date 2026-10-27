@@ -321,7 +321,7 @@ async function ensureApp($, quiet) {
   await where($)
   await refresh($)
   if (!S.st.app && !quiet) {
-    await $.process.run(['open', '-g', '-a', 'Standby'])
+    await $.process.run(['open', '-g', '-a', 'Standby', '--args', '--background'])   // its window stays closed until asked for
     for (let i = 0; i < 30; i++) {             // up to about 15 s while it starts
       await where($)
       await refresh($)
