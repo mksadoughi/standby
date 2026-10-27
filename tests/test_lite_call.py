@@ -83,7 +83,8 @@ def fake_talk(sid=None, wait=90, workspace=None, attach=None, copy=False, where=
 
 ui.start_talk = fake_talk
 real_begin_ask, real_run_ask = ui._begin_ask, ui._run_ask
-ui._begin_ask = lambda sid, q, voice=False: None
+begun = []
+ui._begin_ask = lambda sid, q, voice=False, own=False: begun.append((q, own))
 ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None: (asked.append(q), answers.pop(0))[1]
 chat = []
 ui.append_chat = lambda *a, **k: chat.append((a, k))
@@ -138,8 +139,23 @@ check("  that first turn goes to the voice as it is (what to pick up is in the s
       ui.ask_spoken(sid, ui.LITE_OPENING, None, None) == "Hey, what are we working on?"
       and asked[-1] == ui.LITE_OPENING
       and not ui.lite_busy(sid), asked[-1:])
-check("  and it's never shown as theirs: no row of it in the call's chat",
-      not any("talk this through" in str(a) for a, _k in chat), chat)
+check("  and it's never shown as theirs: no row of it in the call's chat, nor the marker as a question being answered",
+      not any("talk this through" in str(a) or ui.LITE_OPENING in str(a) for a, _k in chat)
+      and begun[-1:] == [(ui.LITE_OPENING, True)], (chat, begun))
+# The real _begin_ask for a turn of Claude's own: no row, and the window's "being answered" line has no question
+_live, ui.live_session = ui.live_session, lambda: sid
+_pend, ui.PENDING = ui.PENDING, {}
+try:
+    real_begin_ask(sid, ui.LITE_OPENING, voice=True, own=True)
+    own_shown, own_row = ui.pending_shown(sid), ui.PENDING[sid].get("row")
+    ui.PENDING.clear()
+    real_begin_ask(sid, "what's next?", voice=True)
+    theirs = ui.pending_shown(sid)
+finally:
+    ui.live_session, ui.PENDING = _live, _pend
+check("  the greeting's turn: nothing drawn as asked while it's made ([CALL START] as their line, the VM run)",
+      own_shown is None and own_row is None and not any(ui.LITE_OPENING in str(a) for a, _k in chat), (own_shown, chat[-2:]))
+check("  their own question still is", theirs and theirs.get("question") == "what's next?", theirs)
 answers.append("Sure.")
 ui.ask_spoken(sid, "okay so where were we", None, None)
 check("  given once: the next turn is only their words", asked[-1] == "okay so where were we", asked[-1:])
