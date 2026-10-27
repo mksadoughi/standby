@@ -93,9 +93,11 @@ const ORB_CHECKS = `
   await fresh();
   ok("  thinking: no state words in the orb's window", !/Looking|Thinking|Listening/.test(shown()), shown());
   open = true; render();
-  ok("  pointed at: the buttons on their own glass, rolled out from under the orb, and it takes clicks too",
-     (m => m.glass && m.glass.h === 40 && m.glass.radius === 20 && m.under && m.under.w === 40 && m.ms === 340)(last("orb")) && els.rail.classList.contains("out")
+  ok("  pointed at: one panel on its own glass, rolled out from under the orb (two rows, inside the orb's height), and it takes clicks too",
+     (m => m.glass && m.glass.h === 72 && m.glass.h < m.glyph && m.glass.radius === 16 && m.under && m.under.w === 72 && m.ms === 340)(last("orb")) && els.rail.classList.contains("out")
      && last("hit").areas.length === 2, [last("orb"), last("hit")]);
+  ok("  its top row: the call's session, then the icons under it", (h => h.includes('<span class="nmrow"><span class="dot"></span><span class="nm">') && h.includes('id="ctm"') && h.indexOf("nmrow") < h.indexOf('class="btns"'))(els.ctls.innerHTML)
+     && els.ctls.classList.contains("card"), els.ctls.innerHTML.slice(0, 300));
   const words = () => [...els.ctls.innerHTML.matchAll(/<button[^>]*title="([^"]*)"/g)].map(x => x[1]);
   ok("  three icons, each named in its tip: Full window, Settings, End (no Pause, no Mini window: a click on it pauses)", JSON.stringify(words()) === '["Full window","Settings","End"]'
      && !/<button[^>]*>[A-Za-z]/.test(els.ctls.innerHTML) && !shown().includes("More"), words());
