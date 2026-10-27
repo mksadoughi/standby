@@ -187,7 +187,7 @@ def audio_apps(include_silent=True):
     for it (Chrome's audio service is Chrome's; Safari's WebKit process, Safari's; a
     program run in Terminal, Terminal's), and one no app is responsible for, a system
     process (systemsoundserverd's alert sounds), is not listed. "own": one of Standby's
-    own (its apps, or a process of this checkout's, as Jean's voice: it shows as
+    own (its apps, or a process of this checkout's, as its voice: it shows as
     Python), which is never a meeting."""
     rows = []
     for obj in _get(SYSTEM_OBJECT, PROCESS_LIST, ctypes.c_uint32, count=0) or []:

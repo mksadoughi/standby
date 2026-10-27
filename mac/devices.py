@@ -218,7 +218,7 @@ def choose_meeting(apps, capture, choices, current):
     if capture == "mic":
         return None, "mic only", None
     choices = choices or {}
-    # Standby's own (dictation's cue, Jean's voice) is never a meeting, whatever listed it.
+    # Standby's own (dictation's cue, its voice) is never a meeting, whatever listed it.
     apps = [a for a in apps if not (a.get("own") or (a.get("bundle") or "").startswith("dev.standby."))]
     playing = sorted((a for a in apps if a.get("playing") and choices.get(answer_key(a)) != "no"),
                      key=lambda a: -confidence(a))

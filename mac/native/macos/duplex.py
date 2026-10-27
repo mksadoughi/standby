@@ -104,7 +104,7 @@ class AVFBackend(object):
     halt(). Those buffers arrive on the main thread's run loop only (measured),
     so the recorder's main loop waits in idle() while voice mode is on.
 
-    neural: a Pocket voice ("jean"): Standby's own voice (tts.py), its
+    neural: a Pocket voice ("alba"): Standby's own voice (tts.py), its
     process started with the mic and ended with it, its sound played by the
     same player, so it is cancelled from the mic too. Every sentence is in it:
     while it loads, its process holds them and says them once ready. Never the

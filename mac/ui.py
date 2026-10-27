@@ -4388,7 +4388,7 @@ REGIONS = {"US": "US", "GB": "UK", "AU": "Australia", "IE": "Ireland", "IN": "In
 
 def voices_info():
     """Settings > Voice: Standby's own voices (when installed) and the
-    installed English macOS ones, the one chosen (None: automatic, Jean, else
+    installed English macOS ones, the one chosen (None: automatic, Alba, else
     the best macOS one), the one that speaks now, whether a Premium or
     Enhanced macOS voice is there at all, and the credit Pocket TTS asks for."""
     import tts
