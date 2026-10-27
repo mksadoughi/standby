@@ -294,6 +294,7 @@ try:
     loader.exec_module(sa)
     json.dump({"handoff": True, "folder": "/Users/you/code/orion"}, open(os.path.join(live, TALK + ".voice.json"), "w"))
     call = " ".join(sa.voice_prelude(TALK).split())
+    ledger = " ".join(sa.voice_prelude(TALK, ledger=True).split())
     check("a call's voice: it IS the session, its mouth and ears, with its own deeper side; one self; its judgement; its folder",
           call.startswith("You are the user's Claude Code session in /Users/you/code/orion, on a voice call with them: its mouth and ears.")
           and "It's all you: same agent, same work, same memory, so never speak of a separate agent or helper." in call
@@ -304,8 +305,11 @@ try:
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
           and "[QUIET]" in call and "[RESULT]" in call and len(call.split()) < 300, (len(call.split()), call[:300]))
-    check("  its opening: only a hello, under ten words in all, naming what it's picking up",
-          "[CALL START] means the call just connected: reply with only a hello your way, under ten words in all, naming anything you're picking up." in call)
+    check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
+          "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming anything you're picking up." in call
+          and "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming anything you're picking up." in ledger
+          and "last message" not in ledger)
+    check("  saying nothing sits with the notes, where it's mostly used", "ask first if they want it. To say nothing, reply [QUIET]." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
           "Your own tools are for looking: you can read and search where your session works, and ~/.standby." in call
           and "So whatever they ask for is yours to do" in call
@@ -315,7 +319,6 @@ try:
     check("  honest hand-offs: nothing started until the session says it has it; never a guess at why not",
           "Only your session's notes say what has happened, so never guess: nothing has started until a [SESSION] note says "
           "your session has it (till then, you're sending it), and a [RESULT] says what it came to." in call)
-    ledger = " ".join(sa.voice_prelude(TALK, ledger=True).split())
     check("  on the record, the voice can stop or change a task by its number in TASKS",
           "To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]." in ledger)
     json.dump({}, open(os.path.join(live, TALK + ".voice.json"), "w"))
