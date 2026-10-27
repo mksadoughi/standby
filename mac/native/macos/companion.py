@@ -333,6 +333,7 @@ class Companion(object):
     page posts that this class does not handle."""
     parent, glyph, glass, follow, _moving = None, None, FILL, None, 0
     inset, hit, _hovering, _polling, _poll_gen = None, None, False, 0, 0
+    on_hover = None                       # on_hover(on): pointed at or not, for the words to follow
     under, _glass_gen = None, 0
 
     def __init__(self, url=None, html=None, size=(180, 44), level="status", material="auto",
@@ -603,6 +604,8 @@ class Companion(object):
         if inside != self._hovering and not pressed:
             self._hovering = inside
             self.call("hover", inside)
+            if self.on_hover:
+                self.on_hover(inside)
         if gen is not None:
             self.later(rules.poll_every(distance), lambda: self._pointer_tick(gen=gen))
 
@@ -807,6 +810,7 @@ class Presence(object):
         self.words = make(url=base + "/companion" + q + "#words", size=(184, 44), draggable=False, clicks=False, log=say,
                           radius=14, material="soft", parent=self.pill, on_message=self._message)
         self.pill.follow = self._follow
+        self.pill.on_hover = lambda on: self.words.call("hover", on)   # the call's name tab shows while pointed at
         if native:
             self._hook_into_app()
         self.update()

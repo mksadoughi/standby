@@ -46,9 +46,6 @@ flex:none;color:var(--c-muted);transition:background .12s,color .12s,transform .
 .cmp button:active{background:var(--c-press);transform:scale(.94)}
 .cmp button:focus-visible{outline:2px solid rgba(80,70,229,.55);outline-offset:1px}
 .cmp button:disabled{opacity:.35}.cmp button:disabled:hover{background:none;color:var(--c-muted)}
-/* the mini window's buttons, words only: End in red */
-.cmp button.lab{width:auto;height:32px;padding:0 11px;gap:4px;border-radius:16px;color:var(--c-text);font:500 13px/1 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;white-space:nowrap}
-.cmp button.lab:hover{color:var(--c-text)}
 /* End: the red hang-up phone, its word in the tip */
 .cmp button.hang{color:var(--c-rec)}.cmp button.hang:hover{color:var(--c-rec);background:color-mix(in srgb,var(--c-rec) 14%,transparent)}
 /* the buttons, on their own glass, beside the orb. The glass is the panel's and brings its own
@@ -155,7 +152,7 @@ background:conic-gradient(var(--c-ring) calc(var(--pp,25) * 1%),rgba(80,70,229,.
 /* a passing message, like "Standby isn't answering" */
 .txt{padding:0 6px;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;color:var(--c-muted);font-weight:400}
 
-/* the words' window, hugging its text: on a call only a mic macOS refuses is said */
+/* the words' window, hugging its text: on a call a mic macOS refuses, or, pointed at, the session's name */
 .says{position:fixed;right:0;bottom:0;box-sizing:border-box;width:max-content;max-width:300px;padding:8px 14px;
 font:400 15px/21px ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;text-align:right;
 display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -163,6 +160,10 @@ body:not(.r) .says{right:auto;left:0;text-align:left}
 [data-v=top] .says{bottom:auto;top:0}
 .says p{margin:0;color:var(--c-claude)}
 .says p.warn{color:var(--c-attn)}
+.says p.tab{display:flex;align-items:center;gap:7px;color:var(--c-text);font:600 13px/18px -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+.says p.tab .dot{width:6px;height:6px;border-radius:50%;background:var(--c-rec);flex:none}
+.says p.tab .nm{max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.says p.tab .tm{font-weight:500;font-size:12px;color:var(--c-muted);font-variant-numeric:tabular-nums}
 .says p.in{animation:fadein .34s ease both}
 
 /* outside the panel (a preview), a stand-in for the glass and its shadow; the orb's canvas
@@ -188,6 +189,10 @@ document.documentElement.style.setProperty("--orb", ORB + "px");
 document.documentElement.style.setProperty("--w", W + "px");
 document.documentElement.style.setProperty("--h", H + "px");
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ICON = {
+  window: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/><path d="M10 15l4-4m-3.2 0H14v3.2"/></svg>',
+  gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>' };
+const clock = s => { s = Math.max(0, Math.floor(s)); const m = Math.floor(s / 60); return (m >= 60 ? Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") : String(m).padStart(2, "0")) + ":" + String(s % 60).padStart(2, "0") };
 const SBT = "__SB_TOKEN__";        // this launch's token (the app puts it here): every request carries it
 async function api(p, body) { const r = await fetch(p, body !== undefined ? { method: "POST",
   headers: { "Content-Type": "application/json", "X-Standby-Token": SBT }, body: JSON.stringify(body) } : { headers: { "X-Standby-Token": SBT } }); return r.json() }
@@ -211,10 +216,10 @@ function render() {
     : vs && v.preparing ? "Getting Standby's voice ready" + (pp === null ? "…" : ", " + pp + "%") + ". Your Mac's voice speaks meanwhile"
     : vs ? (vs === "muted" || v.muted ? (v.waiting ? "Paused. Something's waiting: click to resume and hear it" : "Paused. Click to go on with the call") : "Click to pause the call" + (l && l.call ? " with " + l.call.name : ""))
     : l ? "Talk to Claude" : "";
-  // The mini window's three (the user, 2026-10-23): Full window and Settings in words, then End as
-  // the red hang-up phone. A click on the mini window itself pauses and resumes.
-  const B = (label, fn) => `<button class="lab" onclick="${fn}">${label}</button>`;
-  const btns = !open ? "" : B("Full window", "full()") + B("Settings", "callSettings()") +
+  // The mini window's three, as icons, each named in its tip (the user, 2026-10-27): Standby's
+  // window, Settings, then End as the red hang-up phone. A click on the mini window itself pauses and resumes.
+  const B = (label, fn, svg) => `<button title="${label}" aria-label="${label}" onclick="${fn}">${svg}</button>`;
+  const btns = !open ? "" : B("Full window", "full()", ICON.window) + B("Settings", "callSettings()", ICON.gear) +
     `<button class="hang" title="End" aria-label="End" onclick="end()"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-3.2 0-6.2.9-8.6 2.6a1.6 1.6 0 0 0-.6 1.8l.7 2a1.3 1.3 0 0 0 1.6.8l3.2-1a1.3 1.3 0 0 0 .9-1.1l.2-1.6a12 12 0 0 1 5.2 0l.2 1.6a1.3 1.3 0 0 0 .9 1.1l3.2 1a1.3 1.3 0 0 0 1.6-.8l.7-2a1.6 1.6 0 0 0-.6-1.8C18.2 9.9 15.2 9 12 9z"/></svg></button>`;
   const fl = flash ? `<span class="txt">${esc(flash)}</span>` : "";
   const inner = fl + btns;
@@ -274,18 +279,25 @@ function size(el, g, c, r_, top) {
 }
 
 // The words' window: on a call, just the orb (the user: "just the orb itself"); its state is in its
-// animation, with no time, captions or working line. Only a mic macOS refuses is said: the call can't
-// hear you then.
+// animation, with no captions or working line. A mic macOS refuses is said (the call can't hear you
+// then); otherwise, only while the orb is pointed at, the call's tab: its session's name and time.
 let lastW = "";
 function words() {
   const l = C && C.live, box = $("says"), p = $("sp");
   const text = l && l.mic_denied ? "Can’t hear your mic" : "";   // the band's and the window's words, short for the mini window
-  if (!text) {
+  // pointed at, a call's tab: its session's name and how long it has run (the user, 2026-10-27)
+  const name = !text && open && l && l.call ? l.call.name : "";
+  if (name) {
+    const tab = `<span class="dot"></span><span class="nm">${esc(name)}</span>` + (l.call.started ? `<span class="tm">${clock(Date.now() / 1000 - l.call.started)}</span>` : "");
+    if (p.className !== "tab" && p.className !== "tab in") { p.className = "tab"; void p.offsetWidth; p.className = "tab in" }
+    if (p.innerHTML !== tab) p.innerHTML = tab;
+  }
+  if (!text && !name) {
     box.style.display = "none"; p.textContent = "";
     if (lastW !== "0") { lastW = "0"; post({ type: "words", w: 0, h: 0, radius: null, ms: 180 }) }
     return;
   }
-  if (text !== p.textContent) { p.textContent = text; p.className = "warn"; void p.offsetWidth; p.className = "warn in" }
+  if (text && text !== p.textContent) { p.textContent = text; p.className = "warn"; void p.offsetWidth; p.className = "warn in" }
   box.style.display = ""; box.style.minWidth = "";
   const r = box.getBoundingClientRect();
   // The window hugs the text in steps of 8, so it breathes rather than twitching per word.

@@ -96,9 +96,9 @@ const ORB_CHECKS = `
   ok("  pointed at: the buttons on their own glass, rolled out from under the orb, and it takes clicks too",
      (m => m.glass && m.glass.h === 40 && m.glass.radius === 20 && m.under && m.under.w === 40 && m.ms === 340)(last("orb")) && els.rail.classList.contains("out")
      && last("hit").areas.length === 2, [last("orb"), last("hit")]);
-  const words = () => [...els.ctls.innerHTML.matchAll(/<button[^>]*>([^<]*)/g)].map(x => x[1]);
-  ok("  three: Full window, Settings in words, then End (no Pause, no Mini window: a click on it pauses)", JSON.stringify(words()) === '["Full window","Settings",""]'
-     && !shown().includes("More"), words());
+  const words = () => [...els.ctls.innerHTML.matchAll(/<button[^>]*title="([^"]*)"/g)].map(x => x[1]);
+  ok("  three icons, each named in its tip: Full window, Settings, End (no Pause, no Mini window: a click on it pauses)", JSON.stringify(words()) === '["Full window","Settings","End"]'
+     && !/<button[^>]*>[A-Za-z]/.test(els.ctls.innerHTML) && !shown().includes("More"), words());
   ok("  End is the red hang-up phone, its word in the tip", els.ctls.innerHTML.includes('<button class="hang" title="End" aria-label="End" onclick="end()"><svg'), els.ctls.innerHTML);
   ok("  the pill's glass runs on under the orb to its centre (its inner end hidden): it slides out of the mini window",
      (m => m.glass && m.glass.x + m.glass.w === m.w - 12 - m.glyph / 2)(last("orb")), last("orb"));

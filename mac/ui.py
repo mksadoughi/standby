@@ -5892,6 +5892,7 @@ box-shadow:0 1px 3px rgba(80,70,229,.35)}
 header{display:flex;align-items:center;gap:6px;padding:0 14px;height:52px;flex:none}
 .iconbtn{color:var(--muted);width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex:none}
 .iconbtn:hover{background:var(--soft);color:var(--text)}.iconbtn.on{background:var(--soft);color:var(--text)}
+.vhead .iconbtn{width:32px;height:32px;border-radius:50%}   /* a call's header: quiet round icons, their words their tips (the user, 2026-10-27) */
 #title{font-weight:700;font-size:16px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 padding:4px 8px;border-radius:8px;cursor:text;letter-spacing:-.005em}
 #title:hover{background:var(--soft)}
@@ -6215,7 +6216,7 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
     <header class="vhead" data-drag>
       <button class="iconbtn" onclick="mxCallBack()" title="Back to the list" aria-label="Back to the list"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
       <span class="vwho one"><span class="lmark call" id="vmark" role="img" aria-label="On a call" title="On a call"></span><b id="vname"></b><span class="tm" id="vtime"></span></span>
-      <button class="vtxt" onclick="mxToOrb()">Mini window</button>
+      <button class="iconbtn" onclick="mxToOrb()" title="Mini window" aria-label="Mini window"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><rect x="12" y="12" width="6" height="4.5" rx="1.2" fill="currentColor" stroke="none"/></svg></button>
       <button class="iconbtn" onclick="mxCallMenu(event)" title="More" aria-label="More"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg></button>
     </header>
     <div class="vlog" id="mxcalllog"></div>
