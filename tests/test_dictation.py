@@ -1683,8 +1683,22 @@ else:
     c.setupAction_(sw.buttons[0])
     check("  Allow on the mic opens it for a moment, so macOS asks", c.capture.on is False and "mic" in c.asked)
     check("    without hearing the Mac's sound (that is for dictating)", c.capture.room is False)
+    # macOS lists the app in a pane only once it has asked (a VM run: Open Settings… showed a list
+    # without Standby Dictation in it): the ask comes first, then the pane.
+    real_ask_post, real_ask_listen, order = da.ask_post, da.ask_listen, []
+    da.ask_post, da.ask_listen = (lambda: order.append("ask post")), (lambda: order.append("ask listen"))
+    da.open_url = lambda url: (opened.append(url), order.append("open"))
+    c.asked.discard("post")
     c.setupAction_(sw.buttons[2])
     check("  Open Settings… opens Accessibility's pane", opened == [d.PANE + "Accessibility"], opened)
+    check("    asked first, so Standby Dictation is in that list", order == ["ask post", "open"], order)
+    c.setupAction_(sw.buttons[2])
+    check("    asked once: a second click only opens the pane", order == ["ask post", "open", "open"], order)
+    c.asked.discard("listen")
+    c.request("listen")
+    check("    Input Monitoring's ask, the same way", order[-1] == "ask listen", order)
+    da.ask_post, da.ask_listen, da.open_url = real_ask_post, real_ask_listen, opened.append
+    del opened[1:]
     check("  It's on already: only beside Accessibility, while it is missing",
           [b.isHidden() for b in sw.alts] == [True, True, False] and str(sw.alts[2].title()) == d.STALE_BUTTON
           and sw.alts[2].frame().origin.x + sw.alts[2].frame().size.width <= sw.buttons[2].frame().origin.x,
