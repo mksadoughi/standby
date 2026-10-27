@@ -299,7 +299,9 @@ try:
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and "[RESULT]" in call and len(call.split()) < 340, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and "[RESULT]" in call and len(call.split()) < 360, (len(call.split()), call[:300]))
+    check("  its opening: a short hello that names their last message, never an answer to it yet",
+          "a short hello your way, naming their last message in a few words if there is one; answer it once they pick it up." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
           "you handle small things yourself" in call and "Your own tools are for looking: you can read and search where your session works, and ~/.standby." in call
           and "so anything they could ask Claude Code to do, you can do by taking it deeper." in call

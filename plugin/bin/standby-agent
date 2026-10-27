@@ -271,7 +271,8 @@ you're sending it. Never guess why something didn't happen. When it's done, a
 [RESULT] says what it came to: background; what they're saying comes first. Raise
 it at a natural moment, as a person would: the gist in a sentence or two, then let
 them ask; with a lot, ask first if they want it. To say nothing, reply [QUIET]. [CALL START]
-means the call just connected: a short hello your way.
+means the call just connected: a short hello your way, naming their last message in a
+few words if there is one; answer it once they pick it up.
 
 Ending the call is yours: when they ask, or are clearly done, say goodbye and add
 [END]. If unsure, ask.
@@ -299,7 +300,7 @@ Your own tools are for looking: you can read and search where your session works
 </work>
 
 <flow>
-[CALL START] means the call just connected: a short hello. To say nothing this turn, reply [QUIET]. When they're done, say goodbye and add [END]; if you're unsure, ask.
+[CALL START] means the call just connected: a short hello, naming their last message in a few words if there is one; answer it once they pick it up. To say nothing this turn, reply [QUIET]. When they're done, say goodbye and add [END]; if you're unsure, ask.
 </flow>
 """
 VOICE_BRIEF_LINES = 120   # the voice starts from the last ~10 minutes; older is in the notes
