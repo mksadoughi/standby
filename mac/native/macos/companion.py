@@ -908,7 +908,11 @@ class Presence(object):
     SHOW_LIVE = "typeof mxShowLive === 'function' && mxShowLive()"
 
     def open_settings(self, pane=None):
-        """Standby's Settings, in its window: on `pane` ("call") or at its list."""
+        """Standby's Settings, in a window of its own (the app's hook), on `pane` ("call") or at its
+        list: the call stays here, in the mini window. An app without that window: in the main one."""
+        opener = getattr(self.hooks, "open_settings", None)
+        if opener is not None and (opener(pane) or {}).get("ok"):
+            return
         self.open_main()
         js = "openSettings(%s)" % ('"%s"' % pane if pane else "")
         # pywebview's evaluate_js waits on the main thread for its answer: never from it.
