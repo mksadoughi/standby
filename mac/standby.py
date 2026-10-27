@@ -94,8 +94,17 @@ class UtteranceTranscriber:
     END_SILENCE = 0.6    # trailing quiet that closes an utterance
     MAX_UTT = 15.0       # force-close long monologues so answers stay fresh
     MIN_SPEECH = 0.25    # utterances with less voiced audio are discarded
-    MIN_RMS = 0.006      # absolute floor for "speech"
+    # The noise floor is the quietest frame of the last NOISE_WINDOW, speech or not: speech
+    # has gaps at the room's level, a fan that starts has none. It was an average of the
+    # frames that weren't speech, so a quiet voice under the speech floor became the
+    # "noise", and nothing was speech (a quiet voice on a low-gain mic, 0.002 to 0.01 RMS
+    # over a room at 0.0001: a VM run, 76 s of talk, 2 lines).
+    MIN_RMS = 0.0015     # absolute floor for "speech"
+    # A call's mic through echo cancellation (Channel.borrow) comes with its own gain control,
+    # and Claude's voice faintly left in: the floor it always had there.
+    ENGINE_MIN_RMS = 0.006
     NOISE_MULT = 3.0     # speech must be this far above the noise floor
+    NOISE_WINDOW = 3.0   # seconds
 
     def __init__(self, model, rotate_seconds=None, decode=None):
         import numpy as np
@@ -111,6 +120,8 @@ class UtteranceTranscriber:
         self.silence = 0.0
         self.voiced = 0.0
         self.noise = 0.003
+        self.min_rms = self.MIN_RMS
+        self._levels = deque(maxlen=int(self.NOISE_WINDOW / self.FRAME))
         self.ready = []
         self.decoded = 0
         self.dropped = 0
@@ -144,7 +155,10 @@ class UtteranceTranscriber:
         for i in range(n):
             fr = buf[i * self.frame:(i + 1) * self.frame]
             rms = float(np.sqrt(np.mean(fr * fr)))
-            speech = rms > max(self.MIN_RMS, self.noise * self.NOISE_MULT)
+            self._levels.append(rms)
+            if len(self._levels) >= 10:          # from 0.3 s in: speech can start at once
+                self.noise = min(self._levels)
+            speech = rms > max(self.min_rms, self.noise * self.NOISE_MULT)
             if self.utt is None:
                 if speech:
                     self.utt = list(self.pre) + [fr]
@@ -152,7 +166,6 @@ class UtteranceTranscriber:
                     self.pre = []
                     self.silence, self.voiced = 0.0, self.FRAME
                 else:
-                    self.noise = 0.95 * self.noise + 0.05 * rms
                     self.pre.append(fr)
                     keep = int(self.PREROLL / self.FRAME)
                     if len(self.pre) > keep:
@@ -1637,6 +1650,8 @@ class Channel(object):
         try:
             backend.start_mic(self.device_name, self._feed)
             self.borrowed = backend
+            if hasattr(self._stream, "min_rms"):
+                self._stream.min_rms = getattr(type(self._stream), "ENGINE_MIN_RMS", self._stream.min_rms)
             return True
         except Exception as exc:
             self.borrow_error = str(exc)      # why voice mode is half duplex: to the app (live.json)
@@ -1652,6 +1667,8 @@ class Channel(object):
         backend, self.borrowed = self.borrowed, None
         if backend is None:
             return
+        if hasattr(self._stream, "min_rms"):
+            self._stream.min_rms = getattr(type(self._stream), "MIN_RMS", self._stream.min_rms)
         try:
             backend.stop_mic()
         except Exception as exc:
@@ -2806,7 +2823,7 @@ class EchoGate(object):
                 emit(speaker, start, end, text, spk, audio, ctx=ctx, src=src)
 
 
-def spoken_part(audio, frame=480, floor=UtteranceTranscriber.MIN_RMS):
+def spoken_part(audio, frame=480, floor=UtteranceTranscriber.ENGINE_MIN_RMS):
     """The speech in an utterance, without the quiet around and between its words: its 30 ms
     frames within 20 dB of its loudest, as the recorder's own VAD hears speech above the room
     (UtteranceTranscriber). For a voice print, which the quiet would make the room's."""

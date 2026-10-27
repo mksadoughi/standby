@@ -60,6 +60,7 @@ test_suggest_agent         py    par
 test_one_app_probe         py    par  
 test_purge                 py    par  
 test_clean_exit            py    par
+test_quiet_speech          py    par
 test_companion_orb         py    full   # a real window and the display
 test_companion_presence    py    par  
 test_find_claude           py    par  
