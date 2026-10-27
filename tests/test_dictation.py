@@ -1681,59 +1681,110 @@ else:
     menu = c.build_menu()
     check("menu: Set Up… while a permission is missing",
           "Set Up…" in [menu.itemAtIndex_(i).title() for i in range(menu.numberOfItems())])
+    # The setup window, one step at a time (the user: "very unclear what you expect the user to
+    # take action on... maybe sequential"): only the current step has a button.
+    class Tag(object):
+        def __init__(self, n): self.n = n
+        def tag(self): return self.n
+    c.perm = {"listen": False, "post": False, "mic": "ask"}
+    c.setup_sent, c.setup_tried, c.setup_failed = set(), None, None
+    m = c.setup_steps()
+    check("setup: step 1 of 4, the Microphone, its one button and what macOS will ask",
+          m["count"] == "Step 1 of 4" and [x["state"] for x in m["steps"]] == ["current", "later", "later", "later"]
+          and m["steps"][0]["button"] == "Allow Microphone" and m["steps"][0]["note"] == "macOS will ask: choose Allow."
+          and [x["button"] for x in m["steps"][1:]] == [None, None, None], m)
     sw = da.SetupWindow(c)
-    sw.update(d.setup_rows(c.perm, "mickey"))
-    check("setup window: buttons only where something is missing, named for what they do",
-          [b.isHidden() for b in sw.buttons] == [False, True, False]
-          and [str(b.title()) for b in sw.buttons][0::2] == ["Allow", "Open Settings…"]
-          and str(sw.whys[1].stringValue()) == "notices the F5 key", [str(b.title()) for b in sw.buttons])
+    sw.update(m)
+    check("  drawn: one button for the step, and Not now", sorted(sw.buttons) == ["later", "mic"]
+          and str(sw.buttons["mic"].title()) == "Allow Microphone" and str(sw.buttons["mic"].keyEquivalent()) == "\r",
+          sorted(sw.buttons))
     check("  never shown in a test", not sw.visible)
     opened = []
     da.open_url = opened.append
     c.capture.on = None
-    c.setupAction_(sw.buttons[0])
-    check("  Allow on the mic opens it for a moment, so macOS asks", c.capture.on is False and "mic" in c.asked)
+    c.setupAction_(Tag(1))
+    check("  Allow Microphone opens it for a moment, so macOS asks", c.capture.on is False and "mic" in c.asked)
     check("    without hearing the Mac's sound (that is for dictating)", c.capture.room is False)
+    c.setupAction_(Tag(3))
+    check("  a later step's button does nothing", opened == [], opened)
+    c.perm["mic"] = "allowed"
+    m = c.setup_steps()
+    check("mic allowed: ticked, on to step 2, Input Monitoring", m["count"] == "Step 2 of 4"
+          and [x["state"] for x in m["steps"]] == ["done", "current", "later", "later"]
+          and m["steps"][1]["button"] == "Open Settings" and m["steps"][1]["how"] == d.SETUP_HOW
+          and m["steps"][1]["why"] == "So Standby notices when you press F5." and not m["steps"][1]["waiting"], m["steps"][1])
     # macOS lists the app in a pane only once it has asked (a VM run: Open Settings… showed a list
     # without Standby Dictation in it): the ask comes first, then the pane.
     real_ask_post, real_ask_listen, order = da.ask_post, da.ask_listen, []
     da.ask_post, da.ask_listen = (lambda: order.append("ask post")), (lambda: order.append("ask listen"))
     da.open_url = lambda url: (opened.append(url), order.append("open"))
-    c.asked.discard("post")
-    c.setupAction_(sw.buttons[2])
-    check("  Open Settings… opens Accessibility's pane", opened == [d.PANE + "Accessibility"], opened)
-    check("    asked first, so Standby Dictation is in that list", order == ["ask post", "open"], order)
-    c.setupAction_(sw.buttons[2])
-    check("    asked once: a second click only opens the pane", order == ["ask post", "open", "open"], order)
     c.asked.discard("listen")
-    c.request("listen")
-    check("    Input Monitoring's ask, the same way", order[-1] == "ask listen", order)
+    c.setupAction_(Tag(2))
+    check("  Open Settings: asked first, so Standby Dictation is in that list, then the pane",
+          order == ["ask listen", "open"] and opened == [d.PANE + "ListenEvent"], (order, opened))
+    m = c.setup_steps()
+    check("  then it waits for them, saying so", m["steps"][1]["waiting"] and m["steps"][1]["note"] == d.SETUP_WAITING)
+    c.setupAction_(Tag(2))
+    check("    asked once: a second click only opens the pane", order == ["ask listen", "open", "open"], order)
+    c.perm["listen"] = True
+    c.asked.discard("post")
+    c.setupAction_(Tag(3))
+    m = c.setup_steps()
+    check("step 3, Accessibility: the same, and its reset once they've been there",
+          m["count"] == "Step 3 of 4" and order[-2:] == ["ask post", "open"] and opened[-1] == d.PANE + "Accessibility"
+          and m["steps"][2]["stale"] and not m["steps"][1]["stale"], (order, m["steps"][2]))
     da.ask_post, da.ask_listen, da.open_url = real_ask_post, real_ask_listen, opened.append
-    del opened[1:]
-    check("  It's on already: only beside Accessibility, while it is missing",
-          [b.isHidden() for b in sw.alts] == [True, True, False] and str(sw.alts[2].title()) == d.STALE_BUTTON
-          and sw.alts[2].frame().origin.x + sw.alts[2].frame().size.width <= sw.buttons[2].frame().origin.x,
-          [b.isHidden() for b in sw.alts])
-    check("  the button says when to use it, the footer stays empty", str(sw.footer.stringValue()) == "" and str(sw.alts[0].toolTip()) == d.STALE_HINT)
+    sw.update(m)
+    check("  drawn: the reset beside it, with its hint", "stale" in sw.buttons
+          and str(sw.buttons["stale"].title()) == d.SETUP_STALE and str(sw.buttons["stale"].toolTip()) == d.STALE_HINT)
+    del opened[:]
     real_tcc, real_ask, asked_post = da.TCCUTIL, da.ask_post, []
     da.ask_post = lambda: asked_post.append(1)
-    c.setup, del_opened = sw, opened.__delitem__(slice(None))
+    c.setup = sw
     da.TCCUTIL = ["/usr/bin/true"]
     c.next_check = time.time() + 3600
-    c.setupReset_(sw.alts[2])
-    check("  It's on already: this app's entry reset, macOS lists it again, the pane opens",
+    c.setupReset_(sw.buttons["stale"])
+    check("  reset: this app's entry reset, macOS lists it again, the pane opens",
           asked_post == [1] and opened == [d.PANE + "Accessibility"] and c.next_check == 0.0
-          and str(sw.footer.stringValue()).startswith("Reset. Now turn ") and "again in the list" in str(sw.footer.stringValue()),
-          (opened, str(sw.footer.stringValue())))
+          and sw._said[0].startswith("Reset. Now turn ") and "again in the list" in sw._said[0], (opened, sw._said))
     da.TCCUTIL, asked_post[:] = ["/usr/bin/false"], []
-    c.setupReset_(sw.alts[2])
+    c.setupReset_(sw.buttons["stale"])
     check("  macOS refuses the reset: the steps to do it by hand, nothing asked",
-          asked_post == [] and str(sw.footer.stringValue()).startswith("macOS didn't reset it. ")
-          and "remove it with the minus button" in str(sw.footer.stringValue()), str(sw.footer.stringValue()))
+          asked_post == [] and sw._said[0].startswith("macOS didn't reset it. ")
+          and "remove it with the minus button" in sw._said[0], sw._said)
     da.TCCUTIL, da.ask_post, c.setup = real_tcc, real_ask, None
     c.next_check = time.time() + 3600
     check("  the real tccutil is never run from a test",
           os.environ.get("STANDBY_NO_DEVICES") is None or da.reset_post()[0] is False)
+    c.perm["post"] = True
+    m = c.setup_steps()
+    check("all three allowed: step 4, try it, the box waiting for words", m["count"] == "Step 4 of 4"
+          and m["steps"][3]["state"] == "current" and m["steps"][3]["box"] == d.SETUP_TRY_EMPTY
+          and m["steps"][3]["why"] == "Press F5, say a few words, then press F5 again." and m["steps"][3]["button"] is None, m["steps"][3])
+    check("  holding to talk: says so", d.try_how(dict(d.DEFAULTS, hold=True)) == "Hold F5, say a few words, let go.")
+
+    class OpenSetup(object):                  # the window, as if open on the screen
+        visible, model = True, None
+        def update(self, m): self.model = m
+        def close(self): self.visible = False
+        def show(self): pass
+    c.setup = OpenSetup()
+    pasted = len(c.inserter.got)
+    c.pending = 1
+    c._deliver("", None, None)
+    check("  nothing caught: said in the box, with Try again", c.setup.model["steps"][3]["box"] == "Didn't catch that. Try again."
+          and c.setup.model["steps"][3]["button"] == "Try again", c.setup.model["steps"][3])
+    c.setupAction_(Tag(4))
+    check("    Try again: the box waits again", c.setup.model["steps"][3]["box"] == d.SETUP_TRY_EMPTY)
+    c.pending = 1
+    c._deliver("testing one two", None, None)
+    m = c.setup.model
+    check("  words: in the box, never pasted into an app, and it's done",
+          m["title"] == d.SETUP_DONE and m["steps"][3]["box"] == "testing one two" and m["steps"][3]["button"] == "Done"
+          and m["steps"][3]["note"] == "Dictation is on. Use F5 in any app." and len(c.inserter.got) == pasted, m["steps"][3])
+    c.setupAction_(Tag(4))
+    check("  Done closes the window", c.setup.visible is False)
+    c.setup, c.setup_tried = None, None
     c.perm = {"listen": True, "post": True, "mic": "allowed"}
     check("menu: no Set Up… once all are granted",
           "Set Up…" not in [c.build_menu().itemAtIndex_(i).title() for i in range(c.build_menu().numberOfItems())])
