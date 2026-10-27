@@ -134,9 +134,9 @@ check("  with the voice's hand-off on, and no earlier voice yet", v.get("handoff
 check("  the voice speaks first: the call opens with its greeting turn (who it is: the agent's call prelude)",
       getattr(ui.VOICE[sid], "opening", None) == ui.LITE_OPENING, v)
 answers.append("Hey, what are we working on?")
-check("  that first turn goes to the voice with what they last said to the session, to pick up from, nothing handed on",
+check("  that first turn goes to the voice as it is (what to pick up is in the session's summary), nothing handed on",
       ui.ask_spoken(sid, ui.LITE_OPENING, None, None) == "Hey, what are we working on?"
-      and asked[-1] == ui.LITE_OPENING + "\nTheir last message to you, before the call:\nCan we talk this through on a call?"
+      and asked[-1] == ui.LITE_OPENING
       and not ui.lite_busy(sid), asked[-1:])
 check("  and it's never shown as theirs: no row of it in the call's chat",
       not any("talk this through" in str(a) for a, _k in chat), chat)

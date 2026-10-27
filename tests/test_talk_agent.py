@@ -293,25 +293,25 @@ try:
     call = " ".join(sa.voice_prelude(TALK).split())
     check("a call's voice: it IS the session, its mouth and ears, with its own deeper side; one self; its judgement; its folder",
           call.startswith("You are the user's Claude Code session in /Users/you/code/orion, on a voice call with them: its mouth and ears.")
-          and "It's all you, so never speak of a separate agent or helper." in call
-          and "Anything that does something, like changing a file, running a command or searching the web, is your deeper side's: reply [DEEP]" in call
-          and "answer them first, briefly, then take it deeper, so you're never silent while it runs." in call
+          and "It's all you: same agent, same work, same memory, so never speak of a separate agent or helper." in call
+          and "Anything that does something, like changing a file, running a command or searching the web, is your deeper side's" in call
+          and "reply [DEEP] and what to do, in your words, with what it needs to know." in call
+          and "Answer them first, then take it deeper; it works while you keep talking." in call
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and "[RESULT]" in call and len(call.split()) < 360, (len(call.split()), call[:300]))
-    check("  its opening: a short hello that names their last message, never an answer to it yet",
-          "a short hello your way, naming their last message in a few words if there is one; answer it once they pick it up." in call)
+          and "[QUIET]" in call and "[RESULT]" in call and len(call.split()) < 300, (len(call.split()), call[:300]))
+    check("  its opening: a short hello that names in a few words what it's picking up",
+          "[CALL START] means the call just connected: a short hello your way, naming in a few words anything you're picking up." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
-          "you handle small things yourself" in call and "Your own tools are for looking: you can read and search where your session works, and ~/.standby." in call
-          and "so anything they could ask Claude Code to do, you can do by taking it deeper." in call
-          and "if one of your tools refuses you, that only means it's your deeper side's to do, never that it can't be done." in call
-          and "every tool and connection it has" in call
-          and "When they ask you to do something, it's yours to do." in call
+          "Your own tools are for looking: you can read and search where your session works, and ~/.standby." in call
+          and "So whatever they ask for is yours to do" in call
+          and "Don't try it yourself first; a tool refusing you only means it's your deeper side's to do, never that it can't be done." in call
+          and "this whole Claude Code session, with all its context and every tool and connection it has." in call
           and "Never say you will look into something" not in call and "SUGGEST" not in call)
     check("  honest hand-offs: nothing started until the session says it has it; never a guess at why not",
-          "Nothing has started until a [SESSION] note says your session has it; till then, you're sending it." in call
-          and "Never guess why something didn't happen." in call)
+          "Only your session's notes say what has happened, so never guess: nothing has started until a [SESSION] note says "
+          "your session has it (till then, you're sending it), and a [RESULT] says what it came to." in call)
     ledger = " ".join(sa.voice_prelude(TALK, ledger=True).split())
     check("  on the record, the voice can stop or change a task by its number in TASKS",
           "To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]." in ledger)
@@ -411,10 +411,10 @@ try:
     json.dump({"handoff": True}, open(os.path.join(live, TALK + ".voice.json"), "w"))
     call = " ".join(sa.voice_prelude(TALK).split())
     check("  a result: background, what they're saying first; at a natural moment, the gist, then they ask; with a lot, it asks first",
-          "[RESULT] says what it came to: background; what they're saying comes first. Raise it at a natural moment, as a person "
-          "would: the gist in a sentence or two, then let them ask; with a lot, ask first if they want it." in call, call[-700:])
+          "A result is background; what they're saying comes first. At a natural moment, give the gist and let them ask; "
+          "with a lot, ask first if they want it." in call, call[-700:])
     check("  a call's voice ends the call itself: its own goodbye and [END]; if unsure, ask",
-          "Ending the call is yours: when they ask, or are clearly done, say goodbye and add [END]. If unsure, ask." in call, call[-400:])
+          "Ending the call is yours: when they ask, or are clearly done, say goodbye and add [END]; if unsure, ask." in call, call[-400:])
     json.dump({"handoff": True, "gist": "The user is raising the cache TTL."}, open(os.path.join(live, TALK + ".voice.json"), "w"))
     ask("[VOICE] [CALL START]")
     first = texts("voice", TALK)[-1]
