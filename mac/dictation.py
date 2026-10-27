@@ -84,10 +84,11 @@ F18_KEY = 79                    # kVK_F18
 EDGE_SAME = 0.3                 # two ears hearing one press: this close, by when it was pressed
 
 # Apple's own presets: the 🎤 key, and "Press ... twice" for a modifier, plus a
-# few that rarely clash with anything. Keycodes are from HIToolbox/Events.h.
+# few that rarely clash with anything. Keycodes are from HIToolbox/Events.h. Not Control
+# twice: it is Apple Dictation's own, and pressing it brought up macOS's "Do you want to
+# enable Dictation?" (a VM run). A saved one falls back to F5 (settings).
 SHORTCUTS = {
     "mickey":    ("Press F5", (F18_KEY,)),       # the key with the mic on it, named by its F-key (the user)
-    "control2":  ("Press Control twice", (59, 62)),
     "fn2":       ("Press Fn (Globe) twice", (63,)),
     "rcommand2": ("Press Right Command twice", (54,)),
     "lcommand2": ("Press Left Command twice", (55,)),
@@ -1393,8 +1394,30 @@ def cmd_on():
         raise SystemExit("Standby Dictation did not start. Open it from ~/Applications (it also "
                          "starts at every login from now on); details in %s" % (ROOT / "dictation.log"))
     print("Standby Dictation is on: %s. It starts at login too." % shortcut_label(settings()))
-    print("First time: a small window lists three permissions to allow, with a button for each.")
+    note = permissions_note(running_pid())
+    if note:
+        print(note)
     return 0
+
+
+SETUP_NOTE = "A small window walks you through what macOS needs to allow, one step at a time."
+
+
+def permissions_note(pid, wait=3.0):
+    """`standby dictation on`'s line about permissions: while one is missing (or the app
+    hasn't said yet), the setup window's; once all are allowed, None. The app writes
+    them to STATUS as it starts."""
+    end = time.time() + wait
+    while True:
+        try:
+            st = json.loads(STATUS.read_text())
+        except (OSError, ValueError):
+            st = {}
+        if pid and st.get("pid") == pid and isinstance(st.get("permissions"), dict):
+            return SETUP_NOTE if missing(st["permissions"]) else None
+        if time.time() >= end:
+            return SETUP_NOTE
+        time.sleep(0.1)
 
 
 def cmd_off():
