@@ -1057,7 +1057,7 @@ def setup_steps(perm, settings, tried=None, sent=(), failed=None):
         last.update(state="current", button="Done", note="Dictation is on. Use %s in any app." % (
             "F5" if shortcut in KEY_SHORTCUTS else _shortcut(settings)[1][len("Press "):]),
             box=tried, box_ok=True)
-        return {"title": SETUP_DONE, "count": "Step 4 of 4", "steps": steps}
+        return {"title": SETUP_DONE, "count": "All done", "steps": steps}
     key = current["key"]
     if key == "mic" and perm.get("mic") == "ask":
         current.update(button="Allow Microphone", note="macOS will ask: choose Allow.")
