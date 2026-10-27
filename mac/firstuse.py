@@ -25,6 +25,7 @@ SOUND_HOW = ("macOS will ask you to quit and reopen Standby: choose **Quit & Reo
 SOUND_SETTINGS_HOW = ("In the list, turn on **Standby**. macOS then asks to quit and reopen it: choose "
                       "**Quit & Reopen**. Your %s starts right after.")
 SKIP = "Skip: record only my mic"
+RETRY = "Try again from Claude Code."
 
 
 def steps_for(kind, capture=None):
@@ -79,7 +80,7 @@ def complete(steps, states, skip=False):
 
 def view(kind, steps, states, pressed=(), skip=False, phase="open", error=None):
     """What the window shows: {title, sub, count, steps: [{key, n, name, why, state, button, do, note,
-    waiting, how, skip}], go, error}. state: done, skipped, current or later; only the current step has
+    waiting, how, skip}], go, error, retry}. state: done, skipped, current or later; only the current step has
     a button (do: what it asks Standby to do). phase: open, starting (all done: it's starting) or failed."""
     what = "call" if kind == "call" else "meeting"
     skip = skip and can_skip(steps)
@@ -110,7 +111,7 @@ def view(kind, steps, states, pressed=(), skip=False, phase="open", error=None):
     many = len(steps) > 1
     if phase == "failed":
         return {"title": "Couldn't start your %s" % what, "sub": "", "count": "", "steps": out, "go": None,
-                "error": error or "Something went wrong", "button": "Close"}
+                "error": "The %s didn't start: %s" % (what, error or "something went wrong"), "retry": RETRY, "button": "Close"}
     if current is None or phase == "starting":
         for st in out:
             if st["state"] == "current":

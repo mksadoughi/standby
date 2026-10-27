@@ -188,7 +188,8 @@ ui.lite = lambda: types.SimpleNamespace(listen=lambda b: {"error": "Your Mac did
 ui.setup_hold("meeting", {"cc": "cc-1", "capture": "mic"})
 STATES.update(mic="allowed")
 check("a start that fails after setup: the window says so, with Close", wait(lambda: (ui.setup_for("cc-1") or {}).get("phase") == "failed")
-      and ui.setup_view()["error"] == "Your Mac didn't start" and ui.setup_view()["button"] == "Close", ui.setup_view())
+      and ui.setup_view()["error"] == "The meeting didn't start: Your Mac didn't start" and ui.setup_view()["button"] == "Close"
+      and ui.setup_view()["retry"] == "Try again from Claude Code.", ui.setup_view())
 check("  Close: gone", ui.setup_act({"do": "close"}) == {"ok": True} and ui.setup_for("cc-1") is None)
 
 page = ui.setup_page()
