@@ -3321,6 +3321,25 @@ def _cc_gone(c):
 CC_CHECK_EVERY = 2.0      # s between looks at the call's Claude Code
 
 
+def cc_signed_in():
+    """Is Claude Code signed in on this Mac (`claude auth status`, about 0.1 s)? A call's voice and its
+    deeper side are that Claude Code: signed out (an expired login), every answer failed with "OAuth
+    session expired" (a fresh Mac, 2026-10-27). True whenever it can't be told: a call is never refused
+    on a guess."""
+    if os.environ.get("STANDBY_NO_DEVICES") and not os.environ.get("STANDBY_AUTH_TEST"):
+        return True                                # a test: never the user's own Claude Code
+    try:
+        import sbclaude
+        path = sbclaude.find_claude()
+        if not path:
+            return True
+        r = subprocess.run([path, "auth", "status", "--json"], stdin=subprocess.DEVNULL,
+                           capture_output=True, text=True, timeout=10)
+        return json.loads(r.stdout or "{}").get("loggedIn") is not False
+    except Exception:
+        return True
+
+
 def _lite_voices():
     return read_json(LITE_VOICES) or {}
 
@@ -3384,6 +3403,8 @@ def lite_call(b):
         if c and c["cc"] == cc:
             return {"session": live, "already": True}     # this session's call, already on
         return {"error": "Standby is busy with another call or meeting: end it first", "busy": {"session": live}}
+    if not cc_signed_in():                          # its voice is that Claude Code: signed out, it can't answer
+        return {"error": "Claude Code isn't signed in: run /login"}
     held = setup_hold("call", b)                   # a first call: Standby's setup window asks for the mic first
     if held:
         return held

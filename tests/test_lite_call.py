@@ -125,6 +125,21 @@ with open(CCT, "w") as fh:
         fh.write(json.dumps(r) + "\n")
 ui._cc_transcript = lambda cc: __import__("pathlib").Path(CCT) if cc == CC else None
 check("call: a Claude Code session id is needed", "error" in ui.LITE_POST["/api/lite/call"]({"cc": "../x"}))
+# Claude Code signed out (an expired login): the call would only fail, so it isn't started, and says why
+fake_claude = os.path.join(root if isinstance(root, str) else str(root), "fake-claude-auth")
+open(fake_claude, "w").write('#!/bin/sh\necho \'{"loggedIn": %s, "authMethod": "none"}\'\n' % os.environ.get("FAKE_LOGGED_IN", "false"))
+os.chmod(fake_claude, 0o755)
+import sbclaude
+real_find, sbclaude.find_claude = sbclaude.find_claude, lambda full=False: fake_claude
+os.environ["STANDBY_AUTH_TEST"] = "1"
+check("Claude Code signed out: no call, and the words say what to do",
+      ui.LITE_POST["/api/lite/call"]({"cc": CC}) == {"error": "Claude Code isn't signed in: run /login"} and not ui.LITE_CALLS)
+open(fake_claude, "w").write('#!/bin/sh\necho \'{"loggedIn": true}\'\n')
+check("  signed in: told so", ui.cc_signed_in() is True)
+open(fake_claude, "w").write('#!/bin/sh\necho not json\n')
+check("  it can't be told (an older Claude Code): a call is never refused on a guess", ui.cc_signed_in() is True)
+sbclaude.find_claude = real_find
+del os.environ["STANDBY_AUTH_TEST"]
 r = ui.LITE_POST["/api/lite/call"]({"cc": CC, "cwd": work})
 sid = r.get("session")
 v = (talks[-1]["voice"] or {}) if talks else {}
