@@ -127,7 +127,7 @@ STATES.update(mic="allowed")
 check("the mic allowed already: a call starts at once, no window", ui.setup_hold("call", {"cc": "cc-1"}) is None and not made)
 STATES.update(mic="ask")
 
-ui.lite_call = lambda b: started.append(dict(b)) or {"session": "c1"}
+ui.lite_call = lambda b: (started.append(dict(b)), time.sleep(0.5))[0] or {"session": "c1"}   # a start takes a moment
 r = real_call({"cc": "cc-1", "cwd": "/tmp"})
 check("a first call: held, the setup window up (Standby's own, 440 wide, its page)",
       r == {"setup": "call"} and wait(lambda: made) and made[0].kw["width"] == 440
@@ -143,9 +143,13 @@ v = ui.setup_view()
 check("the window's view: Before your first call, Allow Microphone", v["title"] == "Before your first call" and v["steps"][0]["do"] == "allow_mic", v)
 check("Allow Microphone: macOS asks then, and only then", ui.setup_act({"do": "allow_mic"}) == {"ok": True} and asked == ["mic"])
 check("  a step it doesn't have: refused", "error" in ui.setup_act({"do": "rm -rf"}))
+ui.setup_start_after_launch()        # the app's launch finishing meanwhile (a first call is what opened it)
 STATES.update(mic="allowed")
 check("allowed: Standby starts the call itself, past the window", wait(lambda: started) and started[0].get("setup_done")
       and started[0]["cc"] == "cc-1", started)
+time.sleep(1.0)
+check("  once, though the hold and the app's launch both asked to watch it (twice was \"already starting\")",
+      len(started) == 1, started)
 check("  then the window goes and nothing is held", wait(lambda: win.hidden) and ui.setup_for("cc-1") is None
       and not ui.SETUP_FILE.exists())
 check("fit: the window takes the page's height, never too big", ui.SetupApi().fit(400) == {"ok": True}
