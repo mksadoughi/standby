@@ -637,10 +637,27 @@ def ask_post():
     import Quartz
     Quartz.CGRequestPostEventAccess()
 def ask_listen():
+    """Every way macOS has to put this app in Input Monitoring's list: CoreGraphics' request,
+    IOKit's (the one Apple documents for it) and a keyboard tap, which macOS checks as it is
+    made. A VM run (macOS 26) left the list empty after the first alone. What each said
+    is logged, so the next run tells which one did it."""
     if os.environ.get("STANDBY_NO_DEVICES"):
         return
     import Quartz
-    Quartz.CGRequestListenEventAccess()
+    said = {"cg": bool(Quartz.CGRequestListenEventAccess())}
+    try:
+        iokit = ctypes.CDLL("/System/Library/Frameworks/IOKit.framework/IOKit")
+        iokit.IOHIDRequestAccess.restype, iokit.IOHIDRequestAccess.argtypes = ctypes.c_bool, [ctypes.c_uint32]
+        said["iokit"] = bool(iokit.IOHIDRequestAccess(1))       # kIOHIDRequestTypeListenEvent
+    except Exception as exc:
+        said["iokit"] = repr(exc)
+    tap = Quartz.CGEventTapCreate(Quartz.kCGSessionEventTap, Quartz.kCGHeadInsertEventTap,
+                                  Quartz.kCGEventTapOptionListenOnly, 1 << Quartz.kCGEventKeyDown,
+                                  lambda proxy, etype, event, refcon: event, None)
+    said["tap"] = tap is not None
+    if tap is not None:
+        Quartz.CFMachPortInvalidate(tap)               # only asked: install_tap makes the real one
+    core.log("input monitoring asked: %s" % ", ".join("%s %s" % kv for kv in sorted(said.items())))
 def ax_trusted():
     try:
         ax = ctypes.CDLL("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices")
@@ -1539,7 +1556,7 @@ class Controller(NSObject):
         self.check_permissions(ask=True)
         # Missing permissions: say so up front, not only in the menu. A restart
         # into new code brings the window back only if it was open.
-        if core.missing(self.perm) and (note is None or note.get("setup")):
+        if core.missing(self.perm, self.settings) and (note is None or note.get("setup")):
             self.show_setup()
         self.rebuild_menu()
         timer = NSTimer.timerWithTimeInterval_target_selector_userInfo_repeats_(0.05, self, "tick:", None, True)
@@ -1727,7 +1744,7 @@ class Controller(NSObject):
     def after_permissions(self):
         """The setup window follows the permissions live, and goes once all are
         granted; the first time it all works, the panel says so."""
-        lacking = core.missing(self.perm)
+        lacking = core.missing(self.perm, self.settings)
         now = time.time()
         open_ = self.setup is not None and self.setup.visible
         if self.setup is not None:
@@ -1820,6 +1837,7 @@ class Controller(NSObject):
         if key not in ("listen", "post") or key in self.asked:
             return
         self.asked.add(key)
+        core.log("asking macOS for %s" % dict((k, n) for k, n, _w, _p in core.PERMISSIONS)[key])
         try:
             (ask_listen if key == "listen" else ask_post)()
         except Exception as exc:
@@ -1840,7 +1858,7 @@ class Controller(NSObject):
     def applicationShouldHandleReopen_hasVisibleWindows_(self, _app, _visible):
         """Opened again from Finder or Spotlight while running: show what is
         missing, if anything (there is no other window)."""
-        if core.missing(self.perm):
+        if core.missing(self.perm, self.settings):
             self.show_setup()
         else:
             self.flash(core.ready_text(self.settings))
@@ -2264,7 +2282,7 @@ class Controller(NSObject):
     def set_icon(self, state):
         if self.item is None:
             return
-        if not (self.perm["listen"] and self.perm["post"]) and state == "idle":
+        if {"listen", "post"} & set(core.missing(self.perm, self.settings)) and state == "idle":
             state = "blocked"
         # The user's "C: Wave": Standby's mark, the sound in a circle; today's mic if
         # this macOS lacks the symbol.
@@ -2340,13 +2358,13 @@ class Controller(NSObject):
         fixes = []
         if self.perm["mic"] == "denied":
             fixes.append(("Allow Microphone…", "openMic:", None))
-        if not self.perm["listen"]:
+        if not self.perm["listen"] and core.needs(s, "listen"):
             fixes.append(("Allow Input Monitoring…", "openListen:", None))
         if not self.perm["post"]:
             fixes.append(("Allow Accessibility…", "openPost:", None))
         if apple_dictation_on() and s["shortcut"] not in core.KEY_SHORTCUTS:
             fixes.append(("Turn Off Apple Dictation…", "openKeyboard:", "Or both start at once"))
-        if core.missing(self.perm):
+        if core.missing(self.perm, self.settings):
             fixes.append(("Set Up…", "showSetup:", None))
         elif core.optional_missing(self.perm):           # where the optional row is
             fixes.append(("Leave Out What the Mac Plays…", "allowHearMac:", "Optional. No screen is recorded"))

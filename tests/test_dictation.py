@@ -60,8 +60,10 @@ ctl = (59, 62)                                 # a double tap of Control: the ge
 # `standby dictation on` says the setup window's line only while something is missing.
 d.STATUS.write_text(json.dumps({"pid": 4242, "permissions": {"listen": True, "post": True, "mic": "allowed"}}))
 check("dictation on, all allowed: no word about a setup window", d.permissions_note(4242, wait=0.2) is None)
-d.STATUS.write_text(json.dumps({"pid": 4242, "permissions": {"listen": False, "post": True, "mic": "allowed"}}))
+d.STATUS.write_text(json.dumps({"pid": 4242, "permissions": {"listen": True, "post": False, "mic": "allowed"}}))
 check("  one missing: the setup window's line", d.permissions_note(4242, wait=0.2) == d.SETUP_NOTE)
+d.STATUS.write_text(json.dumps({"pid": 4242, "permissions": {"listen": False, "post": True, "mic": "allowed"}}))
+check("  only Input Monitoring, with F5: nothing is missing, no line", d.permissions_note(4242, wait=0.2) is None)
 check("  the app not yet saying: the line, to be safe", d.permissions_note(999, wait=0.2) == d.SETUP_NOTE)
 d.STATUS.unlink()
 check("Control twice is not offered: Apple Dictation's own, macOS asks to turn that on",
@@ -184,7 +186,7 @@ check("the menu's first line says so while it lasts",
       d.menu_head(ok_perm, "mickey", {"on": True, "heard": False}).startswith("Can't hear the shortcut")
       and d.menu_head(ok_perm, "mickey", {"on": True, "heard": True}) == "Ready: press F5"
       and d.menu_head(ok_perm, "mickey") == "Ready: press F5")
-check("  Input Monitoring missing still comes first", d.menu_head({"listen": False}, "mickey", {"on": True})
+check("  Input Monitoring missing still comes first", d.menu_head({"listen": False}, "rcommand2", {"on": True})
       == "Needs Input Monitoring to see the shortcut")
 
 
@@ -858,9 +860,15 @@ check("  two before the app looks: both, in order, neither written over",
 
 # ---------------------------------------------------------------- setup and status model
 none_yet = {"listen": False, "post": False, "mic": "ask"}
-rows = d.setup_rows(none_yet)
+rows = d.setup_rows(none_yet, "rcommand2")
 check("setup: every permission, in the order the app asks",
-      [r["key"] for r in rows] == ["mic", "listen", "post"] and d.missing(none_yet) == ["mic", "listen", "post"])
+      [r["key"] for r in rows] == ["mic", "listen", "post"] and d.missing(none_yet) == ["mic", "listen", "post"]
+      and d.missing(none_yet, "rcommand2") == ["mic", "listen", "post"])
+check("  F5 is a hotkey: no Input Monitoring asked for it, nor for a recorded combination (a VM run)",
+      [r["key"] for r in d.setup_rows(none_yet)] == ["mic", "post"] and d.missing(none_yet, "mickey") == ["mic", "post"]
+      and d.missing(none_yet, {"shortcut": "custom", "custom": {"kind": "combo", "keycode": 49, "carbon": 2048, "label": "⌥ Space"}}) == ["mic", "post"]
+      and d.missing({"listen": False, "post": True, "mic": "allowed"}, d.DEFAULTS) == []
+      and d.menu_head({"listen": False, "post": True, "mic": "allowed"}, "mickey") == "Ready: press F5", d.setup_rows(none_yet))
 check("  the mic, not asked yet, by asking (macOS lists the app only after)",
       rows[0]["action"] == "ask" and rows[0]["button"] == "Allow", rows[0])
 check("  the others from their System Settings pane",
@@ -868,9 +876,8 @@ check("  the others from their System Settings pane",
       and rows[2]["action"] == "open" and rows[2]["url"].endswith("Privacy_Accessibility")
       and rows[2]["button"] == "Open Settings…", rows)
 check("  in plain words, naming the shortcut",
-      rows[1]["why"] == "notices the F5 key" and d.setup_rows(none_yet, "rcommand2")[1]["why"] == "notices the shortcut"
-      and rows[2]["why"] == "pastes the text", rows)
-denied = d.setup_rows({"listen": True, "post": True, "mic": "denied"})
+      rows[1]["why"] == "notices the shortcut" and rows[2]["why"] == "pastes the text", rows)
+denied = d.setup_rows({"listen": True, "post": True, "mic": "denied"}, "rcommand2")
 check("  a denied mic opens its pane", denied[0]["action"] == "open" and denied[0]["url"].endswith("Privacy_Microphone")
       and denied[1]["ok"] and denied[1]["button"] is None, denied)
 check("  all granted: nothing missing", d.missing({"listen": True, "post": True, "mic": "allowed"}) == [])
@@ -1059,6 +1066,7 @@ else:
                                     "Quit Standby Dictation")), titles)
     titles = [menu.itemAtIndex_(i).title() for i in range(menu.numberOfItems())]
     pick = lambda key: c.pickShortcut_(type("S", (), {"representedObject": lambda self: key})())
+    core_missing = lambda c: d.missing(c.perm, c.settings)
     pick("mickey")
     check("menu: the 🎤 key works on its own, no Apple Dictation warning",
           isinstance(c.gesture, d.KeyPress) and not any("Apple Dictation" in t for t in
@@ -1489,9 +1497,9 @@ else:
     m = c.build_menu()
     titles = [("—" if m.itemAtIndex_(i).isSeparatorItem() else str(m.itemAtIndex_(i).title())) for i in range(m.numberOfItems())]
     check("  with permissions missing: says which, then each Allow…, then Set Up…",
-          titles[0] == "Needs Input Monitoring to see the shortcut" and
+          titles[0] == "Needs Accessibility to paste" and
           titles[titles.index("Edit Word Fixes…") + 1:titles.index("Start at Login")] ==
-          ["—", "Allow Microphone…", "Allow Input Monitoring…", "Allow Accessibility…", "Set Up…", "—"], titles)
+          ["—", "Allow Microphone…", "Allow Accessibility…", "Set Up…", "—"], titles)
     check("  the header is a line, not a button", not m.itemAtIndex_(0).isEnabled())
     c.perm = {"listen": True, "post": True, "mic": "allowed"}
 
@@ -1689,6 +1697,16 @@ else:
     c.perm = {"listen": False, "post": False, "mic": "ask"}
     c.setup_sent, c.setup_tried, c.setup_failed = set(), None, None
     m = c.setup_steps()
+    check("setup with F5: three steps, no Input Monitoring (F5 is a hotkey: a VM run dictated without it)",
+          m["count"] == "Step 1 of 3" and [x["key"] for x in m["steps"]] == ["mic", "post", "try"]
+          and [x["n"] for x in m["steps"]] == [1, 2, 3], m)
+    c.perm = {"listen": False, "post": True, "mic": "allowed"}
+    check("  Microphone and Accessibility allowed: on to trying it, and nothing missing in the menu",
+          c.setup_steps()["count"] == "Step 3 of 3" and core_missing(c) == [] and c.build_menu().itemAtIndex_(0).title() == "Ready: press F5"
+          and "Allow Input Monitoring…" not in [c.build_menu().itemAtIndex_(i).title() for i in range(c.build_menu().numberOfItems())])
+    pick("rcommand2")                         # a double-tap: Input Monitoring is a step
+    c.perm = {"listen": False, "post": False, "mic": "ask"}
+    m = c.setup_steps()
     check("setup: step 1 of 4, the Microphone, its one button and what macOS will ask",
           m["count"] == "Step 1 of 4" and [x["state"] for x in m["steps"]] == ["current", "later", "later", "later"]
           and m["steps"][0]["button"] == "Allow Microphone" and m["steps"][0]["note"] == "macOS will ask: choose Allow."
@@ -1712,18 +1730,26 @@ else:
     check("mic allowed: ticked, on to step 2, Input Monitoring", m["count"] == "Step 2 of 4"
           and [x["state"] for x in m["steps"]] == ["done", "current", "later", "later"]
           and m["steps"][1]["button"] == "Open Settings" and m["steps"][1]["how"] == d.SETUP_HOW
-          and m["steps"][1]["why"] == "So Standby notices when you press F5." and not m["steps"][1]["waiting"], m["steps"][1])
+          and m["steps"][1]["why"] == "So Standby notices your shortcut." and not m["steps"][1]["waiting"], m["steps"][1])
     # macOS lists the app in a pane only once it has asked (a VM run: Open Settings… showed a list
     # without Standby Dictation in it): the ask comes first, then the pane.
     real_ask_post, real_ask_listen, order = da.ask_post, da.ask_listen, []
     da.ask_post, da.ask_listen = (lambda: order.append("ask post")), (lambda: order.append("ask listen"))
     da.open_url = lambda url: (opened.append(url), order.append("open"))
     c.asked.discard("listen")
+    real_log, logged = d.log, []
+    d.log = logged.append
     c.setupAction_(Tag(2))
+    d.log = real_log
     check("  Open Settings: asked first, so Standby Dictation is in that list, then the pane",
           order == ["ask listen", "open"] and opened == [d.PANE + "ListenEvent"], (order, opened))
+    check("    and the log says it asked (a VM run's log could not tell)",
+          "asking macOS for Input Monitoring" in logged, logged)
     m = c.setup_steps()
     check("  then it waits for them, saying so", m["steps"][1]["waiting"] and m["steps"][1]["note"] == d.SETUP_WAITING)
+    check("    and says where the app is, to add it by hand (the + picker opens /Applications)",
+          m["steps"][1]["fallback"] == d.SETUP_FALLBACK and "Shift-Command-H" in d.SETUP_FALLBACK
+          and "~/Applications" in Path(d.__file__).read_text() and m["steps"][0]["fallback"] is None)
     c.setupAction_(Tag(2))
     check("    asked once: a second click only opens the pane", order == ["ask listen", "open", "open"], order)
     c.perm["listen"] = True
@@ -1760,7 +1786,8 @@ else:
     m = c.setup_steps()
     check("all three allowed: step 4, try it, the box waiting for words", m["count"] == "Step 4 of 4"
           and m["steps"][3]["state"] == "current" and m["steps"][3]["box"] == d.SETUP_TRY_EMPTY
-          and m["steps"][3]["why"] == "Press F5, say a few words, then press F5 again." and m["steps"][3]["button"] is None, m["steps"][3])
+          and m["steps"][3]["why"] == "Press Right Command twice, say a few words, then the same again." and m["steps"][3]["button"] is None, m["steps"][3])
+    check("  with F5: says the key", d.try_how(d.DEFAULTS) == "Press F5, say a few words, then press F5 again.")
     check("  holding to talk: says so", d.try_how(dict(d.DEFAULTS, hold=True)) == "Hold F5, say a few words, let go.")
 
     class OpenSetup(object):                  # the window, as if open on the screen
@@ -1781,10 +1808,11 @@ else:
     m = c.setup.model
     check("  words: in the box, never pasted into an app, and it's done",
           m["title"] == d.SETUP_DONE and m["count"] == "All done" and m["steps"][3]["box"] == "testing one two" and m["steps"][3]["button"] == "Done"
-          and m["steps"][3]["note"] == "Dictation is on. Use F5 in any app." and len(c.inserter.got) == pasted, m["steps"][3])
+          and m["steps"][3]["note"] == "Dictation is on. Use Right Command twice in any app." and len(c.inserter.got) == pasted, m["steps"][3])
     c.setupAction_(Tag(4))
     check("  Done closes the window", c.setup.visible is False)
     c.setup, c.setup_tried = None, None
+    pick("mickey")
     c.perm = {"listen": True, "post": True, "mic": "allowed"}
     check("menu: no Set Up… once all are granted",
           "Set Up…" not in [c.build_menu().itemAtIndex_(i).title() for i in range(c.build_menu().numberOfItems())])

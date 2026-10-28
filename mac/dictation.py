@@ -61,7 +61,7 @@ WORDS = ROOT / "dictation-words.txt"
 STATUS = ROOT / "dictation.status.json"
 LOCK = ROOT / "dictation.lock"
 LABEL = "dev.standby.dictation"           # its login item's name, and its app's bundle id
-APP = Path.home() / "Applications" / "Standby Dictation.app"
+APP = Path.home() / "Applications" / "Standby Dictation.app"   # ~/Applications: SETUP_FALLBACK says so
 STANDBY_APP = Path.home() / "Applications" / "Standby.app"
 
 SAMPLE_RATE = 16000
@@ -966,8 +966,25 @@ def granted(perm, key):
     return perm.get("mic") == "allowed" if key == "mic" else bool(perm.get(key))
 
 
-def missing(perm):
-    return [p[0] for p in PERMISSIONS if not granted(perm, p[0])]
+def needs(settings, key):
+    """Whether the shortcut as set needs permission `key`. F5 and a recorded combination
+    are hotkeys (CarbonHotKey), which macOS hands over without Input Monitoring; only a
+    double-tap needs the event tap (a VM run: F5 dictated before Input Monitoring was on)."""
+    return key != "listen" or settings is None or shortcut_kind(_settings(settings)) == "double"
+
+
+def _settings(shortcut):
+    return shortcut if isinstance(shortcut, dict) else {"shortcut": shortcut}
+
+
+def needed(settings):
+    """PERMISSIONS, less what the shortcut as set does not need."""
+    return [p for p in PERMISSIONS if needs(settings, p[0])]
+
+
+def missing(perm, settings=None):
+    """What is not allowed yet of what the shortcut needs (all three when settings is None)."""
+    return [p[0] for p in needed(settings) if not granted(perm, p[0])]
 
 
 def _shortcut(shortcut):
@@ -985,17 +1002,14 @@ def offered(perm):
 
 
 def setup_rows(perm, shortcut="mickey"):
-    """Each permission, granted or not, and what its button does: "ask" when
-    macOS has not asked yet (it lists the app in System Settings only after
+    """Each permission the shortcut needs, granted or not, and what its button does: "ask"
+    when macOS has not asked yet (it lists the app in System Settings only after
     asking), else "open" its pane in System Settings. Then the optional one,
     when offered."""
     rows = []
-    shortcut = _shortcut(shortcut)[0]
-    for key, name, why, pane in PERMISSIONS:
+    for key, name, why, pane in needed(shortcut):
         ok = granted(perm, key)
         ask = key == "mic" and perm.get("mic") == "ask"
-        if key == "listen" and shortcut in KEY_SHORTCUTS:
-            why = "notices the F5 key"
         rows.append({"key": key, "name": name, "why": why, "ok": ok,
                      "action": None if ok else ("ask" if ask else "open"),
                      "button": None if ok else ("Allow" if ask else "Open Settings…"),
@@ -1016,10 +1030,13 @@ def setup_rows(perm, shortcut="mickey"):
 # action on... maybe sequential"): each permission in turn, then trying it once. Only the
 # current step has a button; macOS asks only when it is pressed.
 SETUP_WHY = {"mic": "So Standby can hear you dictate.",
-             "listen": "So Standby notices when you press F5.",
+             "listen": "So Standby notices your shortcut.",
              "post": "So Standby can type the words where your cursor is."}
 SETUP_HOW = "In the list, turn on Standby Dictation, then come back here."
 SETUP_WAITING = "Waiting for you to turn it on"
+# Once it has sent them to the pane: the + picker opens /Applications, and the app is in the
+# home folder's (a VM run: the list was empty, and the app nowhere the picker showed).
+SETUP_FALLBACK = "Not in the list? Click +, press Shift-Command-H, open Applications and choose Standby Dictation."
 SETUP_STALE = "Already on? Turn it off and on again"
 SETUP_TRY_EMPTY = "Your words show here."
 SETUP_DONE = "You're all set"
@@ -1036,22 +1053,20 @@ def try_how(settings):
 
 def setup_steps(perm, settings, tried=None, sent=(), failed=None):
     """The setup window's steps, in order: [{key, n, name, why, state: done|current|later,
-    button, note, waiting, how, stale, box, box_ok}] and the window's title and "Step N of 4".
-    tried: the words of a dictation made on step 4 (it's done then); sent: the panes it has
-    sent the user to; failed: what step 4's last try said instead of words."""
+    button, note, waiting, how, fallback, stale, box, box_ok}] and the window's title and "Step N of M".
+    tried: the words of a dictation made on the last step (it's done then); sent: the panes it
+    has sent the user to; failed: what the last step's try said instead of words. Input
+    Monitoring is a step only for a shortcut that needs it (needs): with F5, three steps."""
     steps, current = [], None
     shortcut = _shortcut(settings)[0]
-    for n, (key, name, _why, _pane) in enumerate(PERMISSIONS, 1):
-        why = SETUP_WHY[key]
-        if key == "listen" and shortcut not in KEY_SHORTCUTS:
-            why = "So Standby notices your shortcut."
-        steps.append({"key": key, "n": n, "name": name, "why": why, "done": granted(perm, key)})
-    steps.append({"key": "try", "n": 4, "name": "Try it", "why": try_how(settings), "done": bool(tried)})
+    for n, (key, name, _why, _pane) in enumerate(needed(settings), 1):
+        steps.append({"key": key, "n": n, "name": name, "why": SETUP_WHY[key], "done": granted(perm, key)})
+    steps.append({"key": "try", "n": len(steps) + 1, "name": "Try it", "why": try_how(settings), "done": bool(tried)})
     for st in steps:
         if not st["done"] and current is None:
             current = st
     for st in steps:
-        st.update(state="current" if st is current else "done" if st["done"] else "later", button=None, note=None, waiting=False, how=None, stale=False, box=None, box_ok=False)
+        st.update(state="current" if st is current else "done" if st["done"] else "later", button=None, note=None, waiting=False, how=None, fallback=None, stale=False, box=None, box_ok=False)
     if current is None:                                    # all done, and tried
         last = steps[-1]
         last.update(state="current", button="Done", note="Dictation is on. Use %s in any app." % (
@@ -1063,10 +1078,11 @@ def setup_steps(perm, settings, tried=None, sent=(), failed=None):
         current.update(button="Allow Microphone", note="macOS will ask: choose Allow.")
     elif key in ("mic", "listen", "post"):
         current.update(button="Open Settings", how=SETUP_HOW, waiting=key in sent,
+                       fallback=SETUP_FALLBACK if key in sent and key != "mic" else None,
                        note=SETUP_WAITING if key in sent else None, stale=key == "post" and key in sent)
     else:
         current.update(box=failed or SETUP_TRY_EMPTY, button="Try again" if failed else None)
-    return {"title": "Set up dictation", "count": "Step %d of 4" % current["n"], "steps": steps}
+    return {"title": "Set up dictation", "count": "Step %d of %d" % (current["n"], len(steps)), "steps": steps}
 
 
 def optional_missing(perm):
@@ -1086,7 +1102,7 @@ def menu_head(perm, shortcut, secure=None):
     not stop it."""
     ident, label, kind = _shortcut(shortcut)
     hotkey = kind == "combo"
-    if not perm.get("listen") and not hotkey:
+    if not perm.get("listen") and needs(shortcut, "listen"):
         return "Needs Input Monitoring to see the shortcut"
     if secure and secure.get("on") and not secure.get("heard") and not hotkey:
         return "Can't hear the shortcut: keyboard input is private"
@@ -1471,7 +1487,7 @@ def permissions_note(pid, wait=3.0):
         except (OSError, ValueError):
             st = {}
         if pid and st.get("pid") == pid and isinstance(st.get("permissions"), dict):
-            return SETUP_NOTE if missing(st["permissions"]) else None
+            return SETUP_NOTE if missing(st["permissions"], settings()) else None
         if time.time() >= end:
             return SETUP_NOTE
         time.sleep(0.1)

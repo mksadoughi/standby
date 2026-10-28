@@ -626,13 +626,13 @@ dictation.ROOM_ONLY = None
 # Standby Dictation's setup window: the optional row, only with room_only.
 ok3 = {"listen": True, "post": True, "mic": "allowed"}
 check("the setup row: not offered unless room_only is on (today's three rows)",
-      [r["key"] for r in dictation.setup_rows(ok3)] == ["mic", "listen", "post"] and not dictation.offered(ok3))
+      [r["key"] for r in dictation.setup_rows(ok3, "rcommand2")] == ["mic", "listen", "post"] and not dictation.offered(ok3))
 room_perm = dict(ok3, hear_mac=False, hear_mac_asked=False)
-rows = dictation.setup_rows(room_perm)
+rows = dictation.setup_rows(room_perm, "rcommand2")
 check("  offered: a fourth row, optional, its button Allow (macOS asks once), then Open Settings",
       [r["key"] for r in rows] == ["mic", "listen", "post", "hear_mac"] and rows[3]["optional"]
       and rows[3]["button"] == "Allow" and rows[3]["why"] == "leaves out the Mac's sound, never the screen"
-      and dictation.setup_rows(dict(room_perm, hear_mac_asked=True))[3]["button"] == "Open Settings…"
+      and dictation.setup_rows(dict(room_perm, hear_mac_asked=True), "rcommand2")[3]["button"] == "Open Settings…"
       and rows[3]["url"].endswith("Privacy_ScreenCapture"), rows[3])
 check("  optional: nothing is missing for it (the window never opens by itself for it)",
       dictation.missing(room_perm) == [] and dictation.optional_missing(room_perm) == ["hear_mac"]
@@ -661,7 +661,7 @@ dc.perm["hear_mac_asked"] = True
 dc.allowHearMac_(None)
 check("    then its pane", asked_screen == [1, dictation.PANE + "ScreenCapture"], asked_screen)
 check("  the setup window's steps never include it",
-      [x["key"] for x in dc.setup_steps()["steps"]] == ["mic", "listen", "post", "try"])
+      [x["key"] for x in dc.setup_steps()["steps"]] == ["mic", "post", "try"])
 cfg_path.write_text(json.dumps({}))
 
 # The apps switched off in a meeting: each its own reference, on that app alone, added together.

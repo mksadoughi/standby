@@ -1180,7 +1180,7 @@ def dictation_app():
         out["shortcut"]["problem"] = hk.get("why")          # e.g. another app already uses those keys
     if mine and isinstance(st.get("permissions"), dict):
         out["missing"] = [{k: r[k] for k in ("key", "name", "why", "action", "button")}
-                          for r in dct.setup_rows(st["permissions"], s["shortcut"])
+                          for r in dct.setup_rows(st["permissions"], s)
                           if not r["ok"] and not r.get("optional")]      # the optional one: dictation's own window
         if s["shortcut"] in dct.KEY_SHORTCUTS and st.get("remapped") is False:
             out["missing"].append({"key": "remap", "name": "F5 key", "why": "isn't remapped yet",
@@ -1275,7 +1275,7 @@ def dictation_action(b):
             return {"error": "Couldn't open the word fixes (%s)" % exc.__class__.__name__}
         return {"ok": True}
     if action == "open":
-        urls = {r["key"]: r["url"] for r in dct.setup_rows({})}
+        urls = {r["key"]: r["url"] for r in dct.setup_rows({}, None)}
         if b.get("key") not in urls:
             return {"error": "unknown permission"}
         subprocess.run(OPEN + [urls[b["key"]]], stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
