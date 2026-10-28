@@ -1179,19 +1179,40 @@ def ask_fix(text):
 
 class SetupWindow(object):
     """What macOS has to allow, one step at a time (core.setup_steps): Microphone, Input
-    Monitoring, Accessibility, then trying it once. Only the current step has a button, done
-    steps tick green in one line, later ones wait greyed. Shown at launch while a permission is
-    missing; the ticks follow System Settings live (update). Buttons send setupAction: to
-    `target` tagged with the step's number, the reset link setupReset:, Not now setupLater:."""
+    Monitoring, Accessibility, then trying it once. One grouped list holds every step: done
+    steps tick green in one line, later ones wait greyed, the current one opens in place with
+    the window's one button. Shown at launch while a permission is missing; the ticks follow
+    System Settings live (update). Buttons send setupAction: to `target` tagged with the
+    step's number, the reset link setupReset:, Not now setupLater:."""
 
-    W, M = 440, 22
+    W, M, P = 440, 24, 14             # the window, its side margin, the list's own padding
+    SUB = "Dictation works in any app once macOS allows these."
+    LINK_INSET = 0                    # a borderless button's title from its frame's left edge
+
+    @staticmethod
+    def _dynamic(light, dark):
+        """A colour that follows light and dark mode: (r, g, b) for each."""
+        from AppKit import NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSColor
+        def pick(appearance):
+            dim = appearance.bestMatchFromAppearancesWithNames_([NSAppearanceNameAqua, NSAppearanceNameDarkAqua])
+            return NSColor.colorWithSRGBRed_green_blue_alpha_(*((dark if dim == NSAppearanceNameDarkAqua else light) + (1.0,)))
+        return NSColor.colorWithName_dynamicProvider_(None, pick)
+
+    @staticmethod
+    def _symbol_weight(size, weight):
+        from AppKit import NSImageSymbolConfiguration
+        return NSImageSymbolConfiguration.configurationWithPointSize_weight_(size, weight)
 
     def __init__(self, target):
         from AppKit import NSBackingStoreBuffered, NSMakeRect, NSView, NSWindow
         self.target = target
         w = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(0, 0, self.W, 300), 1 | 2, NSBackingStoreBuffered, False)   # titled, closable
-        w.setTitle_("Standby Dictation")
+            NSMakeRect(0, 0, self.W, 300), 1 | 2 | 1 << 15, NSBackingStoreBuffered, False)   # titled, closable, full size content
+        w.setTitle_("Standby Dictation")      # Window menu and Mission Control only: the heading is the title
+        w.setTitleVisibility_(1)              # hidden
+        w.setTitlebarAppearsTransparent_(True)
+        w.setMovableByWindowBackground_(True)
+        w.setBackgroundColor_(self._dynamic((1, 1, 1), (0x1e / 255.0, 0x1e / 255.0, 0x20 / 255.0)))
         w.setReleasedWhenClosed_(False)
         w.setCollectionBehavior_(1 << 1)      # moves to the Space you are on
         w.setContentView_(NSView.alloc().initWithFrame_(NSMakeRect(0, 0, self.W, 300)))
@@ -1216,19 +1237,34 @@ class SetupWindow(object):
 
     @python_method
     def _draw(self, model):
-        from AppKit import (NSBox, NSButton, NSColor, NSFont, NSImage, NSImageView, NSMakeRect,
-                            NSProgressIndicator, NSTextField, NSView)
-        M, W = self.M, self.W
-        items = []                    # (view, y from the top, height): placed once the height is known
+        from AppKit import (NSAttributedString, NSBox, NSButton, NSColor, NSFont, NSFontAttributeName,
+                            NSForegroundColorAttributeName, NSImage, NSImageView, NSMakeRect,
+                            NSMutableAttributedString, NSProgressIndicator, NSTextField, NSView)
+        M, W, P = self.M, self.W, self.P
+        items = []                    # (view, x, y from the top, height): placed once the height is known
+        done_all = model["title"] == core.SETUP_DONE
+        last = model["steps"][-1]
 
-        def text(s, size, weight=0.0, color=None, width=W - 2 * M, lines=1):
-            f = NSTextField.labelWithString_(s)
+        def text(s, size, weight=0.0, color=None, width=W - 2 * M):
+            """A label wrapped to `width`, as tall as its lines."""
+            f = NSTextField.wrappingLabelWithString_(s)
             f.setFont_(NSFont.systemFontOfSize_weight_(size, weight))
             f.setTextColor_(color or NSColor.labelColor())
-            if lines > 1:
-                f.setMaximumNumberOfLines_(lines)
-                f.cell().setWraps_(True)
-            f.setFrame_(NSMakeRect(0, 0, width, (size + 5) * lines))
+            f.setPreferredMaxLayoutWidth_(width)
+            f.setFrame_(NSMakeRect(0, 0, width, f.fittingSize().height))
+            return f
+
+        def how(s, width):
+            """The how-to: muted, the app's name in it bold."""
+            f = text(s, 12.5, 0.0, NSColor.secondaryLabelColor(), width)
+            body = NSMutableAttributedString.alloc().initWithAttributedString_(f.attributedStringValue())
+            for name in (core.app_name(), "Standby Dictation"):
+                at = s.find(name) if name else -1
+                if at >= 0:
+                    body.addAttributes_range_({NSFontAttributeName: NSFont.systemFontOfSize_weight_(12.5, 0.3),
+                                               NSForegroundColorAttributeName: NSColor.labelColor()}, (at, len(name)))
+                    break
+            f.setAttributedStringValue_(body)
             return f
 
         def button(title, action, tag=0, default=False, link=False):
@@ -1236,93 +1272,107 @@ class SetupWindow(object):
             b.setTag_(tag)
             if default:
                 b.setKeyEquivalent_("\r")          # Return presses it
-                b.setBezelColor_(NSColor.controlAccentColor())    # blue even before the window is key
+                b.setBezelColor_(NSColor.controlAccentColor())    # filled even before the window is key
             if link:
                 b.setBordered_(False)
-                b.setFont_(NSFont.systemFontOfSize_(12))
+                b.setFont_(NSFont.systemFontOfSize_(12.5))
                 b.setContentTintColor_(NSColor.linkColor())
             b.sizeToFit()
             return b
 
-        def circle(st):
-            box = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, 22, 22))
+        def circle(st, done):
+            box = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, 20, 20))
             box.setBoxType_(4)                      # custom: a filled, bordered circle
-            box.setCornerRadius_(11)
-            box.setBorderWidth_(1.5)
+            box.setCornerRadius_(10)
+            box.setBorderWidth_(0 if done else 1.25)
             box.setTitlePosition_(0)
             box.setContentViewMargins_((0, 0))
-            done = st["state"] == "done" or (st["state"] == "current" and st.get("box_ok"))
             box.setFillColor_(NSColor.systemGreenColor() if done else NSColor.clearColor())
-            box.setBorderColor_(NSColor.systemGreenColor() if done else NSColor.controlAccentColor()
-                                if st["state"] == "current" else NSColor.tertiaryLabelColor())
+            box.setBorderColor_(NSColor.controlAccentColor() if st["state"] == "current" else NSColor.tertiaryLabelColor())
             if done:
-                mark = NSImageView.alloc().initWithFrame_(NSMakeRect(5, 5, 12, 12))
+                mark = NSImageView.alloc().initWithFrame_(NSMakeRect(5, 5, 10, 10))
                 mark.setImage_(NSImage.imageWithSystemSymbolName_accessibilityDescription_("checkmark", "Done"))
+                mark.setSymbolConfiguration_(self._symbol_weight(10, 0.4))
                 mark.setContentTintColor_(NSColor.whiteColor())
                 box.contentView().addSubview_(mark)
             else:
-                n = text(str(st["n"]), 12, 0.4, NSColor.controlAccentColor() if st["state"] == "current"
-                         else NSColor.tertiaryLabelColor(), width=22)
+                n = text(str(st["n"]), 11, 0.3, NSColor.controlAccentColor() if st["state"] == "current"
+                         else NSColor.tertiaryLabelColor(), width=20)
                 n.setAlignment_(1)                  # centred
-                n.setFrame_(NSMakeRect(0, 2, 22, 17))
+                n.setFrame_(NSMakeRect(0, 3, 20, 14))
                 box.contentView().addSubview_(n)
             return box
 
-        y = 14
-        head = text(model["title"], 15, 0.3, width=280)
-        items.append((head, M, y, 22))
-        count = text(model["count"], 12, 0.0, NSColor.secondaryLabelColor(), width=100)
-        count.setAlignment_(2)                      # right
-        items.append((count, W - M - 100, y + 3, 17))
-        y += 34
+        def field(s, ok, height):
+            """A plain field: a thin rounded edge, the words inside."""
+            box = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, inner, height))
+            box.setBoxType_(4)
+            box.setCornerRadius_(6)
+            box.setBorderWidth_(0.5)
+            box.setBorderColor_(NSColor.separatorColor())
+            box.setFillColor_(self._dynamic((1, 1, 1), (0x1e / 255.0, 0x1e / 255.0, 0x20 / 255.0)))
+            box.setTitlePosition_(0)
+            box.setContentViewMargins_((0, 0))
+            words = NSTextField.wrappingLabelWithString_(s)
+            words.setSelectable_(True)
+            words.setFont_(NSFont.systemFontOfSize_(13))
+            words.setTextColor_(NSColor.labelColor() if ok else NSColor.tertiaryLabelColor())
+            words.setFrame_(NSMakeRect(9, 6, inner - 18, height - 13))
+            box.contentView().addSubview_(words)
+            self.box = words
+            return box
+
+        y = 36                                      # under the traffic lights
+        head = text(model["title"], 17, 0.3)
+        items.append((head, M, y, head.frame().size.height))
+        y += head.frame().size.height + 3
+        sub = text(last["note"] if done_all else self.SUB, 13, 0.0, NSColor.secondaryLabelColor())
+        items.append((sub, M, y, sub.frame().size.height))
+        y += sub.frame().size.height + 16
+
         self.buttons, self.spinner, self.box = {}, None, None
-        inner = W - 2 * M - 20 - 32                  # the text column inside a step
-        for st in model["steps"]:
-            x0 = M + 10 + 32
-            if st["state"] != "current":
-                items.append((circle(st), M + 10, y + 9, 22))
-                items.append((text(st["name"], 13, 0.25 if st["state"] == "done" else 0.3,
-                                   NSColor.labelColor() if st["state"] == "done" else NSColor.tertiaryLabelColor(),
-                                   width=inner), x0, y + 11, 18))
-                y += 40 + 6
+        x0 = M + P + 20 + 12                        # a step's text column
+        inner = W - M - P - x0
+        group, rows = y, []
+        for i, st in enumerate(model["steps"]):
+            if i:
+                line = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, W - 2 * M, 1))
+                line.setBoxType_(2)                 # a separator: the hairline between rows
+                rows.append((line, M, y, 1))
+            done = st["state"] == "done" or (done_all and st is last)
+            if st["state"] != "current" or done_all:
+                rows.append((circle(st, done), M + P, y + 10, 20))
+                rows.append((text(st["name"], 13, 0.0, NSColor.labelColor() if done else NSColor.tertiaryLabelColor(),
+                                  width=inner), x0, y + 11, 18))
+                y += 40
+                if done_all and st is last and st["box"]:
+                    rows.append((field(st["box"], True, 28), x0, y - 4, 28))
+                    y += 34
                 continue
-            top, parts = y, []
-            parts.append((circle(st), M + 10, y + 9, 22))
-            parts.append((text(st["name"], 13, 0.3, width=inner), x0, y + 11, 18))
-            y += 31
-            parts.append((text(st["why"], 12, 0.0, NSColor.secondaryLabelColor(), width=inner, lines=2), x0, y, 17))
-            y += 20
+            rows.append((circle(st, False), M + P, y + 14, 20))
+            rows.append((text(st["name"], 13, 0.3, width=inner), x0, y + 15, 18))
+            y += 34
+            why = text(st["why"], 12.5, 0.0, NSColor.secondaryLabelColor(), width=inner)
+            rows.append((why, x0, y, why.frame().size.height))
+            y += why.frame().size.height
             if st["how"]:
-                how = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, inner, 42))
-                how.setBoxType_(4)
-                how.setCornerRadius_(7)
-                how.setBorderWidth_(0)
-                how.setTitlePosition_(0)
-                how.setContentViewMargins_((0, 0))
-                how.setFillColor_(NSColor.quaternaryLabelColor())
-                line = text(st["how"], 12, 0.0, NSColor.secondaryLabelColor(), width=inner - 18, lines=2)
-                line.setFrame_(NSMakeRect(9, 5, inner - 18, 32))
-                how.contentView().addSubview_(line)
-                parts.append((how, x0, y + 6, 42))
-                y += 50
+                h = how(st["how"], inner)
+                rows.append((h, x0, y + 8, h.frame().size.height))
+                y += 8 + h.frame().size.height
+            if st.get("fallback"):                   # where to find the app when the list hasn't it
+                fb = text(st["fallback"], 12.5, 0.0, NSColor.secondaryLabelColor(), width=inner)
+                rows.append((fb, x0, y + 4, fb.frame().size.height))
+                y += 4 + fb.frame().size.height
             if st["box"] is not None:
-                box = NSTextField.alloc().initWithFrame_(NSMakeRect(0, 0, inner, 56))
-                box.setEditable_(False)
-                box.setSelectable_(True)
-                box.setStringValue_(st["box"])
-                box.setFont_(NSFont.systemFontOfSize_(13))
-                box.setTextColor_(NSColor.labelColor() if st["box_ok"] else NSColor.tertiaryLabelColor())
-                box.cell().setWraps_(True)
-                self.box = box
-                parts.append((box, x0, y + 8, 56))
-                y += 64
+                rows.append((field(st["box"], st["box_ok"], 48), x0, y + 10, 48))
+                y += 58
             if st["button"] or st["note"]:
-                y += 10
+                y += 12
                 x = x0
                 if st["button"]:
                     b = button(st["button"], "setupAction:", st["n"], default=True)
                     self.buttons[st["key"]] = b
-                    parts.append((b, x - 6, y, b.frame().size.height))     # its bezel's inset: level with the text
+                    rows.append((b, x - 6, y, b.frame().size.height))     # its bezel's inset: level with the text
                     x += b.frame().size.width - 2
                 if st["waiting"]:
                     sp = NSProgressIndicator.alloc().initWithFrame_(NSMakeRect(0, 0, 12, 12))
@@ -1331,41 +1381,50 @@ class SetupWindow(object):
                     sp.setDisplayedWhenStopped_(False)
                     sp.startAnimation_(None)
                     self.spinner = sp
-                    parts.append((sp, x, y + 6, 12))
-                    x += 18
                 if st["note"]:
-                    parts.append((text(st["note"], 12, 0.0, NSColor.secondaryLabelColor(), width=x0 + inner - x),
-                                  x, y + 5, 17))
+                    note = text(st["note"], 12, 0.0, NSColor.secondaryLabelColor())
+                    width = note.fittingSize().width + (18 if st["waiting"] else 0)
+                    if x + width > x0 + inner:       # no room beside the button: under it
+                        x, y = x0, y + 30
+                    if st["waiting"]:
+                        rows.append((sp, x, y + 6, 12))
+                        x += 18
+                    note.setFrame_(NSMakeRect(0, 0, x0 + inner - x, 17))
+                    rows.append((note, x, y + 6, 17))
                 y += 26
             if st["stale"]:
                 link = button(core.SETUP_STALE, "setupReset:", st["n"], link=True)
                 link.setToolTip_(core.STALE_HINT)
                 self.buttons["stale"] = link
-                parts.append((link, x0 - 4, y + 4, link.frame().size.height))
+                rows.append((link, x0 - self.LINK_INSET, y + 4, link.frame().size.height))
                 y += 22
-            y += 10
-            card = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, W - 2 * M, y - top))
-            card.setBoxType_(4)                      # the current step sits on a slightly raised card
-            card.setCornerRadius_(10)
-            card.setBorderWidth_(0.5)
-            card.setBorderColor_(NSColor.separatorColor())
-            card.setFillColor_(NSColor.controlBackgroundColor())
-            card.setTitlePosition_(0)
-            items.append((card, M, top, y - top))
-            items.extend(parts)
-            y += 6
+            y += 16
+        panel = NSBox.alloc().initWithFrame_(NSMakeRect(0, 0, W - 2 * M, y - group))
+        panel.setBoxType_(4)                         # the grouped list: a rounded, slightly darker panel
+        panel.setCornerRadius_(10)
+        panel.setBorderWidth_(0)
+        panel.setFillColor_(self._dynamic((0xf5 / 255.0, 0xf5 / 255.0, 0xf7 / 255.0), (0x2a / 255.0, 0x2a / 255.0, 0x2d / 255.0)))
+        panel.setTitlePosition_(0)
+        items.append((panel, M, group, y - group))
+        items.extend(rows)
         said, strong = self._said
         if said:
-            note = text(said, 11, 0.0, NSColor.labelColor() if strong else NSColor.secondaryLabelColor(), lines=3)
-            items.append((note, M, y + 4, 42))
-            y += 46
-        if model["title"] != core.SETUP_DONE:          # done: Done closes it
+            note = text(said, 12, 0.0, NSColor.labelColor() if strong else NSColor.secondaryLabelColor())
+            items.append((note, M, y + 12, note.frame().size.height))
+            y += 12 + note.frame().size.height
+        y += 16                                      # the footer: Not now on the left, Done on the right
+        if done_all:
+            b = button(last["button"], "setupAction:", last["n"], default=True)
+            self.buttons[last["key"]] = b
+            items.append((b, W - M - b.frame().size.width + 6, y, b.frame().size.height))
+        else:
             later = button("Not now", "setupLater:", link=True)
+            later.setFont_(NSFont.systemFontOfSize_(13))
             later.setContentTintColor_(NSColor.secondaryLabelColor())
+            later.sizeToFit()
             self.buttons["later"] = later
-            y += 8
-            items.append((later, M - 4, y, later.frame().size.height))
-        y += 34
+            items.append((later, M - self.LINK_INSET, y + 2, later.frame().size.height))
+        y += 24 + 20
         view = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, W, y))
         for v, x, top, h in items:
             f = v.frame()

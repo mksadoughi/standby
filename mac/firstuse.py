@@ -90,7 +90,7 @@ def cause(error):
 
 
 def view(kind, steps, states, pressed=(), skip=False, phase="open", error=None):
-    """What the window shows: {title, sub, count, steps: [{key, n, name, why, state, button, do, note,
+    """What the window shows: {title, sub, steps: [{key, n, name, why, state, button, do, note,
     waiting, how, skip}], go, error, retry}. state: done, skipped, current or later; only the current step has
     a button (do: what it asks Standby to do). phase: open, starting (all done: it's starting) or failed."""
     what = "call" if kind == "call" else "meeting"
@@ -119,16 +119,14 @@ def view(kind, steps, states, pressed=(), skip=False, phase="open", error=None):
                           how=(SOUND_HOW if ask else SOUND_SETTINGS_HOW) % what, waiting=sent,
                           note=WAITING if sent else None, skip=SKIP if can_skip(steps) else None)
         out.append(st)
-    many = len(steps) > 1
     if phase == "failed":
-        return {"title": "Couldn't start your %s" % what, "sub": "", "count": "", "steps": out, "go": None,
+        return {"title": "Couldn't start your %s" % what, "sub": "", "steps": out, "go": None,
                 "error": cause(error), "retry": RETRY, "button": "Close"}
     if current is None or phase == "starting":
         for st in out:
             if st["state"] == "current":
                 st.update(state="done", button=None, do=None, note=None, waiting=False, how=None, skip=None)
-        return {"title": DONE, "sub": "", "count": "All done", "steps": out, "go": "Starting your %s…" % what,
+        return {"title": DONE, "sub": "", "steps": out, "go": "Starting your %s…" % what,
                 "error": None, "button": None}
-    return {"title": TITLES[what], "sub": "Your %s starts as soon as this is done." % what,
-            "count": "Step %d of %d" % (current["n"], len(steps)) if many else "", "steps": out, "go": None,
+    return {"title": TITLES[what], "sub": "Your %s starts as soon as this is done." % what, "steps": out, "go": None,
             "error": None, "button": None}
