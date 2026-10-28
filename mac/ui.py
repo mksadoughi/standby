@@ -4348,7 +4348,13 @@ def setup_start_after_launch():
 
 
 def _setup_watch(held):
-    """Until the held start's steps are all allowed (then it starts), it's cancelled, or it waited too long."""
+    """Until the held start's steps are all allowed (then it starts), it's cancelled, or it waited too long.
+    One per held start: the hold and the app's own launch (a first call is often what opens Standby) both
+    ask for one, and two started it twice, the second failing as "already starting" (a fresh Mac, 2026-10-27)."""
+    with _SETUP_LOCK:
+        if held.get("watched"):
+            return
+        held["watched"] = True
     while held["phase"] == "open":
         if time.time() - held["at"] > firstuse.HELD_FOR:
             log("setup: %s not finished in %d minutes: cancelled" % (held["kind"], firstuse.HELD_FOR // 60))
