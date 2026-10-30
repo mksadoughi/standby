@@ -26,7 +26,7 @@ svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 </head>
 <body>
 <svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
-<script>const DUR = 68;</script>
+<script>const DUR = 58.6;</script>
 <script src="kit.js"></script>
 <script src="screens.js"></script>
 <script src="cc.js"></script>
@@ -36,7 +36,7 @@ const SAY = Object.fromEntries(STORY_LINES.map(l => [l.id, l]));
 const end = id => SAY[id].at + SAY[id].dur;
 const COL = { Claude: INDIGO, You: INK, Nadia: "#3f7cf3", Theo: "#0e9f9a" };
 // the scenes, overlapping by a crossfade
-const HOOK1 = 7.4, WORK0 = 7.0, WORK1 = 34.0, DICT0 = 99, DICT1 = 99, KEY0 = 56.2, OUTRO0 = 61.2;   // (dictation is left out of the film)
+const SKIP = 9.4, HOOK1 = 7.4, WORK0 = 7.0, WORK1 = 34.0, DICT0 = 99, DICT1 = 99, KEY0 = 56.2, OUTRO0 = 61.2;   // (dictation is left out of the film)
 // the call: Claude Code at work as usual; up close, "call me" typed slowly enough to read; the camera pulls out, the call
 const ZIN1 = 10.2, TYPE_CALL = 10.8, ENTER_CALL = 13.6, ZOUT1 = 14.4, OPEN = 14.9, HANDOFF = 29.6, PASS = 99, CLOSE = 34.0;
 const CALL_ASK = "let's hop on a call, it's easier to brainstorm", BUILD = "Build the per-region cache and run the tests.";
@@ -393,7 +393,7 @@ function film(t0) {
     [WIN0 + .6, TYPE_C - .2, "It helps in real time, as they happen."], [TYPE_C, MEET1 - .3, "Ask it to check, while the meeting goes on."]]);   // choosing what it hears shows itself
   return g + subtitle(t);
 }
-play(film);
+play(t => film(t + SKIP));   // the opening words are left out: it starts on the screen, hours into the work
 </script>
 </body>
 </html>
