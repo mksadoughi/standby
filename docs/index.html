@@ -47,14 +47,17 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 .lead{font-size:19px;color:var(--muted);margin:22px 0 0;max-width:540px}.lead b{color:var(--ink)}
 .ul{text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:5px}
 .points{list-style:none;padding:0;margin:22px 0 0;display:grid;gap:10px;font-size:16px;color:var(--muted)}
-/* the two things it does: a card each, its icon in a soft tile (calls in the accent, meetings in the warm orange) */
-.uses{list-style:none;padding:0;margin:28px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:580px}
-.uses li{display:grid;grid-template-columns:40px minmax(0,1fr);gap:4px 14px;align-content:start;padding:18px 18px 18px 16px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:0 1px 2px rgba(27,27,47,.04),0 8px 24px -18px rgba(27,27,47,.25)}
-.uses i{grid-row:span 2;width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:var(--accent-soft)}
-.uses svg{width:21px;height:21px;fill:none;stroke:var(--accent);stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.uses .meet i{background:#fbe9df}.uses .meet svg{stroke:#c2603d}
-.uses b{font:700 19px/1.3 var(--serif);color:var(--ink);margin-top:1px}
-.uses span{font-size:15px;line-height:1.5;color:var(--muted)}
+/* the two things it does: two short columns on the page, each name underlined by a hand-drawn stroke in its colour, drawn in once */
+.uses{list-style:none;padding:0;margin:34px 0 0;display:grid;grid-template-columns:1fr 1fr;max-width:580px}
+.uses li{position:relative;padding:0 28px 0 0}
+.uses li+li{padding:0 0 0 28px;border-left:1px solid var(--line)}
+.uses b{position:relative;display:inline-block;font:700 24px/1.2 var(--serif);color:var(--ink);letter-spacing:-.01em;padding-bottom:9px}
+.uses b svg{position:absolute;left:-2px;bottom:0;width:calc(100% + 10px);height:10px;overflow:visible}
+.uses b path{fill:none;stroke:var(--accent);stroke-width:2.6;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;animation:swash .9s cubic-bezier(.5,0,.2,1) .35s forwards}
+.uses .meet b path{stroke:#d97757;animation-delay:.6s}
+.uses span{display:block;margin-top:10px;font-size:15.5px;line-height:1.55;color:var(--muted)}
+@keyframes swash{to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.uses b path{animation:none;stroke-dashoffset:0}}
 .points li{display:block}.points b{color:var(--ink)}
 .points svg{width:19px;height:19px;flex-shrink:0;margin-top:3px;stroke:var(--accent)}
 .draw img{width:100%;height:auto;max-width:520px;margin:0 auto}
@@ -185,9 +188,10 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   h1{font-size:clamp(28px,8vw,36px);line-height:1.12}
   .lead{font-size:16px;line-height:1.6;margin-top:14px}
   .points{margin-top:16px;font-size:15px;gap:8px}
-  .uses{grid-template-columns:1fr;gap:10px;margin-top:20px}
-  .uses li{padding:14px 14px 14px 12px;gap:2px 12px;grid-template-columns:36px minmax(0,1fr)}
-  .uses i{width:36px;height:36px;border-radius:10px}.uses b{font-size:17px}.uses span{font-size:14.5px}
+  .uses{grid-template-columns:1fr;margin-top:24px}
+  .uses li,.uses li+li{padding:0}
+  .uses li+li{border-left:0;border-top:1px solid var(--line);margin-top:18px;padding-top:18px}
+  .uses b{font-size:21px;padding-bottom:7px}.uses span{font-size:15px;margin-top:8px}
   .draw{width:100%;max-width:240px;justify-self:center}
   .howto-slot{height:auto;min-height:48px;margin-top:24px}
   .howto{position:relative;--pw:100%;max-width:100%}
@@ -261,6 +265,12 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 .github-link:focus-visible{outline:2px solid currentColor;outline-offset:3px}
 
 .end .github-link img{filter:brightness(0) invert(1)}
+/* Install: the one filled pill on the page; white as it rolls out (after the .howto rules and the phone block, so it wins) */
+.howto-slot .howto{background:var(--accent);border-color:var(--accent);box-shadow:0 12px 26px -14px rgba(79,70,229,.6);transition:width .45s ease,height .45s ease .1s,border-radius .45s ease,background .3s,border-color .3s}
+.howto-slot .howto .ic{color:#fff;transition:color .3s}
+.howto-slot .howto.open,.howto-slot .howto:focus-within{background:#fff;border-color:var(--line);box-shadow:0 10px 24px -18px rgba(20,20,50,.35)}
+.howto-slot .howto.open .ic,.howto-slot .howto:focus-within .ic{color:var(--accent)}
+@media (hover:hover){.howto-slot .howto:hover{background:#fff;border-color:var(--line);box-shadow:0 10px 24px -18px rgba(20,20,50,.35)}.howto-slot .howto:hover .ic{color:var(--accent)}}
 </style>
 </head>
 <body>
@@ -279,8 +289,8 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
     <p class="lead">Standby is a free <span class="ul">Claude Code plugin</span>. It works inside the session you already use, with your
       code and everything you've done so far.</p>
     <ul class="uses">
-      <li class="call"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 3.5h3l1.6 4.6-2.2 1.4a11.5 11.5 0 0 0 5.6 5.6l1.4-2.2 4.6 1.6v3a2 2 0 0 1-2.1 2A16.5 16.5 0 0 1 4.5 5.6a2 2 0 0 1 2-2.1Z"/></svg></i><b>Calls</b><span>Brainstorm out loud. It answers by voice and makes the changes while you keep talking.</span></li>
-      <li class="meet"><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2"/><path d="M3 19.5c.6-3.4 3-5.2 6-5.2s5.4 1.8 6 5.2"/><circle cx="17.2" cy="9" r="2.5"/><path d="M16.6 14.3c2.4.3 4 1.8 4.5 4.6"/></svg></i><b>Meetings</b><span>It hears Zoom, Google Meet or the room, with no bot joining. Ask it questions as the meeting goes on.</span></li>
+      <li class="call"><b>Calls<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M2 6.5C20 3.2 44 2.6 62 4.2S88 7.6 98 4"/></svg></b><span>Brainstorm out loud. It answers by voice and makes the changes while you keep talking.</span></li>
+      <li class="meet"><b>Meetings<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M2 4.6C18 7.4 40 7.6 60 5.4S86 2.4 98 5.6"/></svg></b><span>It hears Zoom, Google Meet or the room, with no bot joining. Ask it questions as the meeting goes on.</span></li>
     </ul>
     <div class="howto-slot"><div class="howto" id="install">
       <button type="button" class="ic" aria-expanded="false" aria-controls="howto-steps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Install</span></button>
