@@ -3,12 +3,13 @@
      tools/demo/voiceover.py from story-lines.js; it reads without sound too: every word said is a caption).
      1. Words, one line at a time: Claude Code is brilliant, but distant, never in the conversation; Standby brings it
         right beside you (the spark drifts far off, then comes back with you and Standby beside it).
-     2. A call: hours into a session, you ask to hop on a call to talk an idea through; the band says you're on a call
-        and Standby's call view comes in. You brainstorm (share the route cache, or one per region?), then ask it to
-        build it, and the work arrives in the same chat as a turn "from your call".
+     2. A call: hours into a session building a website, you ask to hop on a call to go over the design; the band says
+        you're on a call and Standby's call view comes in beside the page. You say what feels off (a heavy header, a
+        button that gets lost) and agree on a fix; the call goes to the mini window, the work arrives in the same chat
+        as a turn "from your call", and the page changes beside it.
      3. A meeting: the view pulls back from that same screen to the laptop on a meeting room's table, Nadia and Ines at
         its sides and Theo on the room's screen. The same session, its call faint above: you ask it to join; Standby's
-        meeting window comes in as they talk; you ask it to check Nadia's question in the code, and it does.
+        meeting window comes in as they talk about launching Friday; you ask it whether sign-up is done, and it checks.
      4. What matters, four short lines: free and open source, no API key, your same session, stays on your Mac.
      5. Standby, and where to get it. (Dictation is left out: it's on the page.)
      True to the app: the plugin's band, words and keys (lite/hooks/register.js); the call view and the orb as the app
@@ -38,12 +39,13 @@ const COL = { Claude: INDIGO, You: INK, Nadia: "#3f7cf3", Theo: "#0e9f9a" };
 // the scenes, overlapping by a crossfade
 const SKIP = 9.4, HOOK1 = 7.4, WORK0 = 7.0, WORK1 = 34.0, DICT0 = 99, DICT1 = 99, KEY0 = 56.2, OUTRO0 = 61.2;   // (dictation is left out of the film)
 // the call: Claude Code at work as usual; up close, "call me" typed slowly enough to read; the camera pulls out, the call
-const ZIN1 = 10.2, TYPE_CALL = 10.8, ENTER_CALL = 13.6, ZOUT1 = 14.4, OPEN = 14.9, HANDOFF = 29.6, PASS = 99, CLOSE = 34.0;
-const CALL_ASK = "let's hop on a call, it's easier to brainstorm", BUILD = "Build the per-region cache and run the tests.";
+const ZIN1 = 10.2, TYPE_CALL = 10.8, ENTER_CALL = 13.6, ZOUT1 = 14.4, OPEN = 14.9, HANDOFF = 28.4, PASS = 99, CLOSE = 34.0;
+const CALL_ASK = "let's hop on a call and go over the design", BUILD = "Lighter header, accent sign-up button, and a dark mode.";
+const TERM = { title: "site — claude", path: "~/code/site" };
 // (the old meeting, kept out of reach: the meeting is the conference room below)
 const ZIN2 = 99, TYPE_MEET = 99, ENTER_MEET = 99, ZOUT2 = 99, MEET_IN = 99, ROOM0 = 99, ROOM1 = 99, TYPE_ASK = 99, ENTER_ASK = 99, STOP = 99;
 // the meeting: a conference room; the camera goes into your laptop; you ask Claude Code to join; Standby's meeting
-// window comes in as they talk; you ask it to check Nadia's question in the code, and it does
+// window comes in as they talk about launching Friday; you ask it whether sign-up is done, and it checks
 // the call ends on its screen; the view pulls back from that same screen to the laptop on the meeting room's table
 const MEET0 = 33.8, PULL = 1.0, MEET1 = 56.6, ZLAP0 = 36.8, ZLAP1 = 37.8, TYPE_J = 38.0, ENTER_J = 39.6, WIN0 = 40.2,
   TYPE_C = 47.4, ENTER_C = 49.0, FOUND = 50.2, BOXOPEN = 52.2, ZOOMOFF = 53.3;      // then what it hears: Zoom is unticked
@@ -98,11 +100,11 @@ function work(t) {
   // a long task at work before the call, its steps scrolling by; then, up close, its latest answer and the ask
   let prompt = "";
   const past = t > ENTER_CALL;
-  const RUN = [me("move the fares cache behind the router"), tool("Read", "src/fares/cache.ts"), under(dim("Read 212 lines")),
-    tool("Edit", "src/fares/cache.ts"), under(dim("Updated with 12 additions and 4 removals")), tool("Bash", "npm test -- fares"), under("38 passed"),
-    said("Done. Fares now read through the router."), "", me("add a 2 minute TTL for guest routes"), tool("Read", "src/cache/routes.ts"),
-    tool("Edit", "src/cache/routes.ts"), under(dim("Updated with 3 additions and 1 removal")), tool("Bash", "npm run build"), under("Built in 4.2s"),
-    said("Done: guests keep a route for 2 minutes, members for 15.")];
+  const RUN = [me("build the landing page from the brief"), tool("Read", "docs/brief.md"), under(dim("Read 86 lines")),
+    tool("Write", "src/pages/index.tsx"), tool("Write", "src/styles/site.css"), tool("Bash", "npm run dev"), under("Ready on localhost:3000"),
+    said("Done. The landing page is up on localhost:3000."), "", me("add a pricing section with three plans"), tool("Read", "src/pages/index.tsx"),
+    tool("Edit", "src/pages/index.tsx"), under(dim("Updated with 48 additions")), tool("Bash", "npm run build"), under("Built in 3.1s"),
+    said("Done: three plans, the middle one highlighted.")];
   rows.push(dim("  ⋯ 2h 40m of work above"));
   RUN.forEach((row, i) => { if (t > WORK0 + .25 + i * .17) rows.push(past || (t > ZIN1 && i < RUN.length - 1) ? blur(row) : row) });
   rows.push("");
@@ -118,8 +120,8 @@ function work(t) {
     rows.push(me(CALL_ASK), blur(mcp("call")), "");
     if (t > HANDOFF) rows.push(dim("from your call"), me(BUILD));
     // the work, in the same session, going quickly while you talk
-    [tool("Read", "src/cache/routes.ts"), tool("Edit", "src/cache/routes.ts"), under(dim("Updated with 18 additions and 6 removals")),
-      tool("Bash", "npm test"), under("112 passed"), said("Done: guests get a cache per region. All 112 tests pass.")].forEach((row, i) => { if (t > HANDOFF + .5 + i * .45) rows.push(row) });
+    [tool("Edit", "src/components/Header.tsx"), under(dim("Updated with 6 additions and 9 removals")), tool("Edit", "src/components/SignUp.tsx"),
+      tool("Edit", "src/styles/theme.css"), under(dim("Added a dark theme")), said("Done: lighter header, accent button, dark mode.")].forEach((row, i) => { if (t > HANDOFF + .5 + i * .45) rows.push(row) });
   }
   if (t > TYPE_MEET && t < ENTER_MEET) prompt = typed("listen in on my design sync", t, TYPE_MEET, 14);
   if (t > ENTER_MEET) rows.push(me("listen in on my design sync"), mcp("listen"), under(dim("Listening.")), said("I'm listening. Ask me anything about it."), "");
@@ -143,11 +145,17 @@ function work(t) {
     if (t < STOP + 1.2) band.push(dim("  ⎿  Summarizing…"));
     else ["Guests pay by region.", "The region goes in the cache key first."].forEach((p, i) => { if (t > STOP + 1.2 + i * .3) band.push(under(p, !i)) });
   }
-  // after Claude's answer the call goes to the mini window in the corner (clear of a player's controls), and the session takes the screen back
-  const MINI = end("c3") + .3, mq = inout(span(t, MINI, MINI + .7)), ORB = [1480, 690];   // the rest of the call is talked with just the mini window
-  const side = Math.max(inout(span(t, OPEN, OPEN + .7)) * (1 - mq), 0);
+  // when it's handed the work the call goes to the mini window in the corner, the page moves over and the session shows beside it
+  const MINI = end("c5") + .1, mq = inout(span(t, MINI, MINI + .7)), ORB = [1535, 770];   // the rest of the call is talked with just the mini window
+  const side = inout(span(t, OPEN, OPEN + .7));
   const r = { x: lerp(TFULL.x, TLEFT.x, side), y: TFULL.y, w: lerp(TFULL.w, TLEFT.w, side), h: TFULL.h };
-  let g = terminal(r, t, { rows, band, prompt, size: 19, row: 31 });
+  let g = terminal(r, t, { rows, band, prompt, size: 19, row: 31, ...TERM });
+  // the page you're going over: over the session while you talk, then beside it while it changes
+  const bk = out(span(t, OPEN + .3, OPEN + .9));
+  if (bk > 0) {
+    const B = { x: lerp(PAGE_L.x, PAGE_R.x, mq), y: lerp(PAGE_L.y, PAGE_R.y, mq), w: lerp(PAGE_L.w, PAGE_R.w, mq), h: lerp(PAGE_L.h, PAGE_R.h, mq) };
+    g += `<g opacity="${fo(bk)}" transform="translate(${f((1 - bk) * -40)} 0)">` + browser(B, t, pageLook(t)) + pagePointer(B, t, MINI) + "</g>";
+  }
   // the call view, beside it
   const cw = out(span(t, OPEN + .2, OPEN + .7)) * (1 - span(mq, .75, 1));
   if (cw > 0) {
@@ -158,7 +166,7 @@ function work(t) {
     const clock = t => { const s = Math.floor(Math.max(0, t - OPEN) * 6); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0") };
     const sc = lerp(1, .07, mq), wx = WIN.x + WIN.w / 2, wy = WIN.y + WIN.h / 2, cx = lerp(wx, ORB[0], mq), cy = lerp(wy, ORB[1], mq);
     g += `<g opacity="${fo(cw)}" transform="translate(${f(cx + (1 - out(span(t, OPEN + .2, OPEN + .7))) * 40)} ${f(cy)}) scale(${fs(sc)}) translate(${f(-wx)} ${f(-wy)})">` +
-      callWin(WIN, t, { lean: true, title: "Guest route cache", clock: clock(t), state: callState, items, now, working: t => t > HANDOFF + .2 && t < HANDOFF + 2.8 }) + "</g>";
+      callWin(WIN, t, { lean: true, title: "Landing page", clock: clock(t), state: callState, items, now, working: t => t > HANDOFF + .2 && t < HANDOFF + 2.8 }) + "</g>";
   }
   const ok = pop(span(mq, .55, 1));                                      // the mini window: Standby's mark, over everything
   if (ok > 0) g += orbApp(ORB[0], ORB[1], 40 * ok, callState(t), t, clamp(ok));
@@ -166,6 +174,38 @@ function work(t) {
   const vw = 0;                                                        // the meeting is the room (the options are in meeting-options.html)
   if (vw > 0) g += `<g opacity="${fo(vw)}" transform="translate(${f((1 - vw) * 40)} 0)">` + videoCall(VCALL, t) + "</g>";
   return g;
+}
+// ---- the page you build and go over: a browser on localhost, drawn at 1200 wide and scaled to fit -----------------------
+const PAGE_L = { x: 50, y: 160, w: 860, h: 640 }, PAGE_R = { x: 930, y: 190, w: 560, h: 500 };
+const hexc = (a, b, p) => "#" + [1, 3, 5].map(i => Math.round(lerp(parseInt(a.slice(i, i + 2), 16), parseInt(b.slice(i, i + 2), 16), clamp(p))).toString(16).padStart(2, "0")).join("");
+// how far each change has gone: the header made lighter, the button given the accent colour, the page in dark
+const pageLook = t => ({ hdr: inout(span(t, HANDOFF + 1.0, HANDOFF + 1.5)), btn: inout(span(t, HANDOFF + 1.5, HANDOFF + 2.0)), dk: inout(span(t, HANDOFF + 2.4, HANDOFF + 3.0)) });
+function browser(r, t, k) {
+  const s = r.w / 1200, H = r.h / s, bg = hexc("#ffffff", "#17161f", k.dk), ink = hexc("#1d1c2b", "#f1f0f9", k.dk), mut = hexc("#6b6a7e", "#a9a8bd", k.dk);
+  const hh = lerp(120, 78, k.hdr), hbg = hexc("#2a2740", bg, k.hdr), hink = hexc("#ffffff", ink, k.hdr);
+  let g = `<rect x="0" y="16" width="1200" height="${f(H)}" rx="22" fill="#1e1a50" opacity="${DARK ? .5 : .16}" filter="url(#soft)"/>` +
+    box(0, 0, 1200, H, 22, bg) + `<path d="M22 0 H1178 Q1200 0 1200 22 V60 H0 V22 Q0 0 22 0 Z" fill="#ecebf1"/>` +
+    [0, 1, 2].map(i => `<circle cx="${34 + i * 28}" cy="30" r="9" fill="${["#ff5f57", "#febc2e", "#28c840"][i]}"/>`).join("") +
+    box(380, 12, 440, 36, 18, "#ffffff") + ui(600, 37, "localhost:3000", 20, { anchor: "middle", fill: "#6b6a7e" });
+  g += `<rect x="0" y="60" width="1200" height="${f(hh)}" fill="${hbg}"/>` + (k.hdr > .5 ? `<line x1="0" y1="${f(60 + hh)}" x2="1200" y2="${f(60 + hh)}" stroke="${hexc("#e6e5ee", "#2c2b3a", k.dk)}" stroke-width="2" opacity="${fo(span(k.hdr, .5, 1))}"/>` : "") +
+    ui(60, 60 + hh / 2 + 12, "Larkspur", lerp(36, 30, k.hdr), { fill: hink, weight: 800 }) +
+    ["Trips", "Pricing", "About"].map((n, i) => ui(780 + i * 120, 60 + hh / 2 + 8, n, 22, { fill: hink, weight: 600 })).join("");
+  const y0 = 60 + hh + 110;
+  g += ui(600, y0, "Plan trips together.", 70, { anchor: "middle", fill: ink, weight: 800 }) +
+    ui(600, y0 + 60, "Share plans, split costs, and keep everyone in the loop.", 26, { anchor: "middle", fill: mut });
+  const bw = 260, bx = 600 - bw / 2, by = y0 + 110, fill = hexc(bg, "#5046e5", k.btn), stroke = hexc("#d6d5df", "#5046e5", k.btn);
+  g += box(bx, by, bw, 66, 33, fill, { stroke, sw: 2 }) + ui(600, by + 42, "Sign up free", 25, { anchor: "middle", fill: hexc("#a3a2b2", "#ffffff", k.btn), weight: 700 });
+  [0, 1, 2].forEach(i => { g += box(120 + i * 330, by + 130, 300, 170, 18, hexc("#f4f3f9", "#22212e", k.dk)) +
+    box(150 + i * 330, by + 162, 120, 16, 8, hexc("#dcdbe6", "#3a394b", k.dk)) + box(150 + i * 330, by + 196, 220, 12, 6, hexc("#e8e7f0", "#2f2e3f", k.dk)) +
+    box(150 + i * 330, by + 220, 180, 12, 6, hexc("#e8e7f0", "#2f2e3f", k.dk)) });
+  return `<clipPath id="pg"><rect x="${f(r.x)}" y="${f(r.y)}" width="${f(r.w)}" height="${f(r.h + 30)}" rx="${f(22 * s)}"/></clipPath>` +
+    `<g transform="translate(${f(r.x)} ${f(r.y)}) scale(${fs(s)})">${g}</g>`;
+}
+// while you say what feels off, the pointer goes to the header, then to the button
+function pagePointer(r, t, MINI) {
+  const s = r.w / 1200, P = (x, y) => [r.x + x * s, r.y + y * s], a = SAY.y2.at, h = P(560, 120), b = P(640, 470);
+  return pointerAt(t, [[a - .6, h[0] + 80, h[1] + 160], [a + .2, h[0], h[1]], [a + 1.4, h[0], h[1]], [a + 2.0, b[0], b[1]], [end("c3") + .5, b[0], b[1]]], [],
+    span(t, a - .7, a - .3) * (1 - span(t, MINI - .3, MINI)));
 }
 // Up close on the prompt while a request is typed, so it reads; k: 0 the whole screen, 1 up close
 function closeUp(t) {
@@ -207,35 +247,35 @@ function videoCall(r, t) {
 // ---- 3. the meeting: a conference room, then up close on your laptop --------------------------------------------------
 const NADIA = COL.Nadia, INES = "#d97706", THEO = COL.Theo;
 const WALL = DARK ? "#24223a" : "#ece9f4", FLOOR = DARK ? "#22202e" : "#e3ddd2", WOOD = DARK ? "#3a3448" : "#d9c7ae", WOOD2 = DARK ? "#2e2a3a" : "#c8b394";
-const ASK_J = "join our fares sync and listen in", ASK_C = "check Nadia's question in the code";
+const ASK_J = "join our launch sync and listen in", ASK_C = "is sign-up ready for Friday?";
 const faint = s => `<tspan fill-opacity=".28">${s}</tspan>`;
 // your laptop's screen, drawn at 1600x900: Claude Code, then Standby's meeting window beside it
 function lapScreen(t) {
   let g = `<rect width="1600" height="900" fill="${DARK ? "#262338" : "#e9e7f2"}"/>`;
   const listening = t > ENTER_J + .2, split = inout(span(t, WIN0, WIN0 + .6));
   // the same session as the call: its earlier work stays above, faint, and the meeting carries on below it
-  const rows = ["", faint(me("add a 2 minute TTL for guest routes")), faint(said("Done: guests keep a route for 2 minutes, members for 15.")), "",
+  const rows = ["", faint(me("add a pricing section with three plans")), faint(said("Done: three plans, the middle one highlighted.")), "",
     faint(me(CALL_ASK)), faint(dim("from your call")), faint(me(BUILD)),
-    faint(said("Done: guests get a cache per region. All 112 tests pass.")), ""];
+    faint(said("Done: lighter header, accent button, dark mode.")), ""];
   let prompt = "";
   if (t < ENTER_J) prompt = t > TYPE_J ? typed(ASK_J, t, TYPE_J, 24) : "";
   else { const old = t > TYPE_C; rows.push(old ? faint(me(ASK_J)) : me(ASK_J)); if (t > ENTER_J + .3) rows.push(old ? faint(said("I'm listening.")) : said("I'm listening.")) }
   if (t > TYPE_C && t < ENTER_C) prompt = typed(ASK_C, t, TYPE_C, 22);
   if (t > ENTER_C) {
-    rows.push("", me(ASK_C), dim("  " + (t < FOUND ? "Searching the fares code " + "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[Math.floor(t * 10) % 10] : "Searched the fares code")));
-    if (t > FOUND) { rows.push(""); ["No. The fares cache keys by route only,", "so guests would share it."].forEach((s, i) => { const n = typed(s, t, FOUND + .2 + i * .6, 60); if (n) rows.push(i ? "  " + n : said(n)) }) }
+    rows.push("", me(ASK_C), dim("  " + (t < FOUND ? "Searching the sign-up code " + "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[Math.floor(t * 10) % 10] : "Searched the sign-up code")));
+    if (t > FOUND) { rows.push(""); ["Sign-up works. The welcome email", "isn't wired up yet."].forEach((s, i) => { const n = typed(s, t, FOUND + .2 + i * .6, 60); if (n) rows.push(i ? "  " + n : said(n)) }) }
   }
-  const bandRow = `<tspan fill="${TC.red}">●</tspan> Listening · Fares sync  ${dim(mins(t, ENTER_J, 1.6))}`;
+  const bandRow = `<tspan fill="${TC.red}">●</tspan> Listening · Launch sync  ${dim(mins(t, ENTER_J, 1.6))}`;
   const band = listening ? [t > TYPE_C ? faint(bandRow) : bandRow] : [];
   const tr = { x: 60, y: 50, w: lerp(1480, 960, split), h: 800 };
-  g += terminal(tr, t, { rows, band, prompt, size: lerp(36, 27, split), row: lerp(58, 44, split), cursor: t < ENTER_C });
+  g += terminal(tr, t, { rows, band, prompt, size: lerp(36, 27, split), row: lerp(58, 44, split), cursor: t < ENTER_C, ...TERM });
   if (split > 0) {
     const lines = STORY_LINES.filter(l => l.at > MEET0 && l.at < MEET1).map(l => ({ at: l.at + l.dur, ts: "2:0" + (l.id === "n1" ? 5 : 6), who: l.who, col: COL[l.who], text: l.text, known: true }));
     const now = STORY_LINES.find(l => l.at > MEET0 && l.at < MEET1 && t > l.at && t < l.at + l.dur);
     const M = { x: 1050, y: 50, w: 510, h: 800 };
     // what it hears, in the bar at the bottom: a click opens the list, Zoom is unticked for this meeting, the list closes
     const open = inout(span(t, BOXOPEN, BOXOPEN + .4)) * (1 - inout(span(t, ZOOMOFF + 1.4, ZOOMOFF + 1.8)));
-    const mo = { lean: true, title: "Fares sync", clock: mins(t, ENTER_J, 1.6).replace("m", " min"), started: "Started 2:00 PM", rowh: 96, lines, open,
+    const mo = { lean: true, title: "Launch sync", clock: mins(t, ENTER_J, 1.6).replace("m", " min"), started: "Started 2:00 PM", rowh: 96, lines, open,
       sources: [{ name: "Your mic", detail: "MacBook Pro Microphone", on: true }, { name: "Zoom", detail: "Playing", on: t < ZOOMOFF }],
       sep: t > ZOOMOFF ? [{ at: ZOOMOFF + .2, text: "Zoom is off" }] : [], live: now ? { who: now.who, text: now.text, from: now.at, to: now.at + now.dur } : null };
     g += `<g opacity="${fo(split)}" transform="translate(${f((1 - split) * 60)} 0)">` + meetingWin(M, t, mo) + hearPointer(mo.geom, t) + "</g>";
