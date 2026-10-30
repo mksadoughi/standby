@@ -353,6 +353,37 @@ wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 for t in ui.LITE_CALLS[sid]["tasks"].values():
     t["seen"] = True
 
+# The session's own turn ends with news and no task of the call's (a teammate's answer came in): told as news,
+# never dropped, never the last tasks again (a call's "repeats", 2026-10-30).
+replies.append("The close button is merged.")
+n_model, said_before = len(told_model), len(vs.told)
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "The setup window's close button is merged."})
+check("a turn-end of the session's own, with news: told as news, once",
+      wait(lambda: len(vs.told) > said_before) and "The setup window's close button is merged." in told_model[-1]
+      and "Fix the film's cut-off caption" not in told_model[-1] and len(told_model) == n_model + 1, told_model[n_model:])
+wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+# What came back, worded while they started talking: not said now, and never told again on its own (the voice
+# had it as said: "that one was a repeat"); their turn tells the voice they never heard it.
+ev, _s = hand("check the leftover sessions")
+replies.append("The leftover sessions are cleaned up.")
+n_model, said_before = len(told_model), len(vs.told)
+real_reply = agentctl.ask
+agentctl.ask = lambda q, **kw: (setattr(vs, "speaking_now", True), fake_voice_ask(q, **kw))[1]
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Two leftovers removed."})
+wait(lambda: len(told_model) > n_model)
+wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+agentctl.ask = real_reply
+vs.speaking_now = False
+time.sleep(ui.LITE_QUIET_GAP + 0.5)
+check("news worded as they spoke: not said, and not told again on its own",
+      len(vs.told) == said_before and len(told_model) == n_model + 1, (vs.told[said_before:], told_model[n_model:]))
+answers.append("They're cleaned up.")
+ui.ask_spoken(sid, "so what's the news?", None, None)
+check("  their turn tells the voice what it never heard", "[UNHEARD]" in asked[-1]
+      and "The leftover sessions are cleaned up." in asked[-1], asked[-1][-300:])
+ui.ask_spoken(sid, "anything else?", None, None) if answers.append("No.") is None else None
+check("    once", "[UNHEARD]" not in asked[-1], asked[-1][-200:])
+
 # Turned away, or no word back at all: failed, told as news; the call's summary says it never got there.
 ev, _s = handoff_of("remove the caption under the film", "remove the caption under the film", received=False)
 replies.append("That one didn't reach the session. Shall I try again?")
@@ -465,9 +496,9 @@ for broken, how, key in ((OSError("the agent is gone"), "done", "done"), ("Could
           wait(lambda: len(vs.told) > n) and vs.told[-1] == ui.LITE_FALLBACK[key] and PATH not in vs.told[-1], vs.told[-1:])
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 n, n_model = len(vs.told), len(told_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Late."})
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Wrote " + PATH})
 time.sleep(ui.LITE_QUIET_GAP + 0.3)
-check("  a done with nothing running says nothing, and asks nothing", len(vs.told) == n and len(told_model) == n_model)
+check("  a done with nothing running, saying again what ended: nothing said, nothing asked", len(vs.told) == n and len(told_model) == n_model)
 
 # Cancel by voice: [CANCEL #n] stops a task; alone in its turn, the turn stops; with others, the session is told to drop it.
 ev, _s = hand("make the snake gold")

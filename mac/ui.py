@@ -3523,6 +3523,11 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     if c.pop("rang", False):                       # they're back from a pause where something waited
         notes.append(LITE_RESUMED)
         rang = True
+    # news the voice worded that they never heard (they spoke first): in its conversation as said, so it's told
+    # here, never told again on its own (it called that a repeat; "which notification?" after a Resume)
+    unheard = c.pop("unheard", []) + (vs.take_told() if hasattr(vs, "take_told") else [])
+    if unheard:
+        notes.append(LITE_UNHEARD % "\n".join(unheard))
     typed_rows = list(c.get("typed") or [])
     typed = _lite_typed_words(sid, c)              # what they typed or pasted in the chat: their words too
     if typed:
@@ -3681,11 +3686,20 @@ def lite_progress(b):
         for x in working:
             _lite_set(sid, c, x, "stopped" if reason == "aborted" else "failed" if reason == "error" else "done",
                       result=final or ("stopped" if reason == "aborted" else ""))
+        if not working and final and final not in [x["result"] for x in c.get("tasks", {}).values()]:
+            # a turn of the session's own (a teammate's answer came in, say) with news: told as news, never
+            # dropped, nor read as the last tasks again (a call's "repeats", 2026-10-30)
+            x = _lite_task(c, "news", "news from the session, on its own", "running", source="session")
+            _lite_set(sid, c, x, "done", result=final)
+            working = [x]
         if working:
             _lite_announce(sid)
     return {"ok": True}
 
 
+# News it worded on its own that they never heard (they spoke first), with their next turn.
+LITE_UNHEARD = ("[UNHEARD] What you were about to tell them on your own never reached them, they spoke first:\n%s\n"
+                "[END UNHEARD]")
 # What the voice says when its own model can't be asked: never the session's words.
 LITE_FALLBACK = {"done": "That's done. It's all in the chat.", "aborted": "I stopped that.",
                  "error": "I ran into a problem with that. The details are in the chat.",
@@ -3772,11 +3786,15 @@ def _lite_tell(sid):
         if sid not in LITE_CALLS or c.get("hanging_up"):
             return                                 # the call ended, or it said goodbye, while this was worded
         _lite_came_back(sid, news)
-        if line and (_lite_user_busy(sid) or call_muted(sid)):
-            log("lite: %s: what came back: not said, they spoke (or paused) while it was worded" % sid)
-            line = ""                              # a moment that's gone: the tasks are on their next turn
+        if line and call_muted(sid):
+            log("lite: %s: what came back: not said, they paused while it was worded" % sid)
+            line = ""                              # told after Resume
             for t in news:
                 t["seen"] = False
+        elif line and _lite_user_busy(sid):
+            log("lite: %s: what came back: not said yet, they spoke while it was worded: their turn has it" % sid)
+            c.setdefault("unheard", []).append(line)
+            line = ""
         log("lite: %s: what came back (%s, %.1fs): the voice %s" % (sid, how, time.time() - t0,
             "says it (%d words)" % len(line.split()) if line else "says nothing now"))
         if not failed:                             # the call's record: told, and what of it the voice said
@@ -3786,7 +3804,7 @@ def _lite_tell(sid):
             append_chat(sid, "ai", line, voice=True)
             vs = VOICE.get(sid)
             if vs is not None:                     # not said in time (a turn came first): their next turn has the tasks
-                vs.announce(line, dropped=lambda: ([t.update(seen=False) for t in news], _lite_announce(sid)))
+                vs.announce(line, dropped=lambda: c.setdefault("unheard", []).append(line))
     finally:
         if c is not None:
             c["telling"] = False

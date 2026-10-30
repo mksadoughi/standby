@@ -726,6 +726,14 @@ class VoiceSession(object):
                     pass
         return bool(self._told)
 
+    def take_told(self):
+        """News still waiting to be said, taken by a turn of theirs that came first (it tells the voice they
+        never heard it): its words, oldest first. Its tellers aren't told it was dropped."""
+        out = []
+        while self._told:
+            out.append(self._told.popleft()[0])
+        return out
+
     def open_with(self, question):
         """Claude speaks first: `question` (words for the agent, never shown) is asked as the
         conversation's first turn, once it is quiet; dropped if the user speaks first."""
