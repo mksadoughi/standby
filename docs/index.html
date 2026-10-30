@@ -69,7 +69,19 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 .see{text-align:center;margin:40px 0 0}.see a{text-decoration:none}.see .eyebrow{color:var(--muted)}
 .see svg{display:block;margin:6px auto 0;width:18px;height:18px;stroke:var(--muted)}
 /* the film */
+/* six promises under the hero: each name in Claude's orange and one short line; pointing at one (or a tap, or focus)
+   shows the whole of it in a small card over the page, so nothing moves */
+.why{list-style:none;padding:0;margin:44px auto 0;max-width:1080px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 40px}
+.why li{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr);gap:2px 12px;align-content:start;cursor:default;outline:none}
+.why li:before{content:"";grid-row:1;width:22px;height:12px;margin-top:8px;background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%2722%27%20height%3D%2712%27%20viewBox%3D%270%200%2022%2012%27%3E%3Cpath%20d%3D%27M1%206%20Q6%200%2011%206%20T21%206%27%20fill%3D%27none%27%20stroke%3D%27%23d97757%27%20stroke-width%3D%272.2%27%20stroke-linecap%3D%27round%27/%3E%3C/svg%3E") no-repeat center/22px 12px}
+.why b{font:700 20px/1.4 var(--serif);color:#c2603d;display:flex;align-items:center;gap:8px}
+.why b:after{content:"";width:6px;height:6px;border-right:1.6px solid #d9a58f;border-bottom:1.6px solid #d9a58f;transform:rotate(45deg);margin-top:-4px;transition:transform .25s}
+.why .short{grid-column:2;color:var(--muted);font-size:15.5px;line-height:1.5}
+.why .full{position:absolute;left:24px;top:calc(100% + 8px);z-index:4;width:300px;padding:12px 14px;border:1px solid #ecd9cf;border-radius:12px;background:#fff;
   box-shadow:0 20px 44px -24px rgba(20,20,50,.35);font-size:14.5px;line-height:1.55;color:var(--muted);opacity:0;transform:translateY(-6px);pointer-events:none;transition:opacity .22s ease,transform .22s ease}
+.why li.open .full,.why li:focus-visible .full{opacity:1;transform:none}
+.why li.open b:after,.why li:focus-visible b:after{transform:rotate(225deg);margin-top:4px}
+@media (hover:hover){.why li:hover .full{opacity:1;transform:none}.why li:hover b:after{transform:rotate(225deg);margin-top:4px}}
 /* how to install: a small pill; hover, focus or a tap rolls it out to the right with two steps */
 .howto{--hh:178px;--pw:min(560px,calc(100vw - 36px))}.howto.manual{--hh:258px}
 .howto .steps p.use{align-items:flex-start}.howto .steps p.use>span:last-child{flex:1;min-width:0;line-height:1.7}.howto code{white-space:nowrap}
@@ -96,7 +108,8 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 .howto.open,.howto:focus-within{width:var(--pw);height:var(--hh);border-radius:18px}
 .howto.open .steps,.howto:focus-within .steps{opacity:1;transition-delay:.3s}
 @media (hover:hover){.howto:hover{width:var(--pw);height:var(--hh);border-radius:18px}.howto:hover .steps{opacity:1;transition-delay:.3s}}
-@media (max-width:560px){.howto{--hh:240px}.howto.manual{--hh:306px}}
+@media (max-width:900px){.why{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.why{grid-template-columns:1fr}.howto{--hh:240px}.howto.manual{--hh:306px}}
 @media (prefers-reduced-motion:reduce){.howto,.howto .steps{transition:none}}
 .film{position:relative;margin:64px auto 0;border-radius:20px;overflow:hidden;background:var(--card);border:1px solid var(--line);padding:12px;box-shadow:0 30px 60px -40px rgba(20,20,50,.3)}
 .film video{display:block;width:100%;height:auto;border-radius:12px}
@@ -188,6 +201,16 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   .howto .n{margin-top:1px}
   .howto .cp{min-height:36px;flex:none}
   .howto .cmd{margin-left:0;gap:8px}
+  .why{gap:14px 16px;margin-top:28px}
+  .why li{grid-template-columns:15px minmax(0,1fr);gap:1px 6px}
+  .why li:before{width:15px;height:9px;margin-top:7px;background-size:15px 9px}
+  .why b{display:block;font-size:16px;line-height:1.35}
+  .why b:after{display:inline-block;vertical-align:middle;margin:-3px 0 0 6px}
+  .why li.open b:after,.why li:focus-visible b:after{margin-top:2px}
+  .why .short{font-size:14px;line-height:1.45}
+  .why .full{position:static;grid-column:2;display:none;width:auto;margin-top:6px;padding:0;border:0;background:none;box-shadow:none;opacity:1;transform:none;pointer-events:auto}
+  .why li.open .full,.why li:focus-visible .full{display:block}
+  .why li.open .short,.why li:focus-visible .short{display:none}   /* the whole of it in place of the short line, not after it */
   .film{margin-top:36px;padding:6px;border-radius:14px}
   .film video{border-radius:9px}
   #what{padding-top:48px}
@@ -224,6 +247,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 @media (max-width:700px){.say-long{display:none}.say-short{display:inline}}
 /* a small phone: the three promises one under another; the features' thread steps aside so the cards use the whole width */
 @media (max-width:560px){
+  .why{grid-template-columns:1fr}
   .thread{padding:16px 0}.thread:before,.thread .knot,.thread .glow{display:none}
   .thread .card,.thread .card:nth-of-type(odd),.thread .card:nth-of-type(even){width:100%;margin:0}
 }
@@ -267,6 +291,17 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   .howto-slot .howto.open,.howto-slot .howto.open:focus-within{height:auto}
   .howto-slot .howto .ic{width:100%;height:50px;justify-content:center;font-size:16px}
   .howto-slot .howto.open .ic{justify-content:flex-start}
+  .why{position:relative;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:30px auto 0}
+  .why li{position:static;display:block;padding:7px 13px;border-radius:999px;background:#fbf3ee;border:1px solid #f0dfd5;cursor:pointer}
+  .why li:before{display:none}
+  .why b{font:650 14px/1.3 -apple-system,system-ui;color:#b4552f}
+  .why b:after{width:5px;height:5px;margin:-3px 0 0 6px}
+  .why .short{display:none}
+  .why li.open{background:#fff;border-color:#e8cfc2}
+  .why li.open .short,.why li:focus-visible .short{display:none}
+  .why .full,.why li.open .full,.why li:focus-visible .full{position:absolute;left:0;right:0;top:calc(100% + 8px);width:auto;margin:0;padding:12px 14px;border:1px solid #ecd9cf;border-radius:12px;background:#fff;
+    box-shadow:0 20px 44px -24px rgba(20,20,50,.35);text-align:left;font-size:14.5px}
+  .why .full{display:none}.why li.open .full,.why li:focus-visible .full{display:block}
 }
 /* a phone: the films run edge to edge, no side margins or frames (the user, 2026-10-29) */
 @media (max-width:560px){
@@ -297,26 +332,6 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   .thread .card+.card{margin-top:30px;padding-top:0;border-top:1px solid var(--line)}
   .loop{margin:0;border:0;border-radius:0;border-bottom:1px solid var(--line)}   /* the film fills the card's top, edge to edge */
   .card h3{margin:16px 16px 6px}.card p{margin:0 16px}
-}
-/* three facts under the hero, all said in full as you scroll, nothing behind a tap (the user, 2026-10-29: "user should
-   just scroll"). Each with a small drawing in the hero's hand (ink lines, the warm orange and the indigo), its name in
-   the serif and one or two short lines; fine warm rules between them. A phone: one under another, drawing beside. */
-.facts{list-style:none;padding:0;margin:56px auto 0;max-width:1000px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
-.facts li{padding:6px 34px;text-align:center}
-.facts li+li{border-left:1px solid var(--line)}
-.facts svg{display:block;width:64px;height:48px;margin:0 auto 14px;overflow:visible}
-.facts .ink{fill:none;stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
-.facts .warm{fill:none;stroke:#d97757;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
-.facts .fill{fill:#6c63f0;stroke:var(--ink);stroke-width:1.8;stroke-linejoin:round}
-.facts b{display:block;font:700 21px/1.3 var(--serif);color:var(--ink)}
-.facts p{margin:8px auto 0;max-width:27ch;font-size:15px;line-height:1.55;color:var(--muted)}
-@media (max-width:700px){
-  .facts{grid-template-columns:1fr;margin:34px 0 0;max-width:none}
-  .facts li{display:grid;grid-template-columns:56px minmax(0,1fr);column-gap:16px;align-items:start;padding:16px 0;text-align:left}
-  .facts li+li{border-left:0;border-top:1px solid var(--line)}
-  .facts svg{grid-row:span 2;width:56px;height:42px;margin:2px 0 0}
-  .facts b{font-size:18px}
-  .facts p{margin:4px 0 0;max-width:none;font-size:14.5px}
 }
 </style>
 </head>
@@ -361,10 +376,10 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
   <div class="draw"><img src="img/hero.svg" width="480" height="314" alt="Claude Code wearing headphones"></div>
 </div>
 
-<ul class="facts">
-  <li><svg viewBox="0 0 64 48" aria-hidden="true"><path class="ink" d="M13 8.5c12.6-.8 25.4-.6 38 .2l.4 25.6c-12.8.5-25.6.4-38.4-.1z"/><path class="ink" d="M5 39.5c18-.6 36-.5 54 .3-1 2.4-2.6 3.6-5 3.7-14.6.4-29.4.4-44-.2-2.6-.2-4.2-1.4-5-3.8z"/><path class="warm" d="M22 21.5c2-4 3.6 7.4 6 2.6s3.2-8.6 5.6-2.4 3-5 5.4-.6 2.6 3 4.2 1.2"/></svg><b>Stays on your Mac</b><p>Speech-to-text, speaker labels and the voice run on your Mac. Claude Code gets your words as text.</p></li>
-  <li><svg viewBox="0 0 64 48" aria-hidden="true"><circle class="ink" cx="19" cy="24" r="8.6"/><circle class="ink" cx="19" cy="24" r="2.6"/><path class="ink" d="M27.4 24.4c8.6-.3 17.4-.2 26 .2M45.6 24.6l.2 6.4M51.6 24.4l.4 4.6"/><path class="warm" d="M10 39.5C25 29 39 18.5 54.5 8"/></svg><b>No API key</b><p>It runs on your Claude Code subscription. No account, no key to set up.</p></li>
-  <li><svg viewBox="0 0 64 48" aria-hidden="true"><path class="ink" d="M22.5 9.5c-4.6.2-6.4 2.4-6 6.6.4 3.6.2 6.2-4 7.8 4.2 1.6 4.4 4.4 4 7.8-.4 4.2 1.4 6.6 6 6.8M41.5 9.5c4.6.2 6.4 2.4 6 6.6-.4 3.6-.2 6.2 4 7.8-4.2 1.6-4.4 4.4-4 7.8.4 4.2-1.4 6.6-6 6.8"/><path class="fill" d="M32 31.6c-4.6-3.2-7.4-5.6-7.4-8.8 0-2.4 1.8-4 3.8-4 1.6 0 2.8.8 3.6 2.2.8-1.4 2-2.2 3.6-2.2 2 0 3.8 1.6 3.8 4 0 3.2-2.8 5.6-7.4 8.8z"/></svg><b>Open source</b><p>Free, with nothing to pay per use. Every line is on GitHub.</p></li>
+<ul class="why">
+  <li tabindex="0"><b>Stays on your Mac</b><span class="short">Audio never leaves it.</span><span class="full" role="tooltip">Speech-to-text, speaker labels and the voice run on your Mac. Your words go to your Claude Code as text, along with anything you paste or attach; Claude Code and its tools handle data their own way.</span></li>
+  <li tabindex="0"><b>No API key</b><span class="short">It runs on your Claude subscription.</span><span class="full" role="tooltip">It runs through your own Claude Code and its subscription. There's no account or key to set up.</span></li>
+  <li tabindex="0"><b>Open source</b><span class="short">Every line is on GitHub.</span><span class="full" role="tooltip">Free and open source, with nothing to pay per use. The code is on GitHub for anyone to read.</span></li>
 </ul>
 
 
@@ -491,6 +506,11 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
       h.classList.toggle("manual", t.dataset.tab === "manual");
       h.querySelectorAll("[data-tab]").forEach(function (o) { o.setAttribute("aria-selected", o === t ? "true" : "false"); });
     });
+  });
+  // a promise: a tap shows its card (and hides the others)
+  document.querySelectorAll(".why li").forEach(function (li, i, all) {
+    li.addEventListener("click", function () { var on = !li.classList.contains("open"); all.forEach(function (o) { o.classList.remove("open"); }); if (on) li.classList.add("open"); });
+    leave(li, function () { li.classList.remove("open"); });
   });
   addEventListener("hashchange", function () { if (location.hash === "#install") set(true); });
 })();
