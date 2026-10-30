@@ -6607,8 +6607,7 @@ html.lights .sethead{padding-left:84px}.sethead.scrolled{box-shadow:0 1px 0 var(
 .utab{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px;font-variant-numeric:tabular-nums}
 .utab th{text-align:left;font-weight:500;color:var(--muted);padding:6px 0;border-bottom:1px solid var(--line)}
 .utab td{padding:7px 0;border-bottom:1px solid var(--line)}
-.utab th:not(:first-child),.utab td:not(:first-child){text-align:right}
-.utab.kinds th:nth-child(2),.utab.kinds td:nth-child(2){text-align:left;color:var(--muted);padding-left:12px}
+.utab th:not(:first-child),.utab td:not(:first-child){text-align:right;width:68px}     /* the same columns in both tables */
 .uempty{margin:48px 0;text-align:center}.uempty b{display:block;font-size:15px;margin-bottom:4px}.uempty span{color:var(--muted);font-size:13px}.pane .sec{border:0;padding:0}.pane .sec>h4{margin-bottom:14px}
 dialog.ask{width:400px}.ask .dhead{padding-top:20px}.ask .dbody p{margin:2px 0 6px;font-size:13px;line-height:1.5;color:var(--muted)}
 .ask .dfoot{border-top:0;padding-top:10px}.btn.destroy{background:var(--rec);border-color:var(--rec);color:#fff}
@@ -7001,8 +7000,11 @@ const KIND={voice:"Voice turns",briefing:"Voice briefings",title:"Titles",decisi
   "cc-gist":"Claude Code summaries for calls","call-summary":"Calls added to Claude Code",words:"Word fixes"};
 const fam=m=>/opus/i.test(m)?"Opus":/sonnet/i.test(m)?"Sonnet":/haiku/i.test(m)?"Haiku":m;
 const compact=n=>n>=1e6?(n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,"")+"M":n>=1e4?Math.round(n/1e3)+"K":n>=1e3?(n/1e3).toFixed(1).replace(/\.0$/,"")+"K":String(n||0);
-const toks=x=>(x.input||0)+(x.cache_write||0)+(x.output||0);
-const tokTip=x=>compact((x.input||0)+(x.cache_write||0))+" in, "+compact(x.output||0)+" out"+(x.cache_read?", plus "+compact(x.cache_read)+" read from cache":"");
+// Input and output apart (the user, 10/30): input is what was sent (cache writes too), output what the model wrote;
+// reads from cache are in Input's tooltip.
+const tin=x=>(x.input||0)+(x.cache_write||0);
+const inTip=x=>tin(x).toLocaleString()+" tokens sent"+(x.cache_read?", plus "+compact(x.cache_read)+" read from cache":"");
+const outTip=x=>(x.output||0).toLocaleString()+" tokens written";
 // Opens on the last 3 hours while a session is live ("how much is this call using"), else on
 // today, until a range is picked.
 let URANGE=null;
@@ -7015,7 +7017,8 @@ function paintUsage(u){const t=u&&u.totals;
   if(!t||!t.calls){setHTML($("ubody"),u.since?'<div class="uempty"><b>No calls '+esc(SPAN[u.range]||"")+'</b><span>Try a longer range.</span></div>'
     :'<div class="uempty"><b>No calls yet</b><span>Usage shows here after your first meeting or call.</span></div>');return}
   let h='<div class="kpis"><div class="kpi"><span class="kl">Calls</span><b>'+t.calls.toLocaleString()+'</b></div>'+
-    `<div class="kpi" title="${esc(tokTip(t))}"><span class="kl">Tokens</span><b>${compact(toks(t))}</b></div></div>`;
+    `<div class="kpi" title="${esc(inTip(t))}"><span class="kl">Input tokens</span><b>${compact(tin(t))}</b></div>`+
+    `<div class="kpi" title="${esc(outTip(t))}"><span class="kl">Output tokens</span><b>${compact(t.output)}</b></div></div>`;
   // calls over time: one series, columns from one baseline, the value on hover
   const ser=u.series||[],max=Math.max(1,...ser.map(b=>b.calls||0)),day=u.bucket==="day",n=ser.length;
   const per={day:"per day",hour:"per hour","10 minutes":"per 10 minutes"}[u.bucket]||"";
@@ -7024,13 +7027,13 @@ function paintUsage(u){const t=u&&u.totals;
   h+=`<div class="uchart"><div class="uct"><span>Calls ${per}</span><span>${max} most</span></div><div class="ucols">`+
     ser.map((b,i)=>`<i${now(i)?' class="now"':""} title="${esc(lab(b))}${now(i)?(day?", so far":" to now"):""}: ${b.calls||0} call${b.calls===1?"":"s"}"><b style="height:${b.calls?Math.max(4,Math.round(b.calls/max*100)):0}%"></b></i>`).join("")+
     `</div><div class="uax"><span>${n?esc(lab(ser[0])):""}</span><span>${n?(u.partial?"Now":esc(lab(ser[n-1]))):""}</span></div></div>`;
-  const row=(name,x,tip,extra)=>`<tr><td title="${esc(tip||"")}">${esc(name)}</td>${extra||""}<td>${(x.calls||0).toLocaleString()}</td><td title="${esc(tokTip(x))}">${compact(toks(x))}</td></tr>`;
-  const hd=(first,extra)=>`<thead><tr><th>${first}</th>${extra||""}<th>Calls</th><th>Tokens</th></tr></thead>`;
+  const io=x=>`<td title="${esc(inTip(x))}">${compact(tin(x))}</td><td title="${esc(outTip(x))}">${compact(x.output)}</td>`;
+  const row=(name,x,tip,extra)=>`<tr><td title="${esc(tip||"")}">${esc(name)}</td>${extra||""}<td>${(x.calls||0).toLocaleString()}</td>${io(x)}</tr>`;
+  const hd=(first,extra)=>`<thead><tr><th>${first}</th>${extra||""}<th>Calls</th><th>Input</th><th>Output</th></tr></thead>`;
   h+='<h5>By model</h5><table class="utab">'+hd("Model")+"<tbody>"+(u.models||[]).map(m=>row(fam(m.model),m,m.model)).join("")+"</tbody></table>";
-  h+='<h5>By kind</h5><table class="utab kinds"><thead><tr><th>Kind</th><th>Calls</th><th>Tokens</th></tr></thead><tbody>'+
-    (u.kinds||[]).map(k=>`<tr><td>${esc(KIND[k.kind]||"Other")}</td><td>${(k.calls||0).toLocaleString()}</td><td title="${esc(tokTip(k))}">${compact(toks(k))}</td></tr>`).join("")+"</tbody></table>";
+  h+='<h5>By kind</h5><table class="utab">'+hd("Kind")+"<tbody>"+(u.kinds||[]).map(k=>row(KIND[k.kind]||"Other",k)).join("")+"</tbody></table>";
   const since=u.since?" since "+new Date(u.since*1000).toLocaleDateString(undefined,{month:"short",day:"numeric"}):"";
-  h+='<p class="hint">What Standby\'s own models did'+since+': the call\'s voice, summaries, titles and word fixes. Work it hands your Claude Code session counts there, not here. Tokens are what was sent and written; reads from cache are in each tooltip.</p>';
+  h+='<p class="hint">What Standby\'s own models did'+since+': the call\'s voice, summaries, titles and word fixes. Work it hands your Claude Code session counts there, not here. Input is what was sent to the models, output what they wrote; reads from cache are in Input\'s tooltip.</p>';
   setHTML($("ubody"),h)}
 function setHelp(id,t){const e=$(id);e.title=t||"";delete e.dataset.mxtip;e.setAttribute("aria-label",t?"About this setting":"");e.hidden=!t}
 // Settings' list of sections (setHome), or one section open in its place (setPane); back, and Esc, go from

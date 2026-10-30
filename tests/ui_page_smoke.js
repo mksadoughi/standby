@@ -134,7 +134,9 @@ eval(require("fs").readFileSync(process.env.UI_PAGE_JS, "utf8") + `
     kinds: [{ kind: "voice", calls: 10, input: 8000, output: 700, models: ["claude-haiku-<x>"] },
             { kind: "words", calls: 2, input: 1000, output: 100, models: ["claude-haiku-<x>"] }] });
   const ub = el("ubody").innerHTML;
-  ok("usage: calls and tokens", ub.includes(">12<") && ub.includes("11K"));
+  ok("usage: calls, input and output tokens apart", ub.includes(">12<") && ub.includes("Input tokens") && ub.includes(">10K<")
+    && ub.includes("Output tokens") && ub.includes(">800<") && !ub.includes(">Tokens<"));
+  ok("  cache reads in Input's tooltip", ub.includes("10,000 tokens sent, plus 50K read from cache"));
   ok("  models by family, the exact id escaped in its tooltip", ub.includes(">Haiku<") && ub.includes("claude-haiku-&lt;x&gt;"));
   ok("  kinds in words, the word-fixes pass among them", ub.includes(">Voice turns<") && ub.includes(">Word fixes<"));
   ok("  never a dollar: no cost tile or column, no busiest minute", !ub.includes("Cost") && !ub.includes("$") && !ub.includes("Busiest"));
