@@ -274,26 +274,22 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 .howto-slot .howto.open .ic,.howto-slot .howto:focus-within .ic{color:var(--accent)}
 @media (hover:hover){.howto-slot .howto:hover{background:#fff;border-color:var(--line);box-shadow:0 10px 24px -18px rgba(20,20,50,.35)}.howto-slot .howto:hover .ic{color:var(--accent)}}
 /* A phone: its own hero, not the desktop one squeezed (the user, 2026-10-29: "completely redo on phone view").
-   Centred: the drawing first, then the title, the line, and Calls / Meetings as a two-way switch with one short
-   line under it; Install a full-width filled button; the three facts as small chips, a tap opens the whole of one
+   Centred: the drawing first, then the title, the line, and both Calls and Meetings as one short paragraph
+   each, led by the name in its colour; Install a full-width filled button; the three facts as small chips, a tap opens the whole of one
    in a card under them. */
-.uses-tabs{display:none}
 @media (max-width:700px){
   .hero{padding-top:12px;gap:0;text-align:center}
   .hero>div:first-child{display:flex;flex-direction:column;align-items:center}
   .draw{order:-1;width:100%;max-width:230px;margin:0 auto 18px}
   h1{font-size:clamp(34px,10.5vw,42px);line-height:1.06}
   .lead{font-size:16.5px;line-height:1.55;margin:14px auto 0;max-width:33ch}
-  .uses-tabs{display:inline-flex;gap:2px;margin:26px auto 0;padding:4px;border-radius:999px;background:#ecebe4}
-  .uses-tabs button{all:unset;cursor:pointer;padding:0 20px;height:36px;line-height:36px;border-radius:999px;font:650 15px -apple-system,system-ui;color:#6b6b7e;transition:background .2s,color .2s,box-shadow .2s}
-  .uses-tabs button[aria-selected=true]{background:#fff;color:var(--accent);box-shadow:0 1px 3px rgba(27,27,47,.12),0 4px 12px -6px rgba(27,27,47,.18)}
-  .uses-tabs button[data-use=meet][aria-selected=true]{color:#c2603d}
-  .uses{display:block;margin:14px auto 0;max-width:32ch;min-height:72px}
-  .uses li,.uses li+li{display:none;padding:0;border:0;margin:0}
-  .uses:not([data-show=meet]) .call,.uses[data-show=meet] .meet{display:block;animation:usein .3s ease}
-  .uses b{display:none}
-  .uses span{margin:0;font-size:15.5px;line-height:1.55;color:var(--muted)}
-  @keyframes usein{from{opacity:0;transform:translateY(4px)}}
+  .uses{display:grid;gap:12px;margin:24px auto 0;max-width:33ch}
+  .uses li,.uses li+li{padding:0;border:0;margin:0}
+  .uses b{display:inline;padding:0;font:700 17px/1.5 var(--serif);color:var(--accent)}
+  .uses .meet b{color:#c2603d}
+  .uses b:after{content:"\00a0\00b7\00a0";color:var(--faint,#b8b6c4)}
+  .uses b svg{display:none}
+  .uses span{display:inline;margin:0;font-size:15.5px;line-height:1.55;color:var(--muted)}
   .howto-slot{width:100%;margin-top:22px;text-align:left}
   .howto-slot .howto{width:100%;height:52px;border-radius:14px}
   .howto-slot .howto:focus-within{width:100%;height:52px}
@@ -329,7 +325,6 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
     <h1>Talk to your<br>Claude Code.</h1>
     <p class="lead">Standby is a free <span class="ul">Claude Code plugin</span>. It works inside the session you already use, with your
       code and everything you've done so far.</p>
-    <div class="uses-tabs" role="tablist" aria-label="What it does"><button type="button" role="tab" aria-selected="true" data-use="call">Calls</button><button type="button" role="tab" aria-selected="false" data-use="meet">Meetings</button></div>
     <ul class="uses">
       <li class="call"><b>Calls<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M2 6.5C20 3.2 44 2.6 62 4.2S88 7.6 98 4"/></svg></b><span>Brainstorm out loud. It answers by voice and makes the changes while you keep talking.</span></li>
       <li class="meet"><b>Meetings<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M2 4.6C18 7.4 40 7.6 60 5.4S86 2.4 98 5.6"/></svg></b><span>It hears Zoom, Google Meet or the room, with no bot joining. Ask it questions as the meeting goes on.</span></li>
@@ -500,15 +495,6 @@ document.querySelector(".watch").addEventListener("click", function (e) {
   });
   addEventListener("hashchange", function () { if (location.hash === "#install") set(true); });
 })();
-</script>
-<script>
-/* the phone's Calls / Meetings switch: shows one line at a time */
-document.querySelectorAll(".uses-tabs button").forEach(function (b, _, all) {
-  b.addEventListener("click", function () {
-    all.forEach(function (o) { o.setAttribute("aria-selected", o === b ? "true" : "false"); });
-    document.querySelector(".uses").dataset.show = b.dataset.use;
-  });
-});
 </script>
 </body>
 </html>
