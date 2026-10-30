@@ -58,7 +58,8 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 /* the film */
 /* six promises under the hero: each name in Claude's orange and one short line; pointing at one (or a tap, or focus)
    shows the whole of it in a small card over the page, so nothing moves */
-.why{list-style:none;padding:0;margin:44px auto 0;max-width:1080px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 40px}
+.why{list-style:none;padding:0;margin:44px auto 0;max-width:1180px;display:grid;grid-template-columns:1fr 1fr 1.25fr 1fr .9fr;gap:18px 20px}
+@media (min-width:1101px){.why b{font-size:18.5px;white-space:nowrap}.why .short{font-size:15px}}
 .why li{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr);gap:2px 12px;align-content:start;cursor:default;outline:none}
 .why li:before{content:"";grid-row:1;width:22px;height:12px;margin-top:8px;background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%2722%27%20height%3D%2712%27%20viewBox%3D%270%200%2022%2012%27%3E%3Cpath%20d%3D%27M1%206%20Q6%200%2011%206%20T21%206%27%20fill%3D%27none%27%20stroke%3D%27%23d97757%27%20stroke-width%3D%272.2%27%20stroke-linecap%3D%27round%27/%3E%3C/svg%3E") no-repeat center/22px 12px}
 .why b{font:700 20px/1.4 var(--serif);color:#c2603d;display:flex;align-items:center;gap:8px}
@@ -95,6 +96,7 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 .howto.open,.howto:focus-within{width:var(--pw);height:var(--hh);border-radius:18px}
 .howto.open .steps,.howto:focus-within .steps{opacity:1;transition-delay:.3s}
 @media (hover:hover){.howto:hover{width:var(--pw);height:var(--hh);border-radius:18px}.howto:hover .steps{opacity:1;transition-delay:.3s}}
+@media (max-width:1100px){.why{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:900px){.why{grid-template-columns:1fr 1fr}}
 @media (max-width:560px){.why{grid-template-columns:1fr}.howto{--hh:240px}.howto.manual{--hh:306px}}
 @media (prefers-reduced-motion:reduce){.howto,.howto .steps{transition:none}}
@@ -265,12 +267,12 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 <div class="hero">
   <div>
     <h1>Your Claude Code,<br>right beside you.</h1>
-    <p class="lead">Standby is a <span class="ul">Claude Code plugin</span> that gives your session ears and a voice,
-      while things are happening.</p>
+    <p class="lead">Standby is a free <span class="ul">Claude Code plugin</span>. Talk to your Claude Code session on a voice call,
+      and let it listen to your meetings.</p>
     <ul class="points">
-      <li><span><b>Call it</b> and brainstorm your ideas for hours, while it does the work.</span></li>
-      <li><span><b>Let it listen in</b> on your meetings, and help in real time as they happen.</span></li>
-      <li><span><b>All in your own Claude Code session</b>, with no new app to live in.</span></li>
+      <li><span><b>Call it.</b> Talk through ideas out loud while it writes the code.</span></li>
+      <li><span><b>Bring it to meetings.</b> It hears the conversation, and you can ask it questions while the meeting goes on.</span></li>
+      <li><span><b>Same session.</b> It's the Claude Code session you already work in, with your code and history. There's no new app.</span></li>
     </ul>
     <div class="howto-slot"><div class="howto" id="install">
       <button type="button" class="ic" aria-expanded="false" aria-controls="howto-steps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Install</span></button>
@@ -290,15 +292,14 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
       </div>
     </div></div>
   </div>
-  <div class="draw"><img src="img/hero.svg" width="480" height="314" alt="Claude Code wearing headphones: Standby gives it ears and a voice"></div>
+  <div class="draw"><img src="img/hero.svg" width="480" height="314" alt="Claude Code wearing headphones"></div>
 </div>
 
 <ul class="why">
-  <li tabindex="0"><b>Same Claude session</b><span class="short">The session you're already working in.</span><span class="full" role="tooltip">Calls and meetings go to the Claude Code session you're already working in. It knows what you're doing, and remembers it afterwards.</span></li>
-  <li tabindex="0"><b>In Claude Code</b><span class="short">No new app to live in.</span><span class="full" role="tooltip">No new app to live in. Everything works from your session; Standby's window and mini window are there only if you want them.</span></li>
+  <li tabindex="0"><b>Same session</b><span class="short">Your Claude Code, no new app.</span><span class="full" role="tooltip">Calls and meetings go to the Claude Code session you're already working in. It knows what you're doing, and remembers it afterwards. Standby's window and mini window are there only if you want them.</span></li>
   <li tabindex="0"><b>Any meeting</b><span class="short">Any app or the room, with no bot.</span><span class="full" role="tooltip">Any meeting app, a call in the browser, or people in the room. Nothing joins the call: Standby hears it from your Mac, and you approve what it hears.</span></li>
   <li tabindex="0"><b>Stays on your Mac</b><span class="short">Audio never leaves it.</span><span class="full" role="tooltip">Speech-to-text, speaker labels and the voice run on your Mac. Your words go to your Claude Code as text, along with anything you paste or attach; Claude Code and its tools handle data their own way.</span></li>
-  <li tabindex="0"><b>No API key</b><span class="short">Runs on your own Claude subscription.</span><span class="full" role="tooltip">It runs through your own Claude Code and its subscription. There's no account or key to set up.</span></li>
+  <li tabindex="0"><b>No API key</b><span class="short">It runs on your Claude subscription.</span><span class="full" role="tooltip">It runs through your own Claude Code and its subscription. There's no account or key to set up.</span></li>
   <li tabindex="0"><b>Free</b><span class="short">Free and open source.</span><span class="full" role="tooltip">Free and open source, with nothing to pay per use. The code is on GitHub for anyone to read.</span></li>
 </ul>
 <a class="watch" href="#film">See it in action</a>
