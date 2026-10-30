@@ -47,6 +47,17 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 .lead{font-size:19px;color:var(--muted);margin:22px 0 0;max-width:540px}.lead b{color:var(--ink)}
 .ul{text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:5px}
 .points{list-style:none;padding:0;margin:22px 0 0;display:grid;gap:10px;font-size:16px;color:var(--muted)}
+/* the two things it does: two short columns on the page, each name underlined by a hand-drawn stroke in its colour, drawn in once */
+.uses{list-style:none;padding:0;margin:34px 0 0;display:grid;grid-template-columns:1fr 1fr;max-width:580px}
+.uses li{position:relative;padding:0 28px 0 0}
+.uses li+li{padding:0 0 0 28px;border-left:1px solid var(--line)}
+.uses b{position:relative;display:inline-block;font:700 24px/1.2 var(--serif);color:var(--ink);letter-spacing:-.01em;padding-bottom:9px}
+.uses b svg{position:absolute;left:-2px;bottom:0;width:calc(100% + 10px);height:10px;overflow:visible}
+.uses b path{fill:none;stroke:var(--accent);stroke-width:2.6;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;animation:swash .9s cubic-bezier(.5,0,.2,1) .35s forwards}
+.uses .meet b path{stroke:#d97757;animation-delay:.6s}
+.uses span{display:block;margin-top:10px;font-size:15.5px;line-height:1.55;color:var(--muted)}
+@keyframes swash{to{stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.uses b path{animation:none;stroke-dashoffset:0}}
 .points li{display:block}.points b{color:var(--ink)}
 .points svg{width:19px;height:19px;flex-shrink:0;margin-top:3px;stroke:var(--accent)}
 .draw img{width:100%;height:auto;max-width:520px;margin:0 auto}
@@ -177,6 +188,10 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   h1{font-size:clamp(28px,8vw,36px);line-height:1.12}
   .lead{font-size:16px;line-height:1.6;margin-top:14px}
   .points{margin-top:16px;font-size:15px;gap:8px}
+  .uses{grid-template-columns:1fr;margin-top:24px}
+  .uses li,.uses li+li{padding:0}
+  .uses li+li{border-left:0;border-top:1px solid var(--line);margin-top:18px;padding-top:18px}
+  .uses b{font-size:21px;padding-bottom:7px}.uses span{font-size:15px;margin-top:8px}
   .draw{width:100%;max-width:240px;justify-self:center}
   .howto-slot{height:auto;min-height:48px;margin-top:24px}
   .howto{position:relative;--pw:100%;max-width:100%}
@@ -236,9 +251,9 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 /* each feature has a long text for desktop and a short one for phones, the same breakpoint as the phone layout */
 .say-short{display:none}
 @media (max-width:700px){.say-long{display:none}.say-short{display:inline}}
-/* a small phone: the promises two by two; the features' thread steps aside so the cards use the whole width */
+/* a small phone: the three promises one under another; the features' thread steps aside so the cards use the whole width */
 @media (max-width:560px){
-  .why{grid-template-columns:1fr 1fr}
+  .why{grid-template-columns:1fr}
   .thread{padding:16px 0}.thread:before,.thread .knot,.thread .glow{display:none}
   .thread .card,.thread .card:nth-of-type(odd),.thread .card:nth-of-type(even){width:100%;margin:0}
 }
@@ -250,6 +265,12 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 .github-link:focus-visible{outline:2px solid currentColor;outline-offset:3px}
 
 .end .github-link img{filter:brightness(0) invert(1)}
+/* Install: the one filled pill on the page; white as it rolls out (after the .howto rules and the phone block, so it wins) */
+.howto-slot .howto{background:var(--accent);border-color:var(--accent);box-shadow:0 12px 26px -14px rgba(79,70,229,.6);transition:width .45s ease,height .45s ease .1s,border-radius .45s ease,background .3s,border-color .3s}
+.howto-slot .howto .ic{color:#fff;transition:color .3s}
+.howto-slot .howto.open,.howto-slot .howto:focus-within{background:#fff;border-color:var(--line);box-shadow:0 10px 24px -18px rgba(20,20,50,.35)}
+.howto-slot .howto.open .ic,.howto-slot .howto:focus-within .ic{color:var(--accent)}
+@media (hover:hover){.howto-slot .howto:hover{background:#fff;border-color:var(--line);box-shadow:0 10px 24px -18px rgba(20,20,50,.35)}.howto-slot .howto:hover .ic{color:var(--accent)}}
 </style>
 </head>
 <body>
@@ -264,13 +285,12 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 
 <div class="hero">
   <div>
-    <h1>Your Claude Code,<br>right beside you.</h1>
-    <p class="lead">Standby is a <span class="ul">Claude Code plugin</span> that gives your session ears and a voice, on your Mac,
-      while things are happening.</p>
-    <ul class="points">
-      <li><span><b>Call it</b> and brainstorm your ideas for hours, while it does the work.</span></li>
-      <li><span><b>Bring it to meetings</b>, on a call or in the room, and ask it anything.</span></li>
-      <li><span><b>Dictate anywhere</b>, with a high-quality speech model on your Mac that learns your words.</span></li>
+    <h1>Talk to your<br>Claude Code.</h1>
+    <p class="lead">Standby is a free <span class="ul">Claude Code plugin</span>. It works inside the session you already use, with your
+      code and everything you've done so far.</p>
+    <ul class="uses">
+      <li class="call"><b>Calls<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M2 6.5C20 3.2 44 2.6 62 4.2S88 7.6 98 4"/></svg></b><span>Brainstorm out loud. It answers by voice and makes the changes while you keep talking.</span></li>
+      <li class="meet"><b>Meetings<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M2 4.6C18 7.4 40 7.6 60 5.4S86 2.4 98 5.6"/></svg></b><span>It hears Zoom, Google Meet or the room, with no bot joining. Ask it questions as the meeting goes on.</span></li>
     </ul>
     <div class="howto-slot"><div class="howto" id="install">
       <button type="button" class="ic" aria-expanded="false" aria-controls="howto-steps"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Install</span></button>
@@ -290,16 +310,13 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
       </div>
     </div></div>
   </div>
-  <div class="draw"><img src="img/hero.svg" width="480" height="314" alt="Claude Code wearing headphones: Standby gives it ears and a voice"></div>
+  <div class="draw"><img src="img/hero.svg" width="480" height="314" alt="Claude Code wearing headphones"></div>
 </div>
 
 <ul class="why">
-  <li tabindex="0"><b>Same Claude session</b><span class="short">The session you're already working in.</span><span class="full" role="tooltip">Calls and meetings go to the Claude Code session you're already working in. It knows what you're doing, and remembers it afterwards.</span></li>
-  <li tabindex="0"><b>In Claude Code</b><span class="short">No new app to live in.</span><span class="full" role="tooltip">No new app to live in. Everything works from your session; Standby's window and mini window are there only if you want them.</span></li>
-  <li tabindex="0"><b>Any meeting</b><span class="short">Any app or the room, with no bot.</span><span class="full" role="tooltip">Any meeting app, a call in the browser, or people in the room. Nothing joins the call: Standby hears it from your Mac, and you approve what it hears.</span></li>
   <li tabindex="0"><b>Stays on your Mac</b><span class="short">Audio never leaves it.</span><span class="full" role="tooltip">Speech-to-text, speaker labels and the voice run on your Mac. Your words go to your Claude Code as text, along with anything you paste or attach; Claude Code and its tools handle data their own way.</span></li>
-  <li tabindex="0"><b>No API key</b><span class="short">Runs on your own Claude subscription.</span><span class="full" role="tooltip">It runs through your own Claude Code and its subscription. There's no account or key to set up.</span></li>
-  <li tabindex="0"><b>Free</b><span class="short">Free and open source.</span><span class="full" role="tooltip">Free and open source, with nothing to pay per use. The code is on GitHub for anyone to read.</span></li>
+  <li tabindex="0"><b>No API key</b><span class="short">It runs on your Claude subscription.</span><span class="full" role="tooltip">It runs through your own Claude Code and its subscription. There's no account or key to set up.</span></li>
+  <li tabindex="0"><b>Open source</b><span class="short">Every line is on GitHub.</span><span class="full" role="tooltip">Free and open source, with nothing to pay per use. The code is on GitHub for anyone to read.</span></li>
 </ul>
 <a class="watch" href="#film">See it in action</a>
 
@@ -337,7 +354,7 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
 </section>
 
 <div class="joint tall" aria-hidden="true"></div>
-<div class="end"><div><h2>Give your Claude Code ears and a voice.</h2><p>Free and open source, for Apple Silicon Macs.</p></div>
+<div class="end"><div><h2>Try it in your next Claude Code session.</h2><p>Free and open source, for Apple Silicon Macs.</p></div>
   <a class="github-link" data-gh="repo" href="#install" aria-label="Standby on GitHub" title="GitHub"><img src="img/github.svg" width="26" height="26" alt=""></a></div>
 
 <div class="sign" aria-hidden="true"></div>

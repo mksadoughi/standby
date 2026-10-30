@@ -16,7 +16,7 @@ function terminal(r, t, o) {
     `<circle cx="${x + 24}" cy="${y + 20}" r="7" fill="#ff5f57"/><circle cx="${x + 46}" cy="${y + 20}" r="7" fill="#febc2e"/><circle cx="${x + 68}" cy="${y + 20}" r="7" fill="#28c840"/>` +
     text(x + w / 2, y + 27, o.title || "trips — claude", 18, { font: SYS, fill: "#a9a9b8" }) +
     text(x + 40, y + 82, "Claude Code", size + 1, { font: MONO, weight: 700, fill: "#e8e6e3", anchor: "start" }) +
-    text(x + 40 + (size + 1) * 7.6, y + 82, "~/code/trips", size - 1, { font: MONO, fill: TC.dim, anchor: "start" });
+    text(x + 40 + (size + 1) * 7.6, y + 82, o.path || "~/code/trips", size - 1, { font: MONO, fill: TC.dim, anchor: "start" });
   const band = o.band || [], promptY = y + h - 66, bandTop = promptY - 14 - band.length * row;
   const top = y + 126, fit = Math.max(0, Math.floor((bandTop - top - 6) / row) + 1), rows = o.rows || [], from = Math.max(0, rows.length - fit);
   rows.slice(from).forEach((s, i) => { const b = typeof s === "object";
