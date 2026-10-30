@@ -452,7 +452,8 @@ try:
           "You took this deeper, and are working on it now: Create a sample text file"
           in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
     # An early question the user went on from: answered with a hand-off, then dropped (agentctl.cancel's
-    # .x). The hand-off never went, so the voice's next turn has no note that it's working on it.
+    # .x). The hand-off never went, so the voice's next turn has no note that it's working on it, and is
+    # told it never went: its own conversation still has that answer (a call's two lost hand-offs, 10/30).
     ids = []                         # its question's id, as the agent queued it (never the trace, written behind)
     got = ask("[VOICE] can you ask the agent to create a new text file, just a sample text file?", ident=ids)
     qid = ids[-1] if ids else "none"
@@ -460,6 +461,7 @@ try:
     ask("[VOICE] what time is it there")
     check("a hand-off whose early question they went on from: the voice keeps no note it's working on it",
           got.startswith("[HANDOFF]") and "You took this deeper" not in texts("voice", TALK)[-1]
+          and (getattr(sa, "NOT_HANDED", "(none) %s") % got[len("[HANDOFF] "):]) in texts("voice", TALK)[-1]
           and not os.path.exists(os.path.join(root, "agent", "spool", qid + ".x")), (qid, sorted(os.listdir(os.path.join(root, "agent", "spool")))[-6:], texts("voice", TALK)[-1][-300:]))
     os.remove(os.path.join(live, TALK + ".voice.json"))
 
