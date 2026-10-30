@@ -336,7 +336,7 @@ function dictation(t) {
 
 // ---- 5. Standby -------------------------------------------------------------------------------------------------------
 // ---- 4. what matters, one line at a time, each after the logo's wave ------------------------------------------------
-const KEYS = ["Free and open source", "No API key", "Your same Claude Code session", "Stays on your Mac"];
+const KEYS = ["In your own Claude Code session", "No API key", "Stays on your Mac", "Free and open source"];
 function keys(t) {
   return KEYS.map((s, i) => {
     const a = KEY0 + .35 + i * .5, k = out(span(t, a, a + .45)), y = 285 + i * 105;
@@ -350,7 +350,7 @@ function outro(t) {
   return orbApp(800, 340, 74 * o, t > OUTRO0 + 1 ? "speaking" : "listening", t, clamp(o)) +
     text(800, 500, "Standby", 72, { font: ROUND, weight: 800, fill: INK, opacity: out(span(t, OUTRO0 + .6, OUTRO0 + 1.2)) }) +
     text(800, 566, "Your Claude Code, right beside you.", 40, { weight: 700, fill: INK, opacity: out(span(t, OUTRO0 + 1.0, OUTRO0 + 1.6)) }) +
-    text(800, 640, "Free and open source · for Mac", 26, { font: SYS, fill: MUTE, opacity: out(span(t, OUTRO0 + 1.6, OUTRO0 + 2.2)) }) +
+    text(800, 640, "Free and open source", 26, { font: SYS, fill: MUTE, opacity: out(span(t, OUTRO0 + 1.6, OUTRO0 + 2.2)) }) +
     text(800, 680, "github.com/mksadoughi/standby", 24, { font: MONO, fill: INDIGO, opacity: out(span(t, OUTRO0 + 1.8, OUTRO0 + 2.4)) });
 }
 
@@ -388,10 +388,9 @@ function film(t0) {
   const ck = closeUp(t) * fade(t, WORK0, WORK1, .4);                   // up close, the terminal fills the top: paper under the words
   if (ck > 0) g += `<rect width="1600" height="150" fill="${PAPER}" opacity="${fo(ck)}"/>`;
   g += cap(t, [[WORK0 + .3, ZIN1 + .2, "Hours into a Claude Code session, on a long task."], [ZIN1 + .3, ZOUT1 + .4, "Ask it to call."],
-    [OPEN + .2, end("c3") + .2, "Call it and brainstorm, for hours."], [end("c3") + .3, HANDOFF + .2, "On your same Claude Code session."],
-    [HANDOFF + .3, MEET0 + .2, "It builds while you talk."],
-    [MEET0 + PULL - .1, ZLAP0 + .3, "Then take it to your meetings."], [ZLAP1 + .1, WIN0 + .4, "Just ask it to join."],
-    [WIN0 + .6, TYPE_C - .2, "It helps in real time, right beside you."], [TYPE_C, MEET1 - .3, "Ask it to check, while the meeting goes on."]]);   // choosing what it hears shows itself
+    [OPEN + .2, HANDOFF + .2, "Call it and brainstorm, for hours."], [HANDOFF + .3, MEET0 + .2, "While it does the work."],
+    [MEET0 + PULL - .1, ZLAP0 + .3, "Let it listen in on your meetings."], [ZLAP1 + .1, WIN0 + .4, "Just ask it to join."],
+    [WIN0 + .6, TYPE_C - .2, "It helps in real time, as they happen."], [TYPE_C, MEET1 - .3, "Ask it to check, while the meeting goes on."]]);   // choosing what it hears shows itself
   return g + subtitle(t);
 }
 play(film);
