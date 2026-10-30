@@ -3784,10 +3784,16 @@ class Voice(object):
         handed = (rc == 0 and not result and wants_deep(text) and bool(voice_meta(session).get("handoff"))
                   and (not stopping() or (_cut_off(cpath) and bool(deep_task(text)))))
         if result:
-            # news to tell, in its words: nothing to hand on. A [DEEP] here is never handed on, and what
-            # follows it is its task, never words: only what it said before the tag is said
+            # news to tell, in its words; what follows a [DEEP] is its task, never words. On a call, a task it
+            # takes deeper from the news goes too, as it told them it would ("I'll send that deeper": a call's
+            # four lost, 2026-10-30): its words, then the [HANDOFF] line, for the Mac (ui._lite_tell)
+            task = deep_task(text) if rc == 0 and wants_deep(text) and voice_meta(session).get("handoff") else ""
             text = text.split(DEEP_TAG, 1)[0].strip() if DEEP_TAG in (text or "") else text
             went += ", telling the user how the handed-on work went"
+            if task:
+                text = "%s\n%s %s" % (text, HANDOFF_TAG, task)
+                went += ", and handing on more"
+                self.remember(session, "You took this deeper, and are working on it now: %s" % task)
         elif handed:
             task = deep_task(text)           # the voice's own instruction to Claude Code
             if not task:                     # a bare [DEEP]: asked for once, in its conversation

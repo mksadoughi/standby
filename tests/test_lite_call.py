@@ -341,11 +341,17 @@ ui._lite_watchdog(sid, ui.LITE_CALLS[sid])
 check("running with no step for a while: stalled", t["state"] == "stalled" and re.search(r"stalled, no step since [\d:]{8}: render the film", tasks_txt()), tasks_txt())
 ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "tool", "text": "Encoding"})
 check("  a step again: running", t["state"] == "running", t)
-replies.append("The film's rendered.")
-n_model = len(told_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Rendered."})
-wait(lambda: len(told_model) > n_model)
+replies.append("The film's rendered, but its caption is cut off, so I'm fixing that.\n[HANDOFF] Fix the film's cut-off caption.")
+n_model, said_before = len(told_model), len(vs.told)
+out.clear()
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Rendered. The caption is cut off at the edge."})
+check("news it takes deeper (\"I'm fixing that\"): its words are said, and the work goes to the session (a call's four lost)",
+      wait(lambda: len(vs.told) > said_before) and vs.told[-1] == "The film's rendered, but its caption is cut off, so I'm fixing that."
+      and wait(lambda: any(e.get("call") == "handoff" and "Fix the film's cut-off caption." in json.dumps(e) for _c, e in out)),
+      (vs.told[-1:], out))
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+for t in ui.LITE_CALLS[sid]["tasks"].values():
+    t["seen"] = True
 
 # Turned away, or no word back at all: failed, told as news; the call's summary says it never got there.
 ev, _s = handoff_of("remove the caption under the film", "remove the caption under the film", received=False)

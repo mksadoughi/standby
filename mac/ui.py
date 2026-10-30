@@ -3763,6 +3763,10 @@ def _lite_tell(sid):
         failed = answer is None or answer.strip() == "(stopped)" or voice_mod.spoken_error(answer) != answer
         if not failed:
             answer = answer.replace(END_TAG, "")   # news isn't the user asking to hang up
+            if HANDOFF_TAG in answer:              # it takes something deeper from the news: its words, then the work
+                answer, work = answer.split(HANDOFF_TAG, 1)
+                if work.strip() and sid in LITE_CALLS:
+                    _lite_hand(sid, c, work.strip())
         line = LITE_FALLBACK.get(how, LITE_FALLBACK["done"]) if failed else _lite_spoken("" if answer.strip() == QUIET_TAG else answer)
         trace(sid, "told_done", how=how, ms=int((time.time() - t0) * 1000), said=line or None, failed=bool(failed))
         if sid not in LITE_CALLS or c.get("hanging_up"):

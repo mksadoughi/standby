@@ -233,8 +233,9 @@ try:
     check("  never handed on again, even if the model asks for real work", got == "" and len(texts("meeting", TALK)) == asked
           and "the work you took deeper ran into an error" in texts("voice", TALK)[-1], (got, texts("voice", TALK)[-1][-200:]))
     got = ask("[VOICE] [RESULT aborted] (the orb button work stopped)")
-    check("  a result answered with words and a task after [DEEP]: only the words are said, never the task",
-          got == "That stopped, so I'll pick it up." and "regression" not in got and len(texts("meeting", TALK)) == asked, got)
+    check("  on a call, news it takes deeper: its words, then the work as a [HANDOFF] line for the Mac, never said (a call's four lost)",
+          got == "That stopped, so I'll pick it up.\n[HANDOFF] The user reports a regression: put the orb button back."
+          and len(texts("meeting", TALK)) == asked, got)
     # Back from a pause where results waited: one [RESUMED] turn, not their words; what waited as news
     ask("[VOICE] [RESUMED] They're back. While paused, they saw something was waiting.\n[RESULT done] The film is built.\n[END RESULT]")
     last = texts("voice", TALK)[-1]
