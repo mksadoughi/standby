@@ -331,6 +331,16 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   .end{padding:26px 22px;border-radius:16px;flex-direction:column;align-items:flex-start;gap:18px}
   .end h2{font-size:26px}.end .end-dek{font-size:17px}
 }
+/* a phone: each feature is one white card, nearly the screen's width, holding its film and its words together,
+   with more room between one feature and the next (the user, 2026-10-29: "one box... around the whole video and
+   also the caption under it") */
+@media (max-width:560px){
+  .thread .card,.thread .card:nth-of-type(odd),.thread .card:nth-of-type(even),.thread .card.focus{width:calc(100% + 16px);margin:0 -8px;padding:10px 10px 20px;
+    background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 2px rgba(27,27,47,.04),0 12px 30px -22px rgba(27,27,47,.32)}
+  .thread .card+.card{margin-top:30px;padding-top:10px;border-top:1px solid var(--line)}
+  .loop{margin:0 0 4px;border-radius:11px;border:1px solid var(--line)}
+  .card h3{margin:14px 6px 6px}.card p{margin:0 6px}
+}
 </style>
 </head>
 <body>
