@@ -739,7 +739,7 @@ out.clear()
 r = ui.LITE_POST["/api/lite/call/end"]({"session": sid})
 check("end: as End does, and the stream says it ended", r == {"ok": True} and ended == [sid]
       and any(e.get("call") == "state" and e.get("phase") == "ended" for _c, e in out), (r, out))
-check("  its voice is kept for this session's next call", json.loads(ui.LITE_VOICES.read_text()).get(CC) == ran[sid])
+check("  its voice isn't carried to a next call (it's deleted with the call)", not hasattr(ui, "LITE_VOICES"))
 check("  and state shows nothing live", ui.LITE_GET["/api/lite/state"]({"cc": CC}).get("live") is None)
 (ui.SESSIONS / sid / "card.json").write_text(json.dumps({"points": [], "gist": "A quick sound check: the agent could hear you.",
                                                           "duration_s": 60, "memory": "pending"}))
@@ -794,7 +794,8 @@ ui.transport.for_config = real_cfg
 check("  a meeting, or no card yet: not offered", "error" in add({"session": "meeting-20200101-000000"}))
 check("end of a call that has ended: said so", "error" in ui.LITE_POST["/api/lite/call/end"]({"session": sid}))
 r = ui.LITE_POST["/api/lite/call"]({"cc": CC, "cwd": work})
-check("the next call: the same voice, carried on", talks[-1]["voice"]["from"] == ran[sid], talks[-1]["voice"])
+check("the next call: a voice of its own, from nothing earlier (the session's summary says what it did)",
+      "from" not in talks[-1]["voice"] and talks[-1]["voice"].get("handoff") is True, talks[-1]["voice"])
 ui.lite_ended(r["session"])
 
 # ---------------------------------------------------------------- the voice ends the call

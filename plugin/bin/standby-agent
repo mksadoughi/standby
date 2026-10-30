@@ -179,6 +179,7 @@ PUSH_SECONDS = float(os.environ.get("STANDBY_PUSH_SECONDS", 60))  # ...or this l
 PUSH_MIN_GAP = float(os.environ.get("STANDBY_PUSH_MIN_GAP", 20))
 VOICE_TAG = "[VOICE] "    # a question asked in voice mode starts with this
 WORDS_TAG = "[WORDS] "    # Standby's own word-fixes pass, asked as a question: counted as "words" in usage
+FORGET_TAG = "[FORGET]"   # an ended call's conversations deleted (forget_call), asked as a question: never Claude's
 VOICE_RULES = ("[VOICE] Spoken by the user in voice mode, a live conversation: your reply is read aloud. "
                "Make the whole reply a short, clean conversational message, the way you would say it to "
                "them in person: one to three short sentences, answer first, plain words. Nowhere in the "
@@ -1760,10 +1761,14 @@ class ClaudeSession(object):
         if not os.path.exists(CLAUDE):
             raise RuntimeError("no claude binary at %s" % CLAUDE)
         sid, self.fresh = session_uuid(self.key)
+        # Standby's own, made for this session (never the user's own conversation, attached): noted with
+        # it, so a call's go when the call does (forget_call)
         if self.kind == "meeting" and self.fresh and fork_of(self.session):
-            sbagents.note_created(sid, "copy")    # a call's or a meeting's copy: Standby's own, never an agent
-        if self.kind == "voice" and self.fresh and voice_meta(self.session):
-            sbagents.note_created(sid, "voice")   # an agent's voice: Standby's own, to tidy or delete
+            sbagents.note_created(sid, "copy", self.session)    # a call's or a meeting's copy, never an agent
+        elif self.kind == "meeting" and self.fresh and not attached(self.session):
+            sbagents.note_created(sid, "engine", self.session)  # its own Claude Code (a call's: the words pass)
+        if self.kind == "voice" and self.fresh:
+            sbagents.note_created(sid, "voice", self.session)   # its voice
         # An attached conversation without Standby's instructions gets them in its next
         # turn; edited ones too, from the next start, as a session of its own gets them.
         self.owed = rules_owed(self.session, sid) if self.kind == "meeting" else None
@@ -2179,7 +2184,7 @@ class VoiceTurn(ClaudeSession):
         argv = build_argv(self.session, self.asks, True, self.sid, stream=True, kind="voice", turn=True,
                           parent=self.parent)
         self.dirs = voice_shape(self.session)
-        sbagents.note_created(self.sid, "voice")  # Standby's own: the forks that aren't kept are deleted
+        sbagents.note_created(self.sid, "voice", self.session)  # Standby's own: deleted when not kept, and with the call
         self.bare = "--bare" in argv
         if sbtrace.enabled(self.session):
             sp = argv[argv.index("--append-system-prompt") + 1] if "--append-system-prompt" in argv else None
@@ -2267,6 +2272,44 @@ def promote(session):
             with open(uuid_path("%s.voice" % session), "w") as fh:
                 fh.write(cv.head + "\n")             # the conversation the Mac carries to the agent's next call
         return moved
+
+
+def a_call(session):
+    """A call's session, its meta there or not (a call's id is "talk-...", as the Mac names it)."""
+    return is_talk(session) or session.startswith("talk-")
+
+
+def forget_call(session):
+    """A call that ended: every conversation Standby made for it (its voice, the voice's turns, its own
+    Claude Code's, as the words pass asked it) stopped and deleted for good, so none is left in the user's
+    Claude Code list. Only the ones noted as made for it (sbagents.made_for); never the user's own, never
+    the live session's. Asked by the Mac once the call's last pass is done (FORGET_TAG)."""
+    if session == "none" or session == current_session() or not a_call(session):
+        return {"error": "not an ended call"}
+    with _SPARES_LOCK:
+        spare = _SPARES.pop(session, None)
+        _CALLS.pop(session, None)
+    if spare is not None:
+        spare.stop(hard=True)
+    for key in [k for k in list(_LIVE_SESSION) if k[0] == session]:
+        _LIVE_SESSION.pop(key).stop()             # its process gone first: it writes no transcript again
+    gone, kept = 0, 0
+    for sid in sbagents.made_for(session):
+        r = sbagents.delete(sid)
+        gone, kept = gone + bool(r.get("ok")), kept + bool(r.get("error"))
+    for key in (session, "%s.voice" % session):
+        _remove(uuid_path(key))                  # a later ask starts afresh, never resumes one deleted
+    sys.stderr.write("standby-agent: call %s forgotten: %d of its conversations deleted%s\n"
+                     % (session, gone, ", %d kept (in use)" % kept if kept else ""))
+    return {"ok": True, "deleted": gone}
+
+
+def forget_ended_calls():
+    """At the server's start: the calls that ended while nothing was there to delete their conversations
+    (the app quit before the call's last pass) have them deleted now."""
+    for session in sbagents.made_sessions():
+        if session != current_session() and a_call(session):
+            forget_call(session)
 
 
 def _forget(sid):
@@ -3800,6 +3843,10 @@ def cmd_serve(args):
     os.replace(PIDFILE + ".tmp", PIDFILE)
     backend = Backend(args, args.model)
     voice = Voice(args, backend, getattr(args, "voice_model", None) or args.model)
+    try:
+        forget_ended_calls()
+    except Exception as exc:
+        sys.stderr.write("standby-agent: deleting ended calls' conversations: %r\n" % exc)
     stamp, looked, waited_for = code_stamp(), time.time(), None
     shown = lambda m: m if model_for(m) == m else "%s (%s is not available)" % (model_for(m), m)
     sys.stderr.write("standby-agent: serving %s (engine=%s, meeting agent %s, voice %s, code of %s)\n"
@@ -3878,6 +3925,10 @@ def cmd_serve(args):
                 voiced = question.startswith(VOICE_TAG)       # an older client's voice question
                 if voiced:
                     question = question[len(VOICE_TAG):].strip()
+                if question == FORGET_TAG:                     # an ended call: its conversations go
+                    with backend.lock:
+                        _answer(apath, json.dumps(forget_call(asked)))
+                    continue
                 words = question.startswith(WORDS_TAG)        # Standby's own pass, not the user's question
                 if words:
                     question = question[len(WORDS_TAG):].strip()

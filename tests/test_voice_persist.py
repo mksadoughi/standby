@@ -146,6 +146,39 @@ eng.stop(hard=True)
 copy_sid = open(agent.uuid_path(S3)).read().strip()
 check("a call's copy is noted as a helper as it's made", copy_sid in sbagents.helpers())
 
+print("a call's own conversations go when it's over")
+S4 = "talk-20261016-1500"
+meta(S4)
+eng = agent.ClaudeSession(S4, "sonnet", kind="meeting")          # its own Claude Code (the words pass's)
+eng.start()
+eng.stop(hard=True)
+own_sid = open(agent.uuid_path(S4)).read().strip()
+TURN = "9" * 8 + "-4444-4444-8444-444444444444"
+sbagents.note_created(TURN, "voice", S4)                          # one of its voice's turns
+for x in (own_sid, TURN):
+    conv(x, "Claude Code · voice")
+(home / ".standby" / "agent" / (S4 + ".voice.uuid")).write_text(TURN + "\n")
+check("its own Claude Code is noted as made for it, never the user's attached one",
+      sbagents.made_for(S4) == [own_sid, TURN] and OWN not in sbagents.created(), sbagents.made_for(S4))
+(home / ".standby" / "live" / "CURRENT").write_text(S4 + "\n")
+check("  live: never deleted", agent.forget_call(S4).get("error") and (proj2 / (TURN + ".jsonl")).exists())
+(home / ".standby" / "live" / "CURRENT").write_text("")
+r = agent.forget_call(S4)
+check("  ended: each deleted, transcript and all, and nothing left that would resume one",
+      r == {"ok": True, "deleted": 2} and not (proj2 / (own_sid + ".jsonl")).exists() and not (proj2 / (TURN + ".jsonl")).exists()
+      and not os.path.exists(agent.uuid_path(S4)) and not os.path.exists(agent.uuid_path(S4 + ".voice"))
+      and sbagents.made_for(S4) == [], r)
+check("  the user's own and everything not made for it stay",
+      all((proj2 / (x + ".jsonl")).exists() for x in (REAL, OWN, VNOTED, COPY, MADE)), sorted(os.listdir(proj2)))
+check("  a meeting is never one", agent.forget_call("meeting-20261016-0901").get("error") and (proj2 / (MADE + ".jsonl")).exists())
+S5 = "talk-20261016-1600"
+LEFT = "8" * 8 + "-5555-4555-8555-555555555555"
+conv(LEFT, "Claude Code · voice")
+sbagents.note_created(LEFT, "voice", S5)                          # a call that ended while the app was gone
+agent.forget_ended_calls()
+check("at the server's start: a call that ended unforgotten has them deleted then", not (proj2 / (LEFT + ".jsonl")).exists()
+      and (proj2 / (REAL + ".jsonl")).exists())
+
 print()
 print("%d failed" % len(fails) if fails else "ALL PASS")
 sys.exit(1 if fails else 0)

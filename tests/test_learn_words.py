@@ -141,7 +141,15 @@ ui.learn_tick(now=NOW, start=sync)
 state["live"] = None
 ui.learn_tick(now=NOW, start=sync)
 ui.learn_tick(now=NOW + 61, start=sync)
-check("a talk ends, with questions in it: asked too", asked[-1] == (ui.WORDS_TAG + vocabulary.WORDS_QUESTION, "t1"), asked[-1:])
+check("a talk ends, with questions in it: asked too, then its own conversations deleted (none left in Claude Code's list)",
+      asked[-2:] == [(ui.WORDS_TAG + vocabulary.WORDS_QUESTION, "t1"), (ui.FORGET_TAG, "t1")], asked[-2:])
+session("t2", kind="talk", me=1)
+state["live"] = "t2"
+ui.learn_tick(now=NOW, start=sync)
+state["live"] = None
+ui.learn_tick(now=NOW, start=sync)
+ui.learn_tick(now=NOW + 61, start=sync)
+check("  a talk with too little said: not asked, its conversations deleted all the same", asked[-1:] == [(ui.FORGET_TAG, "t2")], asked[-2:])
 
 # Not asked: Claude off (nothing ever left the Mac), too little said, a pass that failed.
 n = len(asked)
@@ -151,7 +159,7 @@ ui.learn_tick(now=NOW, start=sync)
 state["live"] = None
 ui.learn_tick(now=NOW, start=sync)
 ui.learn_tick(now=NOW + 61, start=sync)
-check("Claude off: never asked, live or ended", len(asked) == n, asked[n:])
+check("Claude off: never asked, live or ended (a meeting's conversations are kept)", len(asked) == n, asked[n:])
 session("short", lines=5)
 state["live"] = "short"
 ui.learn_tick(now=NOW, start=sync)

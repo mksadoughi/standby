@@ -621,14 +621,15 @@ def _created_path():
     return os.path.join(ROOT, "agent", "created.txt")
 
 
-def note_created(sid, kind="agent"):
+def note_created(sid, kind="agent", session=None):
     """A conversation Standby started here: the only kind it will ever delete. `kind`: "agent"
-    (one the user asked for), or one of Standby's own helpers ("voice", an agent's voice;
-    "copy", a call's or a meeting's copy), never offered as an agent."""
+    (one the user asked for), or one of Standby's own helpers ("voice", a call's voice or one of its
+    turns; "copy", a call's or a meeting's copy; "engine", a session's own Claude Code), never offered
+    as an agent. `session`: the Standby session it was made for, so it goes when that call does."""
     os.makedirs(os.path.dirname(_created_path()), exist_ok=True)
     with open(_created_path(), "a") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX)
-        fh.write("%s %s\n" % (sid, kind))
+        fh.write("%s %s%s\n" % (sid, kind, " " + session if session else ""))
 
 
 def _created_rows():
@@ -641,6 +642,16 @@ def _created_rows():
 
 def created():
     return set(row[0] for row in _created_rows())
+
+
+def made_for(session):
+    """The conversations Standby noted making for that Standby session, oldest first."""
+    return [row[0] for row in _created_rows() if len(row) > 2 and row[1] != "agent" and row[2] == session]
+
+
+def made_sessions():
+    """The Standby sessions that have conversations noted as made for them."""
+    return sorted(set(row[2] for row in _created_rows() if len(row) > 2 and row[1] != "agent"))
 
 
 def helpers():

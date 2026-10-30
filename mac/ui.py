@@ -2556,6 +2556,7 @@ def suggest_for(sid, chat):
 
 VOICE_TAG = "[VOICE] "       # standby-agent answers these to be heard (see voice.py)
 WORDS_TAG = "[WORDS] "       # Standby's own word-fixes pass: standby-agent counts it as "words" in Settings > Usage
+FORGET_TAG = "[FORGET]"      # an ended call's conversations deleted: standby-agent's forget_call, never asked of Claude
 VOICE = {}                    # sid -> voice.VoiceSession
 
 
@@ -3144,7 +3145,6 @@ MSG["on_delivered"], MSG["on_dropped"] = card_delivered, card_dropped
 # progress back (lite_progress), and the voice says how it ended when the conversation is quiet.
 
 LITE_CALLS = {}           # live call session -> {cc, cwd, running, doing, said, turn}
-LITE_VOICES = ROOT / "lite" / "voices.json"   # Claude Code session id -> its voice's conversation
 HANDOFF_TAG = "[HANDOFF]"                     # standby-agent's answer for work the session does
 CANCEL_RE = re.compile(r"\[CANCEL\s*#?(\d+)\]")    # the voice stops a task of the call's, by its number
 
@@ -3340,10 +3340,6 @@ def cc_signed_in():
         return True
 
 
-def _lite_voices():
-    return read_json(LITE_VOICES) or {}
-
-
 def _cc_work_dirs(cc, folder=None, limit=12):
     """Where a Claude Code session works: the folders its transcript shows it in (its cwd, and the projects of
     the files it read or changed), each as its project's top (the git root, else the file's folder), and the
@@ -3411,7 +3407,9 @@ def lite_call(b):
     cwd = str(b.get("cwd") or "").strip()
     folder = cwd if cwd and os.path.isdir(os.path.expanduser(cwd)) else None
     # Who the voice is and what Claude Code is to it: standby-agent's call prelude, with the folder.
-    voice = {"from": _lite_voices().get(cc), "name": "Claude Code · voice", "handoff": True, "folder": folder}
+    # Its voice starts afresh each call (what the session did comes as its summary) and is deleted when
+    # the call is over (forget_call): never a conversation left in the user's Claude Code list
+    voice = {"name": "Claude Code · voice", "handoff": True, "folder": folder}
     gist, gist_at, current = lite_gist(cc)
     if gist:                                       # what the session has been working on: known from the start
         voice["gist"], voice["gist_at"] = gist, gist_at
@@ -3918,18 +3916,12 @@ def lite_call_end(b):
 
 def lite_ended(sid):
     """A Claude Code session's call stopped, however (End, Escape, the orb, a quiet while, Quit):
-    its voice is kept for that session's next call, and the mod is told."""
+    the mod is told."""
     c = LITE_CALLS.pop(sid, None) if sid else None
     if c is None:
         return
-    ran = voice_ran(sid)
-    if ran:
-        voices = _lite_voices()
-        voices[c["cc"]] = ran
-        LITE_VOICES.parent.mkdir(parents=True, exist_ok=True)
-        write_json(LITE_VOICES, voices)
     _lite_out(c["cc"], {"call": "state", "session": sid, "phase": "ended"})
-    log("lite: call %s ended%s" % (sid, ", its voice kept" if ran else ""))
+    log("lite: call %s ended" % sid)
 
 
 def lite_mute(b):
@@ -5290,6 +5282,21 @@ def learn_words(sid, why):
         log("learning words from %s: %r" % (sid, exc))
     finally:
         _LEARNING.discard(sid)
+        if why == "end":
+            forget_call(sid)
+
+
+def forget_call(sid):
+    """An ended call's own Claude Code conversations (its voice, the voice's turns, the words pass's),
+    deleted once its last pass is done, so none is left in the user's Claude Code list. A meeting's
+    are kept: they answer about it later."""
+    if session_info(sid)["kind"] != "talk":
+        return
+    try:
+        import agentctl
+        log("call %s: its own conversations: %s" % (sid, agentctl.ask(FORGET_TAG, err=None, session=sid)))
+    except Exception as exc:
+        log("call %s: deleting its own conversations: %r" % (sid, exc))
 
 
 def learn_tick(now=None, start=None):
@@ -5312,6 +5319,8 @@ def learn_tick(now=None, start=None):
         if learn_due(sid, "end", now):
             _LEARNING.add(sid)
             start(learn_words, sid, "end")
+        else:
+            start(forget_call, sid)                # nothing to learn: its conversations go now
     if live and learn_due(live, "periodic", now):
         _LEARNING.add(live)
         start(learn_words, live, "periodic")
