@@ -3591,7 +3591,7 @@ def _lite_cancel(sid, c, tid):
     return True
 
 
-# Back from a pause where something waited (the bell showed): one line, a fact for the voice's own judgement
+# Back from a pause where something waited (the red dot showed): one line, a fact for the voice's own judgement
 LITE_RESUMED = "[RESUMED] They're back. While paused, they saw something was waiting."
 
 
@@ -3728,7 +3728,7 @@ def _lite_tell(sid):
         quiet = None
         while sid in LITE_CALLS and _lite_untold(c, sid):
             if call_muted(sid):
-                c["rang"], quiet = True, None      # the bell shows: they'll know it's there
+                c["rang"], quiet = True, None      # the red dot shows: they'll know it's there
             elif _lite_user_busy(sid):
                 quiet = None
             else:

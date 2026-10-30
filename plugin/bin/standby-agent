@@ -241,7 +241,7 @@ RESULT_TURN = "[RESULT] Not from the user: the work you took deeper %s. What it 
 RESULT_LATER = ("[RESULT] Background, not from the user: the work you took deeper %s while they were "
                 "talking. What they said comes first; this can wait for a natural moment. What it came to:\n<<<\n%s\n>>>")
 RESULT_IN_TURN = re.compile(r"\[RESULT(?: ([a-z]+))?\]\s*(.*?)\n\[END RESULT\]\n?", re.S)
-# Back from a pause where something waited (the bell): one turn, "[RESUMED] …", with what came back meanwhile
+# Back from a pause where something waited (the red dot): one turn, "[RESUMED] …", with what came back meanwhile
 # as information; not the user's words, and nothing handed on from it (the Mac's _lite_tell)
 RESUMED_TAG = "[RESUMED]"
 QUIET_TAG = "[QUIET]"     # the voice chose to say nothing now

@@ -137,14 +137,10 @@ transition:width .32s cubic-bezier(.23,1,.32,1),height .32s cubic-bezier(.23,1,.
 /* Claude can't be reached: no words, the orb grey with a small red dot at its edge; the line on hover */
 .cmp.down .orb{filter:grayscale(1);background:var(--c-down)}
 .cmp.down .orbs:after{content:"";position:absolute;top:4%;right:4%;width:24%;height:24%;border-radius:50%;background:var(--c-rec)}
-/* a paused call with finished work held for it: a small bell at the orb's edge (the user), in the
-   same red, with a light rim so it reads on the grey orb, until Resume says it */
-.cmp.waiting .orbs:after{content:"";position:absolute;top:-1%;right:-1%;width:32%;height:32%;background:var(--c-rec);
--webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6v-5a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-1.7 1.7a.75.75 0 0 0 .5 1.3h16.4a.75.75 0 0 0 .5-1.3z'/%3E%3C/svg%3E") center/contain no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6v-5a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-1.7 1.7a.75.75 0 0 0 .5 1.3h16.4a.75.75 0 0 0 .5-1.3z'/%3E%3C/svg%3E") center/contain no-repeat;
-filter:drop-shadow(0 0 1.2px #fff) drop-shadow(0 0 .6px #fff)}
-/* tilted, as a bell ringing (the user, 2026-10-23), its top leaning out from the mini window */
-.cmp.waiting .orbs:after{transform:rotate(15deg)}
-body:not(.r) .cmp.down .orbs:after{right:auto;left:4%}body:not(.r) .cmp.waiting .orbs:after{right:auto;left:-1%;transform:rotate(-15deg)}
+/* a paused call with finished work held for it: a plain filled red circle at the orb's edge, where the bell was
+   and its size (the user, 10/30: not the bell), until Resume says it */
+.cmp.waiting .orbs:after{content:"";position:absolute;top:4%;right:4%;width:22%;height:22%;border-radius:50%;background:var(--c-rec)}
+body:not(.r) .cmp.down .orbs:after{right:auto;left:4%}body:not(.r) .cmp.waiting .orbs:after{right:auto;left:4%}
 /* Standby's voice fetched the first time: a thin ring fills around the orb; no words, its percent on hover */
 .cmp.prep .orbs:before{content:"";position:absolute;inset:-7px;border-radius:50%;
 background:conic-gradient(var(--c-ring) calc(var(--pp,25) * 1%),rgba(80,70,229,.14) 0);

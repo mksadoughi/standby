@@ -115,10 +115,10 @@ const ORB_CHECKS = `
   STATE = LIVE({ voice: { state: "listening", holding: true } });
   await fresh();
   ok("  hold on: the orb holds still", els.cmp.className.includes("holding"), els.cmp.className);
-  // Paused, with work that finished meanwhile held for Resume: a bell on the paused orb, until it is said.
+  // Paused, with work that finished meanwhile held for Resume: a red dot on the paused orb, until it is said.
   STATE = LIVE({ voice: { state: "muted", muted: true, waiting: true } });
   await fresh();
-  ok("paused with finished work waiting: the bell on the mini window, and the tip says a click hears it", els.cmp.className.includes("waiting")
+  ok("paused with finished work waiting: the red dot on the mini window, and the tip says a click hears it", els.cmp.className.includes("waiting")
      && els.talk.title === "Paused. Something's waiting: click to resume and hear it", [els.cmp.className, els.talk.title]);
   // A press that moved: the panel dragged the window and said so; its release is no click.
   const fire = kind => { const e = { stopped: false, stopPropagation() { this.stopped = true }, preventDefault() {} };
@@ -131,10 +131,10 @@ const ORB_CHECKS = `
   ok("  the click goes on with the call", calls.some(c => c[0] === "/api/voice" && c[1].includes('"unmute"')), calls);
   STATE = LIVE({ voice: { state: "muted", muted: true } });
   await fresh();
-  ok("  paused with nothing waiting: no bell", !els.cmp.className.includes("waiting") && els.talk.title === "Paused. Click to go on with the call", [els.cmp.className, els.talk.title]);
+  ok("  paused with nothing waiting: no dot", !els.cmp.className.includes("waiting") && els.talk.title === "Paused. Click to go on with the call", [els.cmp.className, els.talk.title]);
   STATE = LIVE({ voice: { state: "listening", waiting: true } });
   await fresh();
-  ok("  not paused: no bell, whatever the flag", !els.cmp.className.includes("waiting"), els.cmp.className);
+  ok("  not paused: no dot, whatever the flag", !els.cmp.className.includes("waiting"), els.cmp.className);
 
   ok("in the panel, hover is the panel's own: no page mouseover (WebKit replays one at a stale spot, and the pill never went)",
      !(els.cmp.on || []).includes("mouseover") && !(els.cmp.on || []).includes("mouseleave"), els.cmp.on);
