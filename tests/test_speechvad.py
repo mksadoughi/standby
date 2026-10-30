@@ -254,6 +254,22 @@ if have:
     check("  speech the energy VAD hardly hears (0.1 s voiced) stops it too", wait(lambda: eng.halts > halts))
     Script.talking, Script.frames, Script.voiced = None, None, 0.0
     sb._stop.set(); th.join(timeout=PATIENCE)
+    # Listening (outdoors: a VM call, 2026-10-30): a car or a bird opens an utterance, later dropped as
+    # noise; meanwhile it is no one talking, so the orb doesn't light and Claude's answer doesn't wait.
+    th, sdir = session()
+    live = lambda: json.loads((sdir / "live.json").read_text()) if (sdir / "live.json").exists() else {}
+    (sdir / "dictate").write_text("voice 34\n")
+    wait(lambda: (live().get("voice") or {}).get("mode") == "voice")
+    wait(lambda: sb.Channel.speech_vad is not None, 5)
+    Script.frames, Script.utt_start, Script.voiced, Script.talking = frames(noise(1.0)), 7, 0.8, "a car"
+    time.sleep(0.6)
+    you = live().get("voice") or {}
+    check("listening: a loud sound's utterance is not the user talking, and the orbs' level is 0",
+          live().get("speaking") is True and you.get("you_speaking") is False and you.get("level") == 0.0, you)
+    Script.frames, Script.talking = frames(spoken(speech("Can you hear me now?"))), "speech"
+    check("  speech is", wait(lambda: (live().get("voice") or {}).get("you_speaking") is True, PATIENCE), live().get("voice"))
+    Script.talking, Script.frames, Script.voiced = None, None, 0.0
+    sb._stop.set(); th.join(timeout=PATIENCE)
     sb.Channel.speech_vad = None
 
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))

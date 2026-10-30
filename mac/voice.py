@@ -859,6 +859,13 @@ class VoiceSession(object):
         """The user is in an utterance now (the recorder's word, before any of it is decoded)."""
         return self._you_speaking()
 
+    @staticmethod
+    def _level(st):
+        """The orbs' level: the recorder's for a mic someone is talking on (a sound is 0), or an
+        older recorder's level of everything."""
+        voice = st.get("voice") or {}
+        return float(voice["level"] if "level" in voice else st.get("level", 0.0))
+
     def _you_speaking(self):
         """The user's mic is in an utterance, as last read. A recorder that does
         not say (an older one) never makes Claude wait: its "speaking" is any
@@ -950,7 +957,7 @@ class VoiceSession(object):
                 return
             self._follow_dictation()
             if self.state == "listening":
-                self.level = float(st.get("level", 0.0))
+                self.level = self._level(st)
                 self.you = self._caption(heard, st)
             else:
                 self.level = 0.0
@@ -1521,7 +1528,7 @@ class VoiceSession(object):
             self.holding = phase == "waiting"
             if phase in ("paused", "stopped", "waiting"):
                 self.state, self.claude = ("muted" if self.muted else "listening"), ""
-                self.level = float(st.get("level", 0.0))
+                self.level = self._level(st)
             elif self.speaker.speaking:
                 self._follow_speaker(q)
                 self.state, self.claude = "speaking", self.speaker.current

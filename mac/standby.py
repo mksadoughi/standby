@@ -1792,6 +1792,19 @@ class Channel(object):
             heard[1] = len(utt)
         return heard[2].speechy
 
+    TALK_SPEECH = 0.15    # seconds of speech by the speech model: an open utterance is the user talking
+
+    @property
+    def talking(self):
+        """The open utterance is someone talking, not a sound: TALK_SPEECH of it speech by the
+        speech model when it is loaded, else loudness, as before. Outdoors, cars and birdsong
+        opened utterances (later dropped as noise) and each read as the user talking: the orb
+        lit and Claude's answer waited (a VM call, 2026-10-30). ESC-50's traffic, birds, wind,
+        rain and sirens gave at most 0.06 s; speech that opened an utterance, 0.15 s or more."""
+        if not self.speaking:
+            return False
+        return self.speech_vad is None or self.speechy >= self.TALK_SPEECH
+
     @property
     def onset(self):
         """How much of the open utterance counts toward talking over Claude: speech by the
@@ -3954,8 +3967,10 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
             st["voice"] = {"mode": dictation["mode"], "turn": dictation["turn"],
                            "heard": voice["turns"].heard if voice["turns"] else "",
                            # the user's mics only: a meeting's voices are not the user going on
-                           "you_speaking": any(c.speaking and (not ident.ignoring_others(c.speaker) or ident.open_whose(c) != "other")
-                                               for c in mics())}
+                           "you_speaking": any(c.talking and (not ident.ignoring_others(c.speaker) or ident.open_whose(c) != "other")
+                                               for c in mics()),
+                           # the orbs' "hearing you": the level of a mic someone is talking on, never a sound's
+                           "level": round(max([c.level for c in mics() if c.talking] or [0.0]), 4)}
             if voice["io"] is not None:               # this recorder plays Claude's voice (VoiceIO)
                 st["voice"].update(voice["io"].status())
             elif voice["half"]:                       # it could not, or stopped: the app's voice speaks
