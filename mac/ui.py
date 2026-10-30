@@ -4254,7 +4254,8 @@ def close_settings_window():
 
 
 # Standby's setup window before a first call or meeting (firstuse): while the mic, or an online meeting's
-# sound, is still undecided, the start is held and the window asks, one step at a time; once all is allowed
+# sound, is still undecided, the start is held and the window asks for both, each on its own row; once both are
+# allowed (or the sound skipped)
 # Standby starts it itself, and the band (waiting on /api/lite/state) carries on as for any start. Allowing
 # the meeting's sound ends in macOS's Quit & Reopen: the held start is in SETUP_FILE, and the next launch
 # takes it up. Allowed already: no window, no wait.
@@ -4305,7 +4306,9 @@ def setup_hold(kind, body):
                                 _sound_skipped_at(), time.time())
         if not steps:
             return None
-        held = {"kind": kind, "cc": cc, "body": dict(body), "steps": steps, "pressed": [], "skip": False,
+        rows = list(firstuse.ROWS)
+        held = {"kind": kind, "cc": cc, "body": dict(body), "steps": rows, "pressed": [],
+                "skip": firstuse.skipped(_sound_skipped_at(), time.time()),
                 "phase": "open", "error": None, "at": time.time(), "id": uuid.uuid4().hex[:8]}
         SETUP["held"] = held
         _save_held(held)
@@ -4381,7 +4384,7 @@ def _setup_watch(held):
     if held["phase"] != "starting":
         return
     body = dict(held["body"], setup_done=True)
-    if held["skip"] and firstuse.can_skip(held["steps"]):
+    if held["kind"] == "meeting" and held["skip"] and setup_states([firstuse.SOUND])[firstuse.SOUND] != "allowed":
         body["capture"] = "mic"                        # skipped: this meeting records the mic only
     log("setup: done, starting the %s" % held["kind"])
     try:
@@ -4404,7 +4407,7 @@ def setup_view():
     if not held:
         return {"gone": True}
     states = setup_states(held["steps"])
-    return firstuse.view(held["kind"], held["steps"], states, held["pressed"], held["skip"],
+    return firstuse.view(held["kind"], held["steps"], states, held["skip"],
                          "starting" if held["phase"] in ("starting", "started") else held["phase"], held["error"])
 
 
@@ -4429,10 +4432,10 @@ def setup_act(b):
     key = firstuse.SOUND if do.endswith("sound") else firstuse.MIC
     if do == "skip_sound":
         if not firstuse.can_skip(held["steps"]):
-            return {"error": "This meeting records only the meeting's sound"}
+            return {"error": "Nothing to skip"}
         SOUND_SKIPPED.write_text("%d\n" % time.time())
         held["skip"] = True
-        log("setup: the meeting's sound skipped: this meeting records the mic only")
+        log("setup: the meeting's sound skipped: meetings record the mic only")
         return {"ok": True}
     if key not in held["pressed"]:
         held["pressed"].append(key)

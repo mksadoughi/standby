@@ -462,23 +462,20 @@ def companion_page():
 
 
 # The setup window before a first call or meeting (mac/firstuse.html), each state as firstuse.view makes it.
-SETUP_SCENES = [("call", "call", ["mic"], {"mic": "ask"}, [], False, "open"),
-                ("call-refused", "call", ["mic"], {"mic": "denied"}, ["mic"], False, "open"),
-                ("call-done", "call", ["mic"], {"mic": "allowed"}, [], False, "starting"),
-                ("call-failed", "call", ["mic"], {"mic": "allowed"}, [], False, "failed"),
-                ("meeting-1", "meeting", ["mic", "sound"], {"mic": "ask", "sound": "ask"}, [], False, "open"),
-                ("meeting-2", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "ask"}, [], False, "open"),
-                ("meeting-2-asked", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "denied"}, ["sound"], False, "open"),
-                ("meeting-done", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "allowed"}, [], False, "starting"),
-                ("meeting-skipped", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "ask"}, [], True, "starting"),
-                ("meeting-failed", "meeting", ["mic", "sound"], {"mic": "allowed", "sound": "allowed"}, [], False, "failed")]
+SETUP_SCENES = [("start", "call", {"mic": "ask", "sound": "ask"}, False, "open"),
+                ("mic-allowed", "call", {"mic": "allowed", "sound": "ask"}, False, "open"),
+                ("mic-refused", "call", {"mic": "denied", "sound": "ask"}, False, "open"),
+                ("sound-refused", "meeting", {"mic": "allowed", "sound": "denied"}, False, "open"),
+                ("done", "call", {"mic": "allowed", "sound": "allowed"}, False, "starting"),
+                ("skipped", "meeting", {"mic": "allowed", "sound": "ask"}, True, "starting"),
+                ("failed", "meeting", {"mic": "allowed", "sound": "allowed"}, False, "failed")]
 
 
 def setup_page(scene):
     sys.path.insert(0, str(ROOT / "mac"))
     import firstuse
-    _, kind, steps, states, pressed, skip, phase = next(x for x in SETUP_SCENES if x[0] == scene)
-    view = firstuse.view(kind, steps, states, pressed, skip, phase, ("Standby is busy with another call or meeting: end it first" if kind == "call" else "Your Mac didn't start")
+    _, kind, states, skip, phase = next(x for x in SETUP_SCENES if x[0] == scene)
+    view = firstuse.view(kind, firstuse.ROWS, states, skip, phase, ("Standby is busy with another call or meeting: end it first" if kind == "call" else "Your Mac didn't start")
                          if phase == "failed" else None)
     html = (ROOT / "mac" / "firstuse.html").read_text()
     fake = "<script>window.fetch = async p => ({ json: async () => (%s) })</script>" % json.dumps(view)

@@ -1,30 +1,25 @@
-"""Standby's setup window before a first call or meeting: what a start needs from macOS, in order,
-and what the window shows.
+"""Standby's setup window before a first call or meeting ("Set up Standby"): what a start needs from
+macOS, and what the window shows.
 
 A call needs the microphone; an online meeting also needs the meeting's sound (Screen & System
-Audio Recording). While one of them is still undecided, the start waits and the window asks, one
-step at a time, as dictation's setup does: macOS's own prompt only on the step's button, a tick as
-each is allowed, then the call or meeting starts by itself. Allowed already: no window, no wait.
-Plain functions; mac/ui.py holds the start and runs the window.
+Audio Recording). While what the start needs is still undecided, the start waits and the window
+asks for both, once: each its own row, either first, macOS's own prompt only on the row's button,
+a tick as each is allowed (or the sound skipped), then the call or meeting starts by itself.
+Allowed already: no window, no wait. Plain functions; mac/ui.py holds the start and runs the window.
 """
 
 MIC, SOUND = "mic", "sound"
 SKIP_DAYS = 30                 # the meeting's sound skipped: not asked again for this long
 HELD_FOR = 15 * 60             # the most a start waits for its setup (and is taken up after a Quit & Reopen)
 
-NAMES = {MIC: ("Microphone", "So Standby can hear you on calls and in meetings."),
-         SOUND: ("Meeting sound", "So Standby can hear the other people in an online meeting. "
-                 "It takes only the sound, never your screen.")}
-TITLES = {"call": "Before your first call", "meeting": "Set up meetings"}
+ROWS = [MIC, SOUND]               # the window always asks for both: a first call also offers the meeting's sound
+
+NAMES = {MIC: ("Microphone", "Standby can hear you on calls and in meetings."),
+         SOUND: ("Meeting sound", "Hears others in online meetings. macOS mentions the screen, "
+                 "but Standby takes only the sound.")}
+TITLE, SUB = "Set up Standby", "Two things for macOS to allow, once."
 DONE = "You're all set"
-WAITING = "Waiting for you to turn it on"
-# the how-to under a step, **bold** as the page shows it
-MIC_HOW = "In the list, turn on **Standby**, then come back here."
-SOUND_HOW = ("macOS will ask you to quit and reopen Standby: choose **Quit & Reopen**. "
-             "Your %s starts right after.")
-SOUND_SETTINGS_HOW = ("In the list, turn on **Standby**. macOS then asks to quit and reopen it: choose "
-                      "**Quit & Reopen**. Your %s starts right after.")
-SKIP = "Skip: record only my mic"
+REFUSED = "Turn on Standby in System Settings, then come back."   # refused before: macOS won't ask again
 RETRY = "Try again from Claude Code."
 
 
@@ -54,12 +49,12 @@ def sound_state(permitted, heard=False, asked=False):
 
 
 def skipped(skipped_at, now):
-    """The meeting's sound was skipped (Skip: record only my mic) within SKIP_DAYS."""
+    """The meeting's sound was skipped (its row's Skip: meetings record the mic only) within SKIP_DAYS."""
     return bool(skipped_at) and 0 <= now - skipped_at < SKIP_DAYS * 86400
 
 
 def can_skip(steps):
-    """Skip is offered only where the mic still records: a meeting on both."""
+    """Skip is offered only where the mic still records: the window's two rows."""
     return MIC in steps and SOUND in steps
 
 
@@ -68,7 +63,8 @@ def settled(key, states, skip):
 
 
 def needed(kind, capture, states, skipped_at=None, now=0):
-    """The steps a start's window shows, or [] when nothing is undecided (no window, no wait)."""
+    """What a start is held for: its steps still undecided, or [] (no window, no wait). The window then
+    asks for all ROWS."""
     steps = steps_for(kind, capture)
     skip = can_skip(steps) and skipped(skipped_at, now)
     return steps if any(not settled(k, states, skip) for k in steps) else []
@@ -89,44 +85,34 @@ def cause(error):
     return text + "."
 
 
-def view(kind, steps, states, pressed=(), skip=False, phase="open", error=None):
-    """What the window shows: {title, sub, steps: [{key, n, name, why, state, button, do, note,
-    waiting, how, skip}], go, error, retry}. state: done, skipped, current or later; only the current step has
-    a button (do: what it asks Standby to do). phase: open, starting (all done: it's starting) or failed."""
+def view(kind, steps, states, skip=False, phase="open", error=None):
+    """What the window shows: {title, sub, steps: [{key, name, line, state, button, do, waiting, skip}],
+    go, error, retry, button}. A row's state: done, skipped or open; an open row has its button (do: what it
+    asks Standby to do) and, once macOS has been refused, the line on turning it on and the waiting spinner.
+    phase: open, starting (all done: it's starting) or failed."""
     what = "call" if kind == "call" else "meeting"
     skip = skip and can_skip(steps)
-    out, current = [], None
-    for n, key in enumerate(steps, 1):
-        name, why = NAMES[key]
-        st = {"key": key, "n": n, "name": name, "why": why, "state": "later", "button": None, "do": None,
-              "note": None, "waiting": False, "how": None, "skip": None}
+    out = []
+    for key in steps:
+        name, line = NAMES[key]
+        st = {"key": key, "name": name, "line": line, "state": "open", "button": None, "do": None,
+              "waiting": False, "skip": None}
         if states.get(key) == "allowed":
             st["state"] = "done"
         elif key == SOUND and skip:
-            st.update(state="skipped", note="Skipped: only your mic")
-        elif current is None:
-            current = st
-            st["state"] = "current"
-            sent = key in pressed
-            if key == MIC and states.get(key) == "ask":
-                st.update(button="Allow Microphone", do="allow_mic", note="macOS will ask: choose Allow.")
-            elif key == MIC:
-                st.update(button="Open System Settings", do="settings_mic", how=MIC_HOW,
-                          waiting=sent, note=WAITING if sent else None)
-            else:
-                ask = states.get(key) == "ask"
-                st.update(button="Allow" if ask else "Open System Settings", do="allow_sound" if ask else "settings_sound",
-                          how=(SOUND_HOW if ask else SOUND_SETTINGS_HOW) % what, waiting=sent,
-                          note=WAITING if sent else None, skip=SKIP if can_skip(steps) else None)
+            st["state"] = "skipped"
+        else:
+            ask = states.get(key) == "ask"
+            st.update(button="Allow" if ask else "Open Settings",
+                      do=("allow_" if ask else "settings_") + key, line=line if ask else REFUSED, waiting=not ask,
+                      skip="Skip" if key == SOUND and can_skip(steps) else None)
         out.append(st)
     if phase == "failed":
         return {"title": "Couldn't start your %s" % what, "sub": "", "steps": out, "go": None,
                 "error": cause(error), "retry": RETRY, "button": "Close"}
-    if current is None or phase == "starting":
+    if phase == "starting" or all(st["state"] != "open" for st in out):
         for st in out:
-            if st["state"] == "current":
-                st.update(state="done", button=None, do=None, note=None, waiting=False, how=None, skip=None)
-        return {"title": DONE, "sub": "", "steps": out, "go": "Starting your %s…" % what,
-                "error": None, "button": None}
-    return {"title": TITLES[what], "sub": "Your %s starts as soon as this is done." % what, "steps": out, "go": None,
-            "error": None, "button": None}
+            if st["state"] == "open":
+                st.update(state="done", button=None, do=None, waiting=False, skip=None)
+        return {"title": DONE, "sub": "", "steps": out, "go": "Starting your %s…" % what, "error": None, "button": None}
+    return {"title": TITLE, "sub": SUB, "steps": out, "go": None, "error": None, "button": None}

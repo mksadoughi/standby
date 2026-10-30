@@ -3,9 +3,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Standby</title>
 <style>
-/* Standby's setup window, before a first call or meeting (firstuse.py), in the look dictation's setup shares:
-   no title-bar text, a heading and one line, every step in one grouped list, the current one opened in place
-   with the window's one button; the start waits and goes by itself. */
+/* "Set up Standby", before a first call or meeting (firstuse.py), in the look dictation's setup shares: no
+   title-bar text, a heading and one line, one grouped list. Each row its name, one line and its control on the
+   right; either row first, a tick once done; the start waits and goes by itself. */
 :root{color-scheme:light dark;--bg:#ffffff;--group:#f5f5f7;--line:rgba(0,0,0,.08);--text:#1d1d1f;--muted:#6e6e73;--faint:#aeaeb2;
 --accent:#0a7aff;--on-accent:#ffffff;--ok:#30b158;--rec:#e5484d;--warn:#c4540a;--focus:rgba(10,122,255,.5)}
 @media (prefers-color-scheme:dark){:root{--bg:#1e1e20;--group:#2a2a2d;--line:rgba(255,255,255,.08);--text:#f2f2f4;--muted:#98989f;--faint:#5c5c62;
@@ -22,27 +22,20 @@ button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .sub{font-size:13px;color:var(--muted);margin:3px 0 0}
 .sub:empty{display:none}
 #steps{background:var(--group);border-radius:10px;margin-top:16px}
-.st{display:grid;grid-template-columns:20px 1fr;column-gap:12px;padding:10px 14px;border-top:.5px solid var(--line);align-items:center}
+.st{display:flex;align-items:center;gap:14px;padding:13px 14px;border-top:.5px solid var(--line)}
 .st:first-child{border-top:0}
-.st .n{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;
-  border:1.25px solid var(--faint);color:var(--faint)}
-.st .t{font-size:13px;color:var(--faint)}
-.st.done .n{border:0;background:var(--ok);color:#fff}.st.done .t{color:var(--text)}
-.st.skipped .t{color:var(--muted)}.st .s{grid-column:2;font-size:12px;color:var(--muted)}
-.st.cur{padding:14px 14px 16px;align-items:start}
-.st.cur .n{border-color:var(--accent);color:var(--accent)}.st.cur .t{color:var(--text);font-weight:600}
-.st .w{grid-column:2;font-size:12.5px;color:var(--muted);margin-top:2px}
-.st .how{grid-column:2;font-size:12.5px;color:var(--muted);margin-top:8px}.how b{color:var(--text);font-weight:600}
-.act{grid-column:2;display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap}
-.btn{height:24px;padding:0 12px;border-radius:6px;background:var(--accent);color:var(--on-accent);font-size:13px;font-weight:500;
+.st .tx{flex:1;min-width:0}
+.st .t{display:block;font-size:13.5px;font-weight:600}
+.st .w{display:block;font-size:12.5px;color:var(--muted);margin-top:1px}
+.ok{flex:none;width:22px;height:22px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center}
+.sk{flex:none;font-size:12.5px;color:var(--muted)}
+.btn{flex:none;height:24px;padding:0 13px;border-radius:6px;background:var(--accent);color:var(--on-accent);font-size:13px;font-weight:500;
   display:inline-flex;align-items:center;box-shadow:0 .5px 1px rgba(0,0,0,.15)}
 .btn:disabled{opacity:.6;cursor:default}
 .note{font-size:12px;color:var(--muted)}
-.lk{font-size:12.5px;color:var(--accent)}
-.wait{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
-.wait i{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--faint);border-top-color:var(--muted);display:inline-block;animation:spin 1s linear infinite}
+.wait{flex:none;width:14px;height:14px;border-radius:50%;border:1.6px solid var(--faint);border-top-color:var(--muted);animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.wait i{animation:none}}
+@media (prefers-reduced-motion:reduce){.wait{animation:none}}
 .err{font-size:13px;color:var(--warn);margin:14px 0 0}
 #retry{margin:2px 0 0;font-size:12.5px}
 .foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;min-height:24px}
@@ -68,7 +61,6 @@ const TOKEN = "__SB_TOKEN__";
 const $ = id => document.getElementById(id);
 const TICK = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const bold = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");     // the how-to's **Standby**
 async function api(path, body) {
   const r = await fetch(path, body === undefined ? { headers: { "x-standby-token": TOKEN } }
     : { method: "POST", headers: { "content-type": "application/json", "x-standby-token": TOKEN }, body: JSON.stringify(body) });
@@ -76,16 +68,14 @@ async function api(path, body) {
 }
 let busy = false, shown = "";
 function step(s) {
-  const done = s.state === "done";
-  let act = "";
-  if (s.button) act = (s.how ? '<span class="how">' + bold(s.how) + "</span>" : "")
-    + '<div class="act"><button type="button" class="btn" data-do="' + esc(s.do) + '">' + esc(s.button) + "</button>"
-    + (s.waiting ? '<span class="wait"><i></i>' + esc(s.note) + "</span>" : s.note ? '<span class="note">' + esc(s.note) + "</span>" : "")
-    + (s.skip ? '<button type="button" class="lk" data-do="skip_sound">' + esc(s.skip) + "</button>" : "") + "</div>";
-  else if (s.state === "skipped" && s.note) act = '<span class="s">' + esc(s.note) + "</span>";
-  return '<div class="st ' + ({ current: "cur", done: "done", skipped: "skipped" }[s.state] || "") + '" data-nodrag="' + (s.button ? "1" : "") + '">'
-    + '<span class="n">' + (done ? TICK : s.state === "skipped" ? "\u2013" : s.n) + '</span><span class="t">' + esc(s.name) + "</span>"
-    + (s.state === "current" ? '<span class="w">' + esc(s.why) + "</span>" : "") + act + "</div>";
+  let end;
+  if (s.state === "done") end = '<span class="ok">' + TICK + "</span>";
+  else if (s.state === "skipped") end = '<span class="sk">Skipped</span>';
+  else end = (s.waiting ? '<span class="wait" title="Waiting for you to turn it on"></span>' : "")
+    + (s.skip ? '<button type="button" class="sk" data-do="skip_sound">' + esc(s.skip) + "</button>" : "")
+    + '<button type="button" class="btn" data-do="' + esc(s.do) + '">' + esc(s.button) + "</button>";
+  return '<div class="st" data-nodrag="' + (s.button ? "1" : "") + '"><div class="tx"><span class="t">' + esc(s.name)
+    + '</span><span class="w">' + esc(s.line) + "</span></div>" + end + "</div>";
 }
 function paint(v) {
   const key = JSON.stringify(v);
@@ -121,7 +111,7 @@ document.addEventListener("click", async e => {
 document.addEventListener("mousedown", e => {
   const w = window.pywebview && window.pywebview.api;
   if (!w || !w.window_drag || e.button !== 0 || !e.target.closest("[data-drag]")) return;
-  if (e.target.closest("button,a,.how,[data-nodrag='1']")) return;
+  if (e.target.closest("button,a,[data-nodrag='1']")) return;
   w.window_drag();
 });
 window.addEventListener("pywebviewready", fit);

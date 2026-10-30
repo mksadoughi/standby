@@ -42,32 +42,33 @@ check("  skipped within 30 days: not asked again", fu.needed("meeting", "auto", 
 check("  skipped longer ago: asked again", fu.needed("meeting", "auto", {"mic": "allowed", "sound": "ask"}, now - 31 * 86400, now) == ["mic", "sound"])
 check("  a meeting on its sound alone can't skip it", fu.needed("meeting", "meeting", {"sound": "ask"}, now - 86400, now) == ["sound"])
 
-v = fu.view("call", ["mic"], {"mic": "ask"})
-s = v["steps"][0]
-check("a first call: its title, Allow Microphone with macOS's line",
-      (v["title"], v["sub"], s["state"], s["button"], s["do"], s["note"]) ==
-      ("Before your first call", "Your call starts as soon as this is done.", "current", "Allow Microphone", "allow_mic",
-       "macOS will ask: choose Allow."), v)
-v = fu.view("call", ["mic"], {"mic": "denied"}, pressed=["mic"])
-s = v["steps"][0]
-check("the mic refused before: Open System Settings, waiting once pressed, how to turn it on",
-      (s["button"], s["do"], s["waiting"], s["note"], s["how"]) ==
-      ("Open System Settings", "settings_mic", True, fu.WAITING, "In the list, turn on **Standby**, then come back here."), s)
-v = fu.view("meeting", ["mic", "sound"], {"mic": "ask", "sound": "ask"})
-check("a first meeting: the mic first, the sound later, no button on it",
-      (v["title"], v["steps"][0]["state"], v["steps"][1]["state"], v["steps"][1]["button"]) == ("Set up meetings", "current", "later", None), v)
-v = fu.view("meeting", ["mic", "sound"], {"mic": "allowed", "sound": "ask"})
-s = v["steps"][1]
-check("step 2: Allow, Skip beside it, and the Quit & Reopen how-to",
-      (v["steps"][0]["state"], s["state"], s["button"], s["do"], s["skip"]) == ("done", "current", "Allow", "allow_sound", fu.SKIP)
-      and "Quit & Reopen" in s["how"] and s["how"].endswith("Your meeting starts right after."), v)
-v = fu.view("meeting", ["mic", "sound"], {"mic": "allowed", "sound": "denied"}, pressed=["sound"])
-check("  asked already: Open System Settings, waiting", v["steps"][1]["do"] == "settings_sound" and v["steps"][1]["waiting"], v)
-v = fu.view("meeting", ["mic", "sound"], ALL)
-check("all done: You're all set, ticks, Starting your meeting…",
-      (v["title"], [x["state"] for x in v["steps"]], v["go"]) == ("You're all set", ["done", "done"], "Starting your meeting…"), v)
-v = fu.view("meeting", ["mic", "sound"], {"mic": "allowed", "sound": "ask"}, skip=True)
-check("  skipped: the sound marked skipped, still starting", v["go"] and v["steps"][1]["state"] == "skipped", v)
+R = fu.ROWS
+v = fu.view("call", R, {"mic": "ask", "sound": "ask"})
+m, snd = v["steps"]
+check("Set up Standby: its line, both rows, each its own Allow, Skip on the sound",
+      (v["title"], v["sub"], m["state"], m["button"], m["do"], m["skip"], snd["state"], snd["button"], snd["do"], snd["skip"]) ==
+      ("Set up Standby", "Two things for macOS to allow, once.", "open", "Allow", "allow_mic", None, "open", "Allow", "allow_sound", "Skip"), v)
+check("  each row one line: what it's for", m["line"] == fu.NAMES["mic"][1] and "takes only the sound" in snd["line"]
+      and not m["waiting"], v)
+v = fu.view("meeting", R, {"mic": "ask", "sound": "allowed"})
+check("either row first: the sound ticked, the mic still open", [x["state"] for x in v["steps"]] == ["open", "done"]
+      and v["title"] == fu.TITLE, v)
+v = fu.view("call", R, {"mic": "denied", "sound": "ask"})
+m = v["steps"][0]
+check("the mic refused before: Open Settings, waiting, how to turn it on",
+      (m["button"], m["do"], m["waiting"], m["line"]) == ("Open Settings", "settings_mic", True, fu.REFUSED), m)
+v = fu.view("meeting", R, {"mic": "allowed", "sound": "denied"})
+snd = v["steps"][1]
+check("  the sound refused the same way, Skip still there",
+      (snd["button"], snd["do"], snd["waiting"], snd["line"], snd["skip"]) == ("Open Settings", "settings_sound", True, fu.REFUSED, "Skip"), snd)
+v = fu.view("call", R, ALL, phase="starting")
+check("all done: You're all set, no line, ticks, Starting your call…",
+      (v["title"], v["sub"], [x["state"] for x in v["steps"]], v["go"]) == ("You're all set", "", ["done", "done"], "Starting your call…"), v)
+v = fu.view("meeting", R, {"mic": "allowed", "sound": "ask"}, skip=True)
+check("  the sound skipped: Skipped on its row, starting", v["go"] == "Starting your meeting…" and v["steps"][1]["state"] == "skipped", v)
+v = fu.view("meeting", R, ALL, phase="failed", error="Your Mac didn't start")
+check("a failed start: its cause, Try again from Claude Code, Close",
+      (v["title"], v["error"], v["retry"], v["button"]) == ("Couldn't start your meeting", "Standby couldn't start listening.", fu.RETRY, "Close"), v)
 check("a failed start's cause, as a sentence: no doubled colons, the recorder's fallback said plainly",
       (fu.cause("Standby is busy with another call or meeting: end it first"), fu.cause("Your Mac didn't start"), fu.cause(None))
       == ("Standby is busy with another call or meeting. End it first.", "Standby couldn't start listening.", "Standby couldn't start listening."))
@@ -140,12 +141,17 @@ check("  the band's state says it's waiting on setup", ui.setup_for("cc-1") == {
 check("  another session's start meanwhile: refused, in words", "error" in real_call({"cc": "cc-2"}))
 check("  this session's again: the same window to the front", real_call({"cc": "cc-1"}) == {"setup": "call"} and len(made) == 1)
 v = ui.setup_view()
-check("the window's view: Before your first call, Allow Microphone", v["title"] == "Before your first call" and v["steps"][0]["do"] == "allow_mic", v)
-check("Allow Microphone: macOS asks then, and only then", ui.setup_act({"do": "allow_mic"}) == {"ok": True} and asked == ["mic"])
+check("the window's view: Set up Standby, both rows, Allow on each", v["title"] == "Set up Standby"
+      and [x["do"] for x in v["steps"]] == ["allow_mic", "allow_sound"], v)
+check("Allow on the mic: macOS asks then, and only then", ui.setup_act({"do": "allow_mic"}) == {"ok": True} and asked == ["mic"])
 check("  a step it doesn't have: refused", "error" in ui.setup_act({"do": "rm -rf"}))
 ui.setup_start_after_launch()        # the app's launch finishing meanwhile (a first call is what opened it)
 STATES.update(mic="allowed")
-check("allowed: Standby starts the call itself, past the window", wait(lambda: started) and started[0].get("setup_done")
+time.sleep(0.6)
+check("the mic allowed: the window still offers the meeting's sound, the call waits", started == [] and
+      [x["state"] for x in ui.setup_view()["steps"]] == ["done", "open"], ui.setup_view())
+STATES.update(sound="allowed")
+check("both allowed: Standby starts the call itself, past the window", wait(lambda: started) and started[0].get("setup_done")
       and started[0]["cc"] == "cc-1", started)
 time.sleep(1.0)
 check("  once, though the hold and the app's launch both asked to watch it (twice was \"already starting\")",
@@ -160,13 +166,21 @@ STATES.update(mic="allowed", sound="ask")
 listens = []
 ui.lite = lambda: types.SimpleNamespace(listen=lambda b: listens.append(dict(b)) or {"session": "m1", "pass": "ask"})
 r = ui.setup_hold("meeting", {"cc": "cc-1", "capture": "auto"})
-check("its sound undecided: held, on the sound", r == {"setup": "meeting"} and ui.setup_view()["steps"][1]["state"] == "current", ui.setup_view())
+check("its sound undecided: held, the mic ticked, the sound open", r == {"setup": "meeting"}
+      and [x["state"] for x in ui.setup_view()["steps"]] == ["done", "open"], ui.setup_view())
 check("Allow: macOS's own prompt for the screen, once", ui.setup_act({"do": "allow_sound"}) == {"ok": True} and asked[-1] == "screen"
       and ui.SNAP_ASKED.exists())
 check("  the held meeting kept, marked for the reopen", "sound" in ui.read_json(ui.SETUP_FILE).get("pressed"))
 check("Skip: this meeting starts on the mic only", ui.setup_act({"do": "skip_sound"}) == {"ok": True}
       and wait(lambda: listens) and listens[0]["capture"] == "mic" and listens[0]["setup_done"], listens)
 check("  not asked again for 30 days", ui.SOUND_SKIPPED.exists() and ui.setup_hold("meeting", {"cc": "cc-1", "capture": "auto"}) is None)
+wait(lambda: ui.setup_for("cc-1") is None)
+STATES.update(mic="ask")
+ui.setup_hold("call", {"cc": "cc-1"})
+check("  a first call meanwhile: the sound's row says Skipped, only the mic asked",
+      [x["state"] for x in ui.setup_view()["steps"]] == ["open", "skipped"], ui.setup_view())
+ui.setup_act({"do": "cancel"})
+STATES.update(mic="allowed")
 ui.SOUND_SKIPPED.unlink()
 
 print("cancel, and Quit & Reopen")
