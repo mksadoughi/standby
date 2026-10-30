@@ -6,9 +6,9 @@
 /* "Set up Standby", before a first call or meeting (firstuse.py), in the look dictation's setup shares: no
    title-bar text, a heading and one line, one grouped list. Each row its name, one line and its control on the
    right; either row first, a tick once done; the start waits and goes by itself. */
-:root{color-scheme:light dark;--bg:#ffffff;--group:#f5f5f7;--line:rgba(0,0,0,.08);--text:#1d1d1f;--muted:#6e6e73;--faint:#aeaeb2;
+:root{color-scheme:light dark;--bg:#ffffff;--group:#f5f5f7;--group-hover:#e8e8ed;--line:rgba(0,0,0,.08);--text:#1d1d1f;--muted:#6e6e73;--faint:#aeaeb2;
 --accent:#0a7aff;--on-accent:#ffffff;--ok:#30b158;--rec:#e5484d;--warn:#c4540a;--focus:rgba(10,122,255,.5)}
-@media (prefers-color-scheme:dark){:root{--bg:#1e1e20;--group:#2a2a2d;--line:rgba(255,255,255,.08);--text:#f2f2f4;--muted:#98989f;--faint:#5c5c62;
+@media (prefers-color-scheme:dark){:root{--bg:#1e1e20;--group:#2a2a2d;--group-hover:#3a3a3e;--line:rgba(255,255,255,.08);--text:#f2f2f4;--muted:#98989f;--faint:#5c5c62;
 --accent:#0a84ff;--on-accent:#ffffff;--ok:#32d74b;--rec:#f2555a;--warn:#ff9f0a;--focus:rgba(10,132,255,.5)}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -17,8 +17,13 @@ html,body{margin:0;background:var(--bg);color:var(--text);font:13px/1.4 -apple-s
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 #head{height:32px}
-#body{padding:4px 24px 20px}
-.hd{font-size:17px;font-weight:600;letter-spacing:-.01em}
+#body{position:relative;padding:4px 24px 20px}
+/* close: a small round x at the top right, level with the heading; a held start is cancelled, a starting one goes on */
+.x{position:absolute;right:16px;top:0;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);background:var(--group)}
+.x:hover{background:var(--group-hover)}
+.x svg{width:10px;height:10px}
+.hd{padding-right:32px;font-size:17px;font-weight:600;letter-spacing:-.01em}
 .sub{font-size:13px;color:var(--muted);margin:3px 0 0}
 .sub:empty{display:none}
 #steps{background:var(--group);border-radius:10px;margin-top:16px}
@@ -39,21 +44,21 @@ button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .err{font-size:13px;color:var(--warn);margin:14px 0 0}
 #retry{margin:2px 0 0;font-size:12.5px}
 .foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;min-height:24px}
-.foot .q{font-size:13px;color:var(--muted)}
 .go{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
 .go i{width:7px;height:7px;border-radius:50%;background:var(--rec)}
 </style></head>
 <body>
 <div id="head" data-drag></div>
 <div id="body" data-drag>
+  <button type="button" class="x" id="x" data-do="cancel" aria-label="Close" title="Close"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor"
+    stroke-width="2.2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
   <div class="hd" id="title"></div>
   <p class="sub" id="sub"></p>
   <div id="steps"></div>
   <p class="err" id="err" hidden></p>
   <p class="note" id="retry" hidden></p>
-  <!-- Cancel while it waits; "Starting your …" in its place once it starts; Close, filled, once it couldn't start -->
-  <div class="foot" id="foot"><button type="button" class="q" id="cancel" data-do="cancel" data-nodrag>Cancel</button>
-    <div class="go" id="go" hidden><i></i><span></span></div><span></span>
+  <!-- only once there's something to say: "Starting your …" once it starts; Close, filled, once it couldn't start -->
+  <div class="foot" id="foot" hidden><div class="go" id="go" hidden><i></i><span></span></div><span></span>
     <button type="button" class="btn" id="close" data-do="close" hidden></button></div>
 </div>
 <script>
@@ -87,7 +92,7 @@ function paint(v) {
   $("err").hidden = !v.error; $("err").textContent = v.error || "";
   $("retry").hidden = !v.retry; $("retry").textContent = v.retry || "";
   $("go").hidden = !v.go; $("go").querySelector("span").textContent = v.go || "";
-  $("cancel").hidden = !!(v.go || v.button);
+  $("foot").hidden = !(v.go || v.button);
   $("close").hidden = !v.button; $("close").textContent = v.button || "";
   fit();
 }
@@ -107,6 +112,8 @@ document.addEventListener("click", async e => {
   busy = false;
   await setupNow();
 });
+// Escape is the close button: a held start cancelled, a starting one left to go on
+document.addEventListener("keydown", e => { if (e.key === "Escape") $("x").click() });
 // The window moves by its top and its empty parts
 document.addEventListener("mousedown", e => {
   const w = window.pywebview && window.pywebview.api;
