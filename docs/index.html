@@ -111,13 +111,6 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 @media (max-width:900px){.why{grid-template-columns:1fr 1fr}}
 @media (max-width:560px){.why{grid-template-columns:1fr}.howto{--hh:240px}.howto.manual{--hh:306px}}
 @media (prefers-reduced-motion:reduce){.howto,.howto .steps{transition:none}}
-/* a quiet hint at the film from the hero: a few spaced capitals and a chevron that nudges down; a click goes to it and plays it */
-.watch{display:flex;flex-direction:column;align-items:center;gap:6px;width:max-content;margin:44px auto 0;text-decoration:none;
-  font:600 15px -apple-system,system-ui;letter-spacing:.16em;text-transform:uppercase;color:#6b6e6a;transition:color .2s}
-.watch:after{content:"";width:11px;height:11px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin-top:2px;animation:nudge 2.4s ease-in-out infinite}
-.watch:hover{color:var(--ink)}
-@keyframes nudge{0%,60%,100%{transform:translateY(0) rotate(45deg)}30%{transform:translateY(4px) rotate(45deg)}}
-@media (prefers-reduced-motion:reduce){.watch:after{animation:none}}
 .film{position:relative;margin:64px auto 0;border-radius:20px;overflow:hidden;background:var(--card);border:1px solid var(--line);padding:12px;box-shadow:0 30px 60px -40px rgba(20,20,50,.3)}
 .film video{display:block;width:100%;height:auto;border-radius:12px}
 .cap{text-align:center;color:var(--muted);font-size:15px;margin:14px 0 0}
@@ -218,7 +211,6 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   .why .full{position:static;grid-column:2;display:none;width:auto;margin-top:6px;padding:0;border:0;background:none;box-shadow:none;opacity:1;transform:none;pointer-events:auto}
   .why li.open .full,.why li:focus-visible .full{display:block}
   .why li.open .short,.why li:focus-visible .short{display:none}   /* the whole of it in place of the short line, not after it */
-  .watch{margin-top:32px;font-size:13px}
   .film{margin-top:36px;padding:6px;border-radius:14px}
   .film video{border-radius:9px}
   #what{padding-top:48px}
@@ -389,7 +381,6 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
   <li tabindex="0"><b>No API key</b><span class="short">It runs on your Claude subscription.</span><span class="full" role="tooltip">It runs through your own Claude Code and its subscription. There's no account or key to set up.</span></li>
   <li tabindex="0"><b>Open source</b><span class="short">Every line is on GitHub.</span><span class="full" role="tooltip">Free and open source, with nothing to pay per use. The code is on GitHub for anyone to read.</span></li>
 </ul>
-<a class="watch" href="#film">See it in action</a>
 
 
 <figure class="film" id="film"><video src="video/story.mp4" poster="video/story.jpg" muted loop playsinline preload="metadata" controls></video></figure>
@@ -500,14 +491,6 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
 })();
 </script>
 <script>
-// the hint at the film: down to it, and it plays, with its sound (the click is the person's own)
-document.querySelector(".watch").addEventListener("click", function (e) {
-  var v = document.querySelector("#film video");
-  if (!v) return;
-  e.preventDefault();
-  document.getElementById("film").scrollIntoView({ behavior: "smooth", block: "center" });
-  v.muted = false; v.currentTime = 0; v.play().catch(function () { v.muted = true; v.play().catch(function () {}); });
-});
 // how to install: a tap opens it (hover does where there's a mouse), and so does arriving at #install
 (function () {
   var h = document.getElementById("install"), b = h.querySelector(".ic");
