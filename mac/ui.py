@@ -2101,6 +2101,9 @@ def _run_ask(sid, question, voice=False, on_event=None, on_queued=None, heard=No
         trace(sid, "early", step="held", why="went on", acts=bool(CANCEL_RE.search(answer) or END_TAG in answer
                                                                or answer.strip().startswith(HANDOFF_TAG)))
         return ""
+    if voice and pending.get("qid"):
+        import agentctl
+        agentctl.kept(pending["qid"])              # the turn was theirs: what the agent held for it is over
     more = None
     if sid in LITE_CALLS and END_TAG in answer:    # the voice ends the call after this goodbye
         answer = answer.replace(END_TAG, "").strip()

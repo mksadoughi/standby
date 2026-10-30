@@ -138,6 +138,16 @@ def cancel(qid, keep=False, dropped=False):
         (spool / (qid + ".x")).write_text("")
 
 
+def kept(qid):
+    """A voice question's answer was committed (the turn was theirs): the hand-offs the agent held for that
+    turn are over (its .k)."""
+    if re.match(r"^[0-9]+-[0-9]+$", str(qid or "")):
+        try:
+            (_spool(transport.for_config()) / (qid + ".k")).write_text("")
+        except OSError:
+            pass
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__.strip())

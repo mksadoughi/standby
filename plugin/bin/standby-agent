@@ -3240,9 +3240,11 @@ class Note(str):
 
 
 # A hand-off of an early question they went on from never goes deeper, but in the voice's own conversation it
-# said it did: told so at its next turn (a call's two lost hand-offs, 2026-10-30, "I sent it twice").
-NOT_HANDED = ("Not handed on: they went on talking before it was their turn, so this never went deeper: %s "
-              "If it's still wanted, take it deeper now.")
+# said it did (a call's two lost hand-offs, 2026-10-30, "I sent it twice"). It's held for the turn instead:
+# shown at each of the turn's later asks, so its answer, once the turn is theirs, can send what still
+# stands with all they've said since; never sent itself. Gone once an answer is committed (agentctl's .k).
+HELD = ("Held, not sent, because they were still talking when you took it deeper:\n%s\nWith all they've said now, "
+        "send one [DEEP] that covers what of it still stands, updated, or none if none does.")
 
 
 # A [DEEP] with no task after it: the voice is asked for one, once, in its own conversation (it
@@ -3450,6 +3452,8 @@ class Voice(object):
         self.tasks = []
         self.cv = threading.Condition()
         self.feeders, self.notes_at, self.context = {}, {}, {}
+        # a call's hand-offs held for the turn (HELD): {session: [task]}, and what each ask was shown of them
+        self.held, self.shown = {}, {}
         self.busy, self.last_used = False, 0.0
         self.briefed = None          # (start, end) of the last briefing, for its wait
         self.did = []                # the last tasks: (what, start, end), for what a question waited on
@@ -3470,11 +3474,11 @@ class Voice(object):
         with self.cv:
             self.context.setdefault(session, []).append(note)
 
-    @staticmethod
-    def _live_notes(context, kept=False):
+    def _live_notes(self, context, kept=None):
         """The notes of questions the user went on from leave (agentctl.cancel's .x: an early question
-        that wasn't their turn): it never handed that work on, so it mustn't think it did. kept: the voice's
-        own conversation has that answer, [DEEP] and all, so a hand-off's note becomes NOT_HANDED."""
+        that wasn't their turn): it never handed that work on, so it mustn't think it did. kept: the session
+        whose voice's own conversation has that answer, [DEEP] and all: a hand-off's task is held (HELD),
+        in place of those it was shown, which it took up or left."""
         out = []
         for note in context:
             ident = getattr(note, "ident", None)
@@ -3485,7 +3489,8 @@ class Voice(object):
                 except OSError:
                     pass
                 if kept and getattr(note, "task", None):
-                    out.append(NOT_HANDED % note.task)
+                    seen = self.shown.get(kept, {}).get(ident, [])
+                    self.held[kept] = [t for t in self.held.get(kept, []) if t not in seen] + [note.task]
                 continue
             out.append(note)
         return out
@@ -3579,19 +3584,40 @@ class Voice(object):
         except IOError:
             return "", self.notes_at.get(session, 0)
 
-    def _message(self, session, head, tail):
+    def _committed(self, session):
+        """An answer the turn's asks were shown the held hand-offs in was committed (agentctl.kept's .k):
+        the turn is over, and what it held with it."""
+        try:
+            marks = [n[:-2] for n in os.listdir(SPOOL) if n.endswith(".k")]
+        except OSError:
+            return
+        for ident in marks:
+            try:
+                os.remove(os.path.join(SPOOL, ident + ".k"))
+            except OSError:
+                pass
+            if ident in self.shown.get(session, {}):
+                self.held.pop(session, None)
+                self.shown.pop(session, None)
+
+    def _message(self, session, head, tail, ident=None):
         feeder = self._feeder(session)
         rows = feeder.unsent() if listens(session) else []
         notes, notes_end = self._notes(session)
         with self.cv:
-            context = self._live_notes(self.context.pop(session, []), kept=True)
+            self._committed(session)
+            context = self._live_notes(self.context.pop(session, []), kept=session)
+            held = list(self.held.get(session, []))
+            if held and ident:
+                self.shown.setdefault(session, {})[ident] = held
+        chat = context + ([HELD % "\n".join("- " + t for t in held)] if held else [])
         parts = [head]
         if rows:
             parts.append(transcript_block(rows, session))
         if notes:
             parts.append("[NOTES from the meeting agent]\n%s\n[END NOTES]" % notes)
-        if context:
-            parts.append("[CHAT]\n%s\n[END CHAT]" % "\n".join(context))
+        if chat:
+            parts.append("[CHAT]\n%s\n[END CHAT]" % "\n".join(chat))
         parts.append(tail)
 
         def commit():
@@ -3735,7 +3761,7 @@ class Voice(object):
             promote(session)                     # the turns the record says were committed: in the head first
             msg, commit, restore = self._ledger_message(session, raw), (lambda: None), (lambda: None)
         else:
-            msg, commit, restore = self._message(session, "[VOICE]", said)
+            msg, commit, restore = self._message(session, "[VOICE]", said, ident)
         # Cut off once its words are out and its hand-off has begun ([DEEP] streamed): the task streams on
         # to its end, so the work it said it's starting still goes (the hand-off below)
         call = bool(voice_meta(session).get("handoff"))

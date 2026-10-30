@@ -43,6 +43,9 @@ while True:
         if kind == "voice" and text.startswith("[TASK]"):        # asked for the task it left out
             emit({"type": "result", "is_error": False,
                   "result": "Look through the build log for the error.\\nSUGGEST: What failed?"}); continue
+        if kind == "voice" and "Held, not sent" in text and "name it notes" in text.split("They said:")[-1]:
+            emit({"type": "result", "is_error": False,     # the held hand-off, updated with what they said since
+                  "result": "Got it. [DEEP] Create a sample text file named notes.txt in the project folder."}); continue
         if kind == "voice" and "sample text file" in text.split("They said:")[-1]:     # as a real voice hands it on
             emit({"type": "result", "is_error": False,
                   "result": "Sure. [DEEP] Create a sample text file in the project folder."}); continue
@@ -452,17 +455,37 @@ try:
           "You took this deeper, and are working on it now: Create a sample text file"
           in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
     # An early question the user went on from: answered with a hand-off, then dropped (agentctl.cancel's
-    # .x). The hand-off never went, so the voice's next turn has no note that it's working on it, and is
-    # told it never went: its own conversation still has that answer (a call's two lost hand-offs, 10/30).
+    # .x). The hand-off never went, so the voice's next turn has no note that it's working on it; it's held
+    # for the turn: its own conversation still has that answer (a call's two lost hand-offs, 10/30), and its
+    # answer once the turn is theirs (agentctl.kept's .k) sends what still stands, with all they said since.
+    spool = os.path.join(root, "agent", "spool")
+    mark = lambda ids, ext: open(os.path.join(spool, (ids[-1] if ids else "none") + ext), "w").close()
+    held = lambda *tasks: (getattr(sa, "HELD", "(none) %s") % "\n".join("- " + t for t in tasks)) in texts("voice", TALK)[-1]
     ids = []                         # its question's id, as the agent queued it (never the trace, written behind)
     got = ask("[VOICE] can you ask the agent to create a new text file, just a sample text file?", ident=ids)
-    qid = ids[-1] if ids else "none"
-    open(os.path.join(root, "agent", "spool", qid + ".x"), "w").close()
+    task = got[len("[HANDOFF] "):]
+    mark(ids, ".x")
+    ids2 = []
+    got2 = ask("[VOICE] and name it notes", ident=ids2)
+    check("a hand-off whose early question they went on from: held for the turn, never a note it's working on it",
+          got.startswith("[HANDOFF]") and "You took this deeper" not in texts("voice", TALK)[-1] and held(task)
+          and not os.path.exists(os.path.join(spool, ids[-1] + ".x")), (sorted(os.listdir(spool))[-6:], texts("voice", TALK)[-1][-400:]))
+    check("  the turn's answer sends one hand-off, updated with what they said since",
+          got2 == "[HANDOFF] Create a sample text file named notes.txt in the project folder.", got2)
+    mark(ids2, ".k")                 # that answer was committed: the turn was theirs
     ask("[VOICE] what time is it there")
-    check("a hand-off whose early question they went on from: the voice keeps no note it's working on it",
-          got.startswith("[HANDOFF]") and "You took this deeper" not in texts("voice", TALK)[-1]
-          and (getattr(sa, "NOT_HANDED", "(none) %s") % got[len("[HANDOFF] "):]) in texts("voice", TALK)[-1]
-          and not os.path.exists(os.path.join(root, "agent", "spool", qid + ".x")), (qid, sorted(os.listdir(os.path.join(root, "agent", "spool")))[-6:], texts("voice", TALK)[-1][-300:]))
+    check("  once committed, nothing is held any more", "Held, not sent" not in texts("voice", TALK)[-1]
+          and not os.path.exists(os.path.join(spool, ids2[-1] + ".k")), texts("voice", TALK)[-1][-300:])
+    ids = []
+    got = ask("[VOICE] can you ask the agent to create a new text file, just a sample text file?", ident=ids)
+    mark(ids, ".x")
+    ids2 = []
+    got2 = ask("[VOICE] actually never mind, forget it", ident=ids2)
+    check("  a turn's answer with no [DEEP]: nothing goes deeper, though one was held",
+          held(got[len("[HANDOFF] "):]) and not got2.startswith("[HANDOFF]"), (got2, texts("voice", TALK)[-1][-300:]))
+    mark(ids2, ".k")
+    ask("[VOICE] what time is it there")
+    check("    and after it, nothing is held", "Held, not sent" not in texts("voice", TALK)[-1])
     os.remove(os.path.join(live, TALK + ".voice.json"))
 
     # The talk ended and a meeting is live. Typing into the talk continues it.
