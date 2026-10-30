@@ -738,6 +738,8 @@ class VoiceSession(object):
             self.speaker.stop()
 
     def mute(self, on):
+        if bool(on) != self.muted:
+            self._quiet_since = time.time()      # a pause's time is never "nothing said" (a call ended on Resume)
         self.muted = bool(on)
         self._epoch += 1
         if self.muted:

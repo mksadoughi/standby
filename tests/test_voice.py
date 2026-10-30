@@ -651,6 +651,14 @@ check("  muted (the user paused the call, typing to Claude Code meanwhile): it g
       t.status()["state"] == "muted" and voice.VoiceSession.MUTED_IDLE >= 1800, t.status())
 t.MUTED_IDLE = 1.5
 check("  muted time still counts, up to its own longer while", wait(lambda: t.status()["state"] == "off", 3), t.status())
+t = talk()
+t.mute(True)
+time.sleep(1.2)                              # paused longer than the quiet while
+t.mute(False)
+time.sleep(0.3)
+check("  resumed after a long pause: its clock starts again, the call goes on (it ended on Resume)",
+      t.status()["state"] == "listening", t.status())
+check("    and ends after the quiet while, from the Resume", wait(lambda: t.status()["state"] == "off", 3), t.status())
 recorder["speaking"] = True
 t = talk()
 time.sleep(1.5)
