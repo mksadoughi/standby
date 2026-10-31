@@ -58,5 +58,38 @@ check("question answered by local Claude Code", ans.startswith("LOCAL-ANSWER"), 
 check("answer came from the live session", "hello local" in ans or "what did I say" in ans, ans)
 checks = t.check()
 check("diagnostics find the agent and claude", all(ok for ok, label, _ in checks[:2]), checks)
+
+# They went on from an answered early question: its drop mark is written, though ask() already took the answer
+# file away (it wasn't: the agent kept "You took this deeper" for hand-offs that never went, a call 2026-10-31).
+ids = []
+agentctl.ask("what did I say?", err=None, on_queued=ids.append)
+spool = root / "agent" / "spool"
+agentctl.cancel(ids[-1] if ids else "0-0", dropped=True)
+check("an answered question they went on from: its drop mark is written", ids and (spool / (ids[-1] + ".x")).exists(),
+      sorted(os.listdir(spool))[-5:])
+
+# An agent started from somewhere else (the checkout, before the apps ran their own copy of the code) is replaced:
+# it restarts in place from there, and run by Standby it lost that folder (a call: "can't open file").
+pid = int((root / "agent" / "server.pid").read_text())
+ok, msg = t.ensure_agent()
+check("the agent running this program: kept as it is", ok and int((root / "agent" / "server.pid").read_text()) == pid
+      and str(transport.LOCAL_AGENT) in (t.agent_program() or ""), msg)
+subprocess.run(t.agent_cmd(["stop"]), capture_output=True)
+# not a child of this test (a real stale agent never is: a stopped child would linger here as a zombie)
+other = int(subprocess.run(["/bin/sh", "-c", "/bin/sleep 60 >/dev/null 2>&1 & echo $!"], capture_output=True, text=True).stdout)
+(root / "agent" / "server.pid").write_text(str(other))
+ok, msg = t.ensure_agent()
+
+
+def gone(pid):
+    try:
+        os.kill(pid, 0)
+        return False
+    except OSError:
+        return True
+check("  one started from elsewhere: stopped, and this one started instead",
+      ok and gone(other) and str(transport.LOCAL_AGENT) in (t.agent_program() or ""), (msg, gone(other), t.agent_program()))
+if not gone(other):
+    os.kill(other, 9)
 subprocess.run(t.agent_cmd(["stop"]), capture_output=True)
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails)); sys.exit(1 if fails else 0)

@@ -19,6 +19,7 @@ Python standard library only.
 """
 
 import json
+import signal
 import os
 import subprocess
 import sys
@@ -32,6 +33,12 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO / "plugin" / "bin"))
 import sbclaude  # noqa: E402  (where Claude Code is: the one finder, the agent's too)
 LOCAL_AGENT = REPO / "plugin" / "bin" / "standby-agent"
+try:                                    # the apps' own copy of the code (codecopy), once installed: everyone's agent
+    import codecopy
+    if (codecopy.CODE / "plugin" / "bin" / "standby-agent").exists():
+        LOCAL_AGENT = codecopy.CODE / "plugin" / "bin" / "standby-agent"
+except ImportError:
+    pass
 
 
 def migrate_mic(cfg):
@@ -163,11 +170,37 @@ class LocalTransport(object):
     def agent_cmd(self, args):
         return [sys.executable, str(LOCAL_AGENT)] + list(args)
 
+    def agent_program(self):
+        """The program the running agent was started from (its command line), or None."""
+        try:
+            pid = int((self.root / "agent" / "server.pid").read_text().strip())
+            r = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], stdin=subprocess.DEVNULL,
+                               capture_output=True, text=True, timeout=5)
+            return r.stdout.strip() or None
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return None
+
+    def retire_agent(self, wait=5.0):
+        """Stop the running agent (it restarts in place, so only this ends one started elsewhere)."""
+        try:
+            pid = int((self.root / "agent" / "server.pid").read_text().strip())
+            os.kill(pid, signal.SIGTERM)
+        except (OSError, ValueError):
+            return
+        end = time.time() + wait
+        while time.time() < end and self.agent_alive():
+            time.sleep(0.1)
+
     def ensure_agent(self, model=None):
         if not LOCAL_AGENT.exists():
             return False, "agent not found at %s" % LOCAL_AGENT
         if self.agent_alive():
-            return True, "agent running on this Mac"
+            running = self.agent_program()
+            if running is None or str(LOCAL_AGENT) in running:
+                return True, "agent running on this Mac"
+            # one started from somewhere else (the checkout, before the apps ran their own copy): it restarts
+            # in place from there, and run by Standby it can lose that folder (a call: "can't open file")
+            self.retire_agent()
         log = self.root / "agent" / "serve.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         find_claude(full=True)             # noted in agent/, where the agent's own quick look finds it

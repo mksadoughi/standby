@@ -132,10 +132,12 @@ def cancel(qid, keep=False, dropped=False):
     if not re.match(r"^[0-9]+-[0-9]+$", str(qid or "")):
         return
     spool = _spool(transport.for_config())
+    if dropped:
+        # Always: its answer is usually read already, and ask() removed the answer file, so "no answer file"
+        # never meant "not answered" (the agent kept "You took this deeper" for hand-offs that never went)
+        (spool / (qid + ".x")).write_text("")
     if not (spool / (qid + ".a")).exists():        # answered already: nothing to stop
         (spool / (qid + ".c")).write_text("keep\n" if keep else "")
-    elif dropped:
-        (spool / (qid + ".x")).write_text("")
 
 
 def kept(qid):
