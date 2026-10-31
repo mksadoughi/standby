@@ -1,0 +1,38 @@
+/* Standby's visual kit: what every visual on a call gets for free, so the fragment the voice's side copy writes
+   stays short and looks like Standby, in light and dark. The classes are the fragment's vocabulary (the side
+   copy is told them): h1, p, .muted, a, .steps (sb.steps), .big, .row, .grid, .tag, table, input[type=range],
+   <sb-math> and <sb-diagram>. */
+:root{color-scheme:light dark;--text:#1d1d1f;--muted:#6e6e73;--faint:#aeaeb2;--accent:#3a30c8;--soft:rgba(80,70,229,.08);
+  --line:rgba(0,0,0,.08);--bg:#fcfcfc;--ok:#1f9d55;--warn:#b54708;--bad:#d93036}
+@media (prefers-color-scheme:dark){:root{--text:#f2f2f4;--muted:#a1a1a6;--faint:#5c5c66;--accent:#c3bfff;--soft:rgba(143,134,255,.16);
+  --line:rgba(255,255,255,.08);--bg:#242426;--ok:#3ccf7a;--warn:#f0a35e;--bad:#f2555a}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  -webkit-text-size-adjust:none;overflow-wrap:anywhere}
+body{padding:14px 16px}
+html.sb-inline,html.sb-inline body{background:transparent}html.sb-inline body{padding:12px 14px}
+html.sb-line body{padding:11px 16px;white-space:nowrap}
+h1{font-size:13.5px;font-weight:650;margin:0 26px 10px 0;letter-spacing:-.005em}
+h2{font-size:12px;font-weight:600;color:var(--muted);margin:12px 0 6px}
+p{margin:0 0 8px}p:last-child{margin-bottom:0}
+.muted{color:var(--muted)}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+ul,ol{margin:0 0 8px;padding-left:18px}li{margin:3px 0}
+.steps{display:grid;gap:6px;margin:0;padding:0;list-style:none;counter-reset:s}
+.steps li{counter-increment:s;display:flex;gap:8px;align-items:flex-start;padding:6px 8px;margin:0;border-radius:8px;cursor:pointer;color:var(--muted)}
+.steps li:before{content:counter(s);flex:none;width:18px;height:18px;border-radius:50%;background:var(--soft);color:var(--accent);
+  font-size:11px;font-weight:650;display:flex;align-items:center;justify-content:center}
+.steps li.on{background:var(--soft);color:var(--text)}.steps li.on:before{background:var(--accent);color:var(--bg)}
+.big{font:26px/1.2 "Iowan Old Style",Georgia,serif;text-align:center;margin:6px 0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--muted);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px}
+.tag{display:inline-block;font-size:10.5px;font-weight:650;color:var(--accent);background:var(--soft);padding:2px 6px;border-radius:5px}
+table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:4px 6px;border-bottom:.5px solid var(--line)}th{color:var(--muted);font-weight:600}
+input[type=range]{width:100%;accent-color:var(--accent)}
+button{font:inherit;color:var(--accent);background:var(--soft);border:0;border-radius:6px;padding:4px 10px;cursor:pointer}
+code{font:12px ui-monospace,Menlo,monospace;background:var(--soft);padding:1px 4px;border-radius:4px}
+sb-math{display:inline-block}sb-math[display]{display:block;text-align:center;margin:6px 0;font-size:15px}
+sb-math.raw,sb-diagram.raw{font:12px ui-monospace,Menlo,monospace;color:var(--muted);white-space:pre-wrap}
+sb-diagram{display:block;text-align:center;margin:4px 0}sb-diagram svg{max-width:100%;height:auto}
+svg{max-width:100%}

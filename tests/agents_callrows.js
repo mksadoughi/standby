@@ -68,4 +68,19 @@ const lost = mxRows({info: {id: "talk-3", runs: [], started: 1000, events: [{kin
   chat: [C("me", "Before", 1010), C("me", "After", 1030)]}, null, false, false).map(r => r.h).join("\n");
 check("words lost over the voice: \"Something you said wasn't heard\", in its place, no words", /mx-sep2">Something you said wasn’t heard</.test(lost)
   && lost.indexOf("Before") < lost.indexOf("wasn’t heard") && lost.indexOf("wasn’t heard") < lost.indexOf("After"), lost);
+// a call's visuals: each under the voice line of the question it was drawn for; one with no line yet after the rest
+eval(src.match(/const MXVHIDE = [^\n]*\n/)[0].replace("const", "var")); eval(pick("function mxVisHTML(sid, v)"));
+const vd = {info: {id: "talk-4", runs: []}, transcript: [], speakers: {}, chat: [C("me", "How long is a route kept?", 1), Object.assign(C("ai", "Fifteen minutes for members.", 2), {qid: "q1"}),
+  C("me", "And regional?", 3), Object.assign(C("ai", "Thirty.", 4), {qid: "q2"})],
+  visuals: [{id: 1, state: "ready", qid: "q1", what: "How long a route is kept"}, {id: 2, state: "failed", qid: "q2"}, {id: 3, state: "drawing", qid: "q9", what: "The three <kinds>"}]};
+const vr = mxRows(vd, null, false, false, true), vh = vr.map(r => r.h).join("\n");
+check("a visual: right under the voice line it was drawn for, keyed by its number and state", vr.findIndex(r => r.k === "v:1:ready") === vr.findIndex(r => /Fifteen minutes/.test(r.h)) + 1
+  && vh.indexOf("v-1") < 0 && /class="mx-vis" data-s="talk-4" data-v="1"/.test(vh), vr.map(r => r.k));
+check("  one that failed: not shown", !vr.some(r => r.k.startsWith("v:2")));
+check("  one still drawing whose line isn't there yet: after the rest, Drawing… with its brief, escaped",
+  vr[vr.length - 1].k === "v:3:drawing" && /Drawing\u2026|Drawing…/.test(vr[vr.length - 1].h) && vr[vr.length - 1].h.includes("The three &lt;kinds&gt;"), vr[vr.length - 1]);
+check("  each has a close button, its frame filled in later (never in the row's markup)", (vh.match(/class="mx-visx"/g) || []).length === 2 && !/<iframe/.test(vh));
+MXVHIDE.add("talk-4:1");
+check("  closed in this window: gone from the conversation", !mxRows(vd, null, false, false, true).some(r => r.k.startsWith("v:1")));
+check("  a meeting has none", !mxRows(Object.assign({}, vd, {info: {id: "meet-1", kind: "meeting", runs: []}}), null, false, false).some(r => r.k.startsWith("v:")));
 console.log(fails ? "FAILURES: " + fails : "ALL PASS"); process.exit(fails ? 1 : 0);

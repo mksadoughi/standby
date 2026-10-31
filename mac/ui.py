@@ -5151,6 +5151,7 @@ def lite_waiting(sid, st):
 
 # A call's visuals (visuals.py): the agent's side copy drops them in its spool by the voice question they
 # go with; the windows' polls move them into the call's folder.
+VISUALS_IN_WINDOW = [True]           # False: the main window's frames couldn't be walled off, so it shows none
 VISUAL_TURNS = {}                     # voice question ident -> the session it was asked in (the newest few hundred)
 _VISUALS = {"at": 0.0}
 
@@ -5175,6 +5176,20 @@ def take_visuals():
         return SESSIONS / sid if sid and valid_id(sid) and (SESSIONS / sid).is_dir() else None
     for sdir in visuals.take(ROOT / "agent" / "spool", call_for, now):
         log("visual: %s" % Path(sdir).name)
+
+
+def visuals_on():
+    """Settings > Call, "Show visuals during calls" (the windows' own switches show it)."""
+    return bool(transport.load_config().get("call_visuals", DEFAULTS["call_visuals"]))
+
+
+def session_visuals(sid):
+    """A call's visuals for the main window's conversation, [] for anything else (or when it can't wall them off)."""
+    import visuals
+    if not VISUALS_IN_WINDOW[0] or not is_talk(sid):
+        return []
+    take_visuals()
+    return visuals.listed(SESSIONS / sid)
 
 
 def visual_latest(sid):
@@ -5983,7 +5998,8 @@ class Handler(BaseHTTPRequestHandler):
                                "transcript": fixed_rows(transcript_rows(SESSIONS / sid / "transcript.jsonl")),
                                "learned": learned_words(sid).get("words") or [],
                                "speakers": speakers(sid), "pending": pending,
-                               "suggest": suggest_for(sid, chat), "claude_error": claude_error(page_machine(sid))})
+                               "suggest": suggest_for(sid, chat), "claude_error": claude_error(page_machine(sid)),
+                               "visuals": session_visuals(sid), "visuals_on": visuals_on()})
         if path.startswith("/api/export/"):
             sid = path.rsplit("/", 1)[1]
             if not valid_id(sid):
@@ -6005,8 +6021,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "no such session"}, 404)
             take_visuals()
             if path == "/api/visuals":
-                return self._json({"visuals": visuals.listed(SESSIONS / sid), "on": get_settings()["call_visuals"]})
+                return self._json({"visuals": visuals.listed(SESSIONS / sid), "on": visuals_on()})
             got = visuals.one(SESSIONS / sid, q.get("id"))
+            if got and q.get("doc") and got.get("html"):          # the whole document for the visual's sandbox
+                got = dict(got, doc=visuals.doc(got.pop("html"), ROOT / "kit", inline=q.get("doc") == "inline"))
             return self._json(got if got else {"error": "no such visual"}, 200 if got else 404)
         if path.startswith("/api/voice/"):
             sid = path.rsplit("/", 1)[1]
@@ -6361,6 +6379,12 @@ def main():
     if server is not None:
         threading.Thread(target=server.serve_forever, daemon=True).start()
     import webview
+    try:                                       # a call's visuals are frames in the window: they never reach its bridge
+        from native.macos import framewall
+        framewall.install()
+    except Exception as exc:
+        log("window: the frames' wall isn't up (%r): visuals stay out of the main window" % exc)
+        VISUALS_IN_WINDOW[0] = False
     api = Api()
     # Opened by Claude Code for a call or a meeting (`open -g ... --args --background`): no window until the
     # user asks for it (the band's Full window, the Dock icon); the band shows the call (the user, 2026-10-27)

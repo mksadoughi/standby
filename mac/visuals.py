@@ -2,7 +2,7 @@
 fragment on Standby's small kit, drawn by a side copy of the voice beside it (standby-agent).
 
 The agent writes each one into its spool as it goes, <qid>.v<k>.json (written whole, then renamed in):
-{"state": "drawing" | "ready" | "failed", "t", "html" (ready), "why" (failed)}; qid is the voice question it
+{"state": "drawing" | "ready" | "failed", "t", "what" (its one-line brief), "html" (ready), "why" (failed)}; qid is the voice question it
 goes with. take() moves them into the call's folder, one file a visual (visuals/<n>.json, n counting
 from 1 in the call), so the windows list them, in order, and fetch one's fragment when it's ready.
 A visual comes when it comes: one whose turn has ended is kept the same.
@@ -75,7 +75,10 @@ def take(spool, call_for, now):
         if old.get("state") in ("ready", "failed"):
             continue                                       # settled: a late "drawing" never undoes it
         row = {"id": n, "src": src, "qid": m.group(1), "state": data["state"],
-               "at": old.get("at") or data.get("t") or now, "t": data.get("t") or now}
+               "at": old.get("at") or data.get("t") or now, "t": data.get("t") or now,
+               "what": str(data.get("what") or old.get("what") or "")[:200]}         # the voice's one-line brief
+        if isinstance(data.get("ms"), (int, float)):
+            row["ms"] = int(data["ms"])
         html = data.get("html") if row["state"] == "ready" else None
         if row["state"] == "ready" and (not isinstance(html, str) or not html.strip()):
             row.update(state="failed", why="nothing to show")
@@ -103,7 +106,7 @@ def listed(sdir):
         return []
     if _LISTED.get(d, (None,))[0] != mtime:
         rows = sorted(_ours(sdir).values())
-        _LISTED[d] = (mtime, [{k: v for k, v in data.items() if k in ("id", "state", "qid", "at")} for _n, data in rows])
+        _LISTED[d] = (mtime, [{k: v for k, v in data.items() if k in ("id", "state", "qid", "at", "what")} for _n, data in rows])
     return list(_LISTED[d][1])
 
 
@@ -115,3 +118,61 @@ def one(sdir, n):
         return None
     data = _read(os.path.join(folder(sdir), "%d.json" % n)) if n > 0 else None
     return {k: v for k, v in data.items() if k != "src"} if data else None
+
+
+# The visual's document: the kit, then the fragment, under a policy that lets nothing in or out. Everything is
+# inline (the kit, and KaTeX or Mermaid only when the fragment uses them, its fonts as data), so the visual
+# loads nothing from anywhere: the same document in the mini window's card and in the main window.
+KIT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "visualkit")
+CSP = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; "
+       "connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; "
+       "manifest-src 'none'; form-action 'none'; base-uri 'none'")
+_PARTS = {}
+
+
+def _text(path):
+    with open(path, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def _part(name, libs):
+    """kit, math or diagram: the inline <style>/<script> for it ("" when its library isn't installed)."""
+    key = (name, libs)
+    if key in _PARTS:
+        return _PARTS[key]
+    out = ""
+    try:
+        if name == "kit":
+            out = "<style>%s</style><script>%s</script>" % (_text(os.path.join(KIT, "kit.css")), _text(os.path.join(KIT, "kit.js")))
+        elif name == "math":
+            d = os.path.join(libs, "katex")
+            css = re.sub(r'src:url\(fonts/([\w-]+)\.woff2\) format\("woff2"\)[^;}]*',
+                         lambda m: 'src:url(data:font/woff2;base64,%s) format("woff2")' % _b64(os.path.join(d, "fonts", m.group(1) + ".woff2")),
+                         _text(os.path.join(d, "katex.min.css")))
+            out = "<style>%s</style><script>%s</script>" % (css, _text(os.path.join(d, "katex.min.js")))
+        elif name == "diagram":
+            out = "<script>%s</script>" % _text(os.path.join(libs, "mermaid.min.js"))
+    except OSError:
+        out = ""
+    _PARTS[key] = out
+    return out
+
+
+def _b64(path):
+    import base64
+    with open(path, "rb") as fh:
+        return base64.b64encode(fh.read()).decode("ascii")
+
+
+def doc(fragment, libs, inline=False):
+    """The whole document for one visual's sandbox. libs: where install.sh put KaTeX and Mermaid; inline: in the
+    main window's conversation, on the card's own tint (a clear background)."""
+    libs = str(libs)
+    head = ['<meta charset="utf-8">', '<meta http-equiv="Content-Security-Policy" content="%s">' % CSP,
+            '<meta name="viewport" content="width=device-width">', _part("kit", libs)]
+    if "<sb-math" in fragment:
+        head.insert(3, _part("math", libs))
+    if "<sb-diagram" in fragment:
+        head.insert(3, _part("diagram", libs))
+    return "<!doctype html><html%s><head>%s</head><body><div id=\"sb-root\">%s</div></body></html>" % (
+        ' class="sb-inline"' if inline else "", "".join(head), fragment)

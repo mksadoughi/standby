@@ -224,3 +224,20 @@ box-shadow:var(--shadow),0 8px 24px rgba(0,0,0,.14);font:400 12.5px/1.45 ui-roun
 .mx-dpop{position:absolute;left:12px;right:12px;bottom:calc(100% + 8px);z-index:5;background:var(--raised);border:1px solid var(--edge);border-radius:14px;
   box-shadow:0 10px 30px rgba(0,0,0,.14);padding:2px 12px 6px}
 .mx-dpop .mx-src{padding:9px 0 3px}
+
+.mx-pop .mi.mx-tick{display:flex;justify-content:space-between;align-items:center;gap:16px}
+/* a call's visual in the conversation (the visual card's look, inline): under the voice line it goes with,
+   level with its words; its own sandboxed frame inside, a round close at the top right */
+.mx-vis{position:relative;margin:2px 0 12px 29px;max-width:calc(92% - 29px);border-radius:14px;background:var(--accent-soft);
+  border:1px solid color-mix(in srgb,var(--accent) 14%,transparent);overflow:hidden}
+.mx-vis iframe{display:block;width:100%;height:60px;border:0;background:transparent}
+.mx-visx{position:absolute;right:8px;top:8px;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);background:color-mix(in srgb,var(--text) 6%,transparent);border:0;cursor:pointer;z-index:1}
+.mx-visx:hover{color:var(--text);background:color-mix(in srgb,var(--text) 11%,transparent)}
+.mx-vis.drawing{padding:12px 14px}
+.mx-vish{font-size:13px;font-weight:600;color:var(--muted);margin-right:28px}
+.mx-visw{font-size:12.5px;color:var(--muted);margin:2px 28px 4px 0}
+.mx-shim{display:block;height:9px;border-radius:5px;margin:8px 0 0;width:78%;background:linear-gradient(90deg,var(--soft),color-mix(in srgb,var(--accent) 16%,transparent),var(--soft));
+  background-size:200% 100%;animation:mxshim 1.4s ease-in-out infinite}.mx-shim.s2{width:56%}
+@keyframes mxshim{from{background-position:100% 0}to{background-position:-100% 0}}
+@media (prefers-reduced-motion:reduce){.mx-shim{animation:none}}

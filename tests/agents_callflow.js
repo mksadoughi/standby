@@ -11,7 +11,7 @@ const cls = new Set(), els = {voice: {style: {display: ""}, classList: {remove: 
 var $ = id => id === "mxdock" ? null : els[id] || (els[id] = {style: {}, classList: {remove() {}, add() {}}, scrollHeight: 0, scrollTop: 0, clientHeight: 0});
 var posts = [], fetched = [], loads = 0, painted = 0, voice = null, spkEditing = false, focus = true;
 var api = async (p, b) => { if (b !== undefined) posts.push([p, b]); else fetched.push(p); return p.startsWith("/api/session/") ? {info: {id: p.split("/").pop()}, transcript: [], chat: [{role: "me", text: "hi", at: 1}]} : {ok: true} };
-var VTASKS = null, mxFadeIn = () => {}, openedWin = [], mxOpenWin = async s => { openedWin.push(s) }, mxToSummary = () => {};
+var VTASKS = null, mxFadeIn = () => {}, mxVisFill = () => {}, openedWin = [], mxOpenWin = async s => { openedWin.push(s) }, mxToSummary = () => {};
 var mxGet = api, mxLoad = () => { loads++ }, mxPaint = () => { painted++ }, mxFocusOn = () => focus;
 var mxPatch = (el, chunks) => { el.drawn = chunks.length }, mxRows = d => (d.chat || []).map((c, n) => ({k: "c:" + n}));
 var MX = {view: {kind: "past"}, call: null, agents: [{id: "a1", live: {call: "talk-1"}}], items: []}, mxAg = id => MX.agents.find(a => a.id === id);

@@ -132,6 +132,7 @@ function mxPaint() {
   const b = $("mbody"), h0 = b.scrollHeight;
   if (b._h == null) b._chunks = null;                  // _h = null asks for a whole new body, as it always has
   const fresh = spkEditing || MX.editing ? null : mxPatch(b, body); if (fresh) { b._h = "patched"; mxFadeIn(b._exp === (exp && exp.session) ? fresh : [], b) }
+  if (fresh) mxVisFill(b);
   const dk = $("mxdock"), dock = exp && exp.kind !== "call" && (exp.live || exp.paused) ? mxMeetDock(exp, (MXW[exp.session] || {}).lv) : [];
   if (dk) { dk.hidden = !dock.length; mxPatch(dk, dock) }
   if (fresh && (fresh.length || b.scrollHeight !== h0)) {
@@ -234,6 +235,10 @@ function mxCopyRow(e, b) {
 }
 function mxRows(d, lv, live, paused, calling, tasks) {
   const i = d && d.info, isCall = !!(i && (i.kind === "talk" || /^talk-/.test(i.id || "")));
+  // a call's visuals, each under the voice line it was drawn for (its question's id); one whose line isn't
+  // written yet (the voice still talking) or that went with no line, after the rest
+  const vsid = i && i.id, vis = isCall ? ((d && d.visuals) || []).filter(v => v.state !== "failed" && !MXVHIDE.has(vsid + ":" + v.id)) : [];
+  const placed = new Set(), visRows = qid => { for (const v of vis) if ((qid === null || v.qid === qid) && !placed.has(v.id)) { placed.add(v.id); add("v:" + v.id + ":" + v.state, mxVisHTML(vsid, v)) } };
   const runs = (i && i.runs) || [], at = r => { let k = 0; while (k + 1 < runs.length && r.t >= runs[k + 1].t - 0.01) k++; return runs.length ? runs[k].start + (r.t - runs[k].t) : (i && i.started || 0) + r.t };
   // the meeting's own events between its lines: started, paused and resumed, the mic muted, the call's sound paused
   const tOf = t => runs.length ? at({t}) : (i && i.started || 0) + t, sep = (when, text) => ({at: when, sep: text});
@@ -280,6 +285,7 @@ function mxRows(d, lv, live, paused, calling, tasks) {
       const stock = handoff && (/^\[HANDOFF\]/.test(c.text || "") || String(c.text || "").trim() === "I'm on it.");
       const said = stock || c.unsaid ? "" : String(c.cut && c.heard != null ? c.heard : c.text || "").trim();
       if (said) { add("c:" + x.n, `<div class="mx-qa ans${prev === "ai" ? " run" : ""}">${MXCP}<div class="a mx-said"><span class="mx-vmark">${MXLOGO}</span><div class="t">${c.cut ? md(said).replace(/<\/p>\s*$/, '<span class="mx-cut">\u2014 cut off</span></p>') : md(said)}</div></div></div>`); prev = "ai" }
+      if (c.qid && vis.length) { visRows(c.qid); prev = null }
       lastWho = undefined; continue }
     // a speaker's turn: their name and its time on one small line, the words at full width under it
     // its time only when the minute moved on since the last one shown ("Started 12:42 AM", then Speaker 1 without it)
@@ -287,6 +293,7 @@ function mxRows(d, lv, live, paused, calling, tasks) {
     const ts = clock(x.at), showTs = turn && ts !== lastClock; if (showTs) lastClock = ts;
     add("r:" + x.n, `<div class="mx-line${turn ? " turn" : ""}">${turn ? `<div class="mx-lh">${sp ? mxSpk(sp, d.info.id, "mx-who") : ""}${showTs ? `<span class="mx-ts">${ts}</span>` : ""}</div>` : ""}<div class="mx-lt"${x.r.heard ? ` title="Heard: ${esc(x.r.heard)}"` : ""}>${x.r.heard ? fixedWords(x.r, d.learned) : esc(x.r.text || "")}</div></div>`);
   }
+  if (vis.length) visRows(null);
   // work going on, by name, from the call's task records (the voice's "tasks"): working, waiting, or no
   // progress lately; ended ones go. Without records (an older app), one "Working on it…" while hand-offs
   // outnumber what came back.
@@ -759,7 +766,15 @@ function mxToSummary() { const top = () => { const b = $("mbody"); if (b) b.scro
 async function mxToOrb() { mxMenuClose(); const api = window.pywebview && window.pywebview.api; if (api && api.to_orb) { const r = await api.to_orb(); if (r && r.error) toast(r.error) } }
 // ⋯ in a call: Settings (the voice and its model). The orb is its own button beside End (the user, 2026-10-22).
 function mxCallMenu(e) {
-  mxMenu(e, `<button class="mi" role="menuitem" onclick="mxMenuClose();openSettings()">Settings</button>`, "mx-menu");
+  const d = MX.call && (MXW[MX.call.session] || {}).d, on = !d || d.visuals_on !== false;
+  mxMenu(e, `<button class="mi mx-tick" role="menuitemcheckbox" aria-checked="${on}" onclick="mxVisuals(${!on})">Show visuals<span class="ck">${on ? MXI.check : ""}</span></button><hr>` +
+    `<button class="mi" role="menuitem" onclick="mxMenuClose();openSettings()">Settings</button>`, "mx-menu");
+}
+// Settings > Call's "Show visuals during calls", from the call: off, the voice is asked for none
+async function mxVisuals(on) {
+  mxMenuClose();
+  try { await api("/api/settings", {call_visuals: on}) } catch (e) {}
+  const d = MX.call && (MXW[MX.call.session] || {}).d; if (d) d.visuals_on = on;
 }
 // the call's conversation, under it: drawn from the record the poller keeps (MXW), no fetch or timer of
 // its own; the first time, before the poller has it, fetched once
@@ -779,8 +794,49 @@ async function mxCallLog() {
   if (!d || spkEditing) return;
   const stick = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
   mxFadeIn(mxPatch(el, mxRows(d, null, false, false, true, VTASKS).filter(r => r.k !== "empty")), el);
+  mxVisFill(el);
   if (stick) el.scrollTop = el.scrollHeight;
 }
+/* ---------------------------------------------------------------- a call's visuals
+   Each in a sandboxed frame (scripts only: its own opaque origin, so not this page, its token or its API),
+   its document whole from the server (the kit, the fragment, a policy that lets nothing in or out; the app
+   walls the frames off from the window's bridge and from loading anything, framewall.py). Its one way out
+   is a message: its height, or an https link clicked, opened in the browser. */
+const MXVHIDE = new Set(), MXVX = '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+function mxVisHTML(sid, v) {
+  const drawing = v.state === "drawing";
+  return `<div class="mx-vis${drawing ? " drawing" : ""}" data-s="${esc(sid)}" data-v="${+v.id}"><button type="button" class="mx-visx" title="Close" aria-label="Close" onclick="mxVisClose(this)">${MXVX}</button>` +
+    (drawing ? `<div class="mx-vish">Drawing\u2026</div>${v.what ? `<div class="mx-visw">${esc(v.what)}</div>` : ""}<i class="mx-shim"></i><i class="mx-shim s2"></i>` : "") + "</div>";
+}
+function mxVisFill(el) {
+  for (const box of el.querySelectorAll(".mx-vis:not(.drawing):not([data-f])")) {
+    box.dataset.f = "1";
+    api("/api/visual?session=" + encodeURIComponent(box.dataset.s) + "&id=" + box.dataset.v + "&doc=inline").then(v => {
+      if (!v || !v.doc || !box.isConnected) return;
+      const f = document.createElement("iframe");
+      f.setAttribute("sandbox", "allow-scripts");
+      f.setAttribute("referrerpolicy", "no-referrer");
+      f.title = v.what || "Visual";
+      f.srcdoc = v.doc;
+      box.appendChild(f);
+    }).catch(() => { delete box.dataset.f });
+  }
+}
+function mxVisClose(b) {
+  const box = b.closest(".mx-vis"); if (!box) return;
+  MXVHIDE.add(box.dataset.s + ":" + box.dataset.v); box.remove(); mxCallLog();
+}
+let MXVOPEN = 0;
+addEventListener("message", e => {
+  const f = [...document.querySelectorAll(".mx-vis iframe")].find(x => x.contentWindow === e.source), m = e.data;
+  if (!f || !m || typeof m !== "object") return;
+  if (m.sb === "size") f.style.height = Math.max(28, Math.min(480, Math.ceil(+m.h || 0))) + "px";
+  // a link: https only, while the pointer is on that visual, one a second and a half: never one it opens by itself
+  else if (m.sb === "open" && typeof m.href === "string" && /^https:\/\/[^\s]+$/i.test(m.href) && f.matches(":hover") && Date.now() - MXVOPEN > 1500) {
+    MXVOPEN = Date.now();
+    if (window.pywebview && pywebview.api && pywebview.api.open_url) pywebview.api.open_url(m.href);
+  }
+});
 // what Claude Code opened ended: what ended at its summary
 function mxFocusCheck() {
   if (!MX.fcLive) return;

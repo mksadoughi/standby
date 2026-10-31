@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 STATES = ["settings", "settings-help", "settings-call", "settings-recording", "usage", "usage-today", "usage-empty", "dictation", "dictation-shortcut", "dictation-recording", "settings-voice-prep", "settings-try-start", "settings-try-mid", "settings-try-failed", "settings-try-playing", "dictation-words", "settings-talkover", "settings-speech-dl", "settings-speech-8gb", "settings-speech-8gb-standard",
-          "mx-past", "mx-row-menu", "mx-delete-ask", "mx-past-session", "mx-past-open", "mx-past-open-menu", "mx-past-empty", "mx-live", "mx-hear", "mx-hear-open", "mx-hear-off", "mx-hear-new", "mx-ask", "mx-pausing", "mx-ending", "mx-live-menu", "mx-paused", "mx-micno", "mx-soundno", "mx-soundask", "mx-spkname", "cc-live", "cc-livemenu", "cc-call", "cc-call-tasks", "cc-call-thinking", "cc-call-pausing", "cc-call-paused", "cc-call-waiting", "cc-call-working", "cc-callmenu", "cc-callcopy", "cc-callend", "cc-ended", "cc-long", "cc-past", "cc-past-menu"]
+          "mx-past", "mx-row-menu", "mx-delete-ask", "mx-past-session", "mx-past-open", "mx-past-open-menu", "mx-past-empty", "mx-live", "mx-hear", "mx-hear-open", "mx-hear-off", "mx-hear-new", "mx-ask", "mx-pausing", "mx-ending", "mx-live-menu", "mx-paused", "mx-micno", "mx-soundno", "mx-soundask", "mx-spkname", "cc-live", "cc-livemenu", "cc-call", "cc-call-tasks", "cc-call-thinking", "cc-call-pausing", "cc-call-paused", "cc-call-waiting", "cc-call-working", "cc-call-visual", "cc-callmenu", "cc-callcopy", "cc-callend", "cc-ended", "cc-long", "cc-past", "cc-past-menu"]
 
 FAKE = r"""
 const NOW = Date.now() / 1000, SCENE = location.hash.slice(1);
@@ -297,7 +297,7 @@ const MXFAKE = (() => {
       return {info: {id: sid, kind: c.kind === "call" ? "talk" : "meeting", title: c.title || (c.kind === "call" ? "Talk" : "Meeting"), title_source: c.title ? "user" : "default", live: !!c.live, started: t0, duration: c.duration_s || Math.round(now() - t0),
         runs: now() - t0 > 140 ? [{start: t0, t: 0, end: t0 + 70}, {start: t0 + 130, t: 70}] : [{start: t0, t: 0}], claude: S0.claude !== false, events: [{kind: "mic_muted", from: 95, to: 125}].concat(S0.offAt ? [{kind: "source_off", name: "Zoom", from: S0.offAt, to: null}] : []),
         ask: c.live && this.ask ? this.ask : null},
-        chat: S0.chat, transcript: tr, speakers: {alias: {}, names: Object.assign({"2": "Nadia", "3": "Theo", "4": "Jules"}, this._names || {}), known: {"5": "Ines"}}, pending: null, suggest: null};
+        chat: S0.chat, visuals: S0.visuals || [], transcript: tr, speakers: {alias: {}, names: Object.assign({"2": "Nadia", "3": "Theo", "4": "Jules"}, this._names || {}), known: {"5": "Ines"}}, pending: null, suggest: null};
     },
     stopMac(sid) { for (const m of items) if (m.session === sid) { m.live = false; m.duration_s = Math.round(now() - m.at); m.points = ["p99 target for Q4: 300 ms on trip search", "Regional fares aren't cached yet", "Same cache on the fares endpoint, by Thursday"] }
       for (const a of ag) if (a.live && a.live.meeting === sid) a.live.meeting = null },
@@ -307,7 +307,8 @@ window.fetch = async (p, o) => { const id = p.split("?")[0].split("/").pop(), bo
   const mx = p.startsWith("/api/msg/") || p === "/api/speaker" || p === "/api/claude" ? MXFAKE.answer(p, body)
     : p === "/api/capture/answer" ? (MXFAKE.ask = null, {ok: true})
     : p === "/api/live/source" ? ((MXFAKE.hearing || []).forEach(x => { if (x.id === body.id) x.on = body.on }), {ok: true})
-    : p.startsWith("/api/session/sample-") ? MXFAKE.session(id) : p.startsWith("/api/live/sample-") ? MXFAKE.live(id) : null;
+    : p.startsWith("/api/session/sample-") ? MXFAKE.session(id) : p.startsWith("/api/live/sample-") ? MXFAKE.live(id)
+    : p.startsWith("/api/visual?") ? { id: 1, state: "ready", what: "How long a route is kept", doc: VISDOC } : null;
   if (mx) return { json: async () => JSON.parse(JSON.stringify(mx)) };
   const r = p === "/api/state" ? STATE : p === "/api/check" ? CHECK : p === "/api/settings" ? SETTINGS
   : p === "/api/speech" ? SETTINGS.settings.speech
@@ -352,6 +353,11 @@ SCENES = r"""
         { role: "me", text: "Is the fares cache warm for guests too?", at: t + 30, voice: true },
         { role: "ai", text: "Mostly. Guests share the member cache for the first two minutes, then", at: t + 32, voice: true, cut: true, heard: "Mostly. Guests share the member cache for the first two minutes." },
         { role: "ai", text: "The tests are done: all 112 pass, and nothing depends on the guest TTL.", result: "All 112 routing cache tests pass. Nothing depends on the guest TTL; `test_reroute` is slow (4.2 s) but passes.", reason: "done", at: t + 260, voice: true });
+      // a visual drawn for the fares answer, and one still being drawn for the next
+      if (SCENE === "cc-call-visual") { S0.chat[3].qid = "q-2"; S0.chat.push({ role: "me", text: "And the regional routes?", at: t + 280, voice: true },
+        { role: "ai", text: "Thirty minutes for members, five for guests. Let me lay the three out side by side.", at: t + 283, voice: true, qid: "q-9" });
+        S0.visuals = [{ id: 1, state: "ready", qid: "q-2", at: t + 24, what: "How long a route is kept" },
+          { id: 2, state: "drawing", qid: "q-9", at: t + 284, what: "Cache times for the three route kinds" }] }
       // deeper work going on: asked, not back yet
       if (SCENE === "cc-call-working") S0.chat.push({ role: "me", text: "Can you check why the fares cache misses for guests?", at: t + 70, voice: true },
         { role: "ai", text: "Let me look into the fares cache.", handoff: "Find why the fares cache misses for guest requests", at: t + 72, voice: true }) }
@@ -483,6 +489,21 @@ def setup_page(scene):
     return html.replace("</head>", head + "</head>", 1).replace("<script>", fake + "<script>", 1)
 
 
+# A visual as the voice's side copy might draw it, in its sandbox's document (mac/visuals.py); KaTeX and Mermaid
+# from SB_KIT_LIBS when set (where install.sh puts them), else their source shows as text.
+VISUAL_SAMPLE = """<div data-size="medium"><h1>How long a route is kept</h1>
+<div style="display:grid;grid-template-columns:64px 1fr 44px;gap:7px 10px;align-items:center;font-size:12px" class="muted">
+<span>Members</span><span style="height:10px;border-radius:5px;background:var(--accent)"></span><span>15 min</span>
+<span>Guests</span><span style="height:10px;width:13%;border-radius:5px;background:var(--accent);opacity:.45"></span><span>2 min</span></div>
+<p class="muted" style="margin-top:10px">Since this morning's fix: <sb-math>t_{guest} = \\tfrac{2}{15}\\,t_{member}</sb-math></p></div>"""
+
+
+def visual_doc(fragment=VISUAL_SAMPLE, inline=True):
+    sys.path.insert(0, str(ROOT / "mac"))
+    import visuals
+    return visuals.doc(fragment, os.environ.get("SB_KIT_LIBS") or "/nonexistent", inline=inline)
+
+
 def page(settings_window=False):
     src = (ROOT / "mac" / "ui.py").read_text()
     html = src[src.index('PAGE = r"""') + len('PAGE = r"""'):]
@@ -490,7 +511,7 @@ def page(settings_window=False):
     if settings_window:                       # as /settings serves it (ui.main_page): Settings alone
         html = html.replace("__SB_SETWIN__", "1").replace('<script src="/agents.js"></script>', "")
     i = html.rindex("<script>")
-    html = (ROUNDED + LIGHTS + html[:i]) + "<script>" + FAKE + "</script>" + html[i:].replace(
+    html = (ROUNDED + LIGHTS + html[:i]) + "<script>const VISDOC = " + json.dumps(visual_doc()).replace("</", "<\\/") + ";" + FAKE + "</script>" + html[i:].replace(
         "</body>", "<script>" + SCENES + "</script></body>")
     # The agents view's own files, inline: the preview has no server
     mx = ROOT / "mac"
