@@ -426,7 +426,7 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
 </ul>
 
 
-<figure class="film" id="film"><div class="screen"><video src="video/story.mp4" poster="video/story.jpg" muted loop playsinline preload="metadata"></video><button type="button" class="big" aria-label="Play the film"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-play" d="M8 5.5v13l11-6.5z" fill="currentColor"/><path class="i-pause" d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z" fill="currentColor"/></svg></button></div>
+<figure class="film" id="film"><div class="screen"><video src="video/story.mp4" poster="video/story.jpg" muted playsinline preload="metadata"></video><button type="button" class="big" aria-label="Play the film"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-play" d="M8 5.5v13l11-6.5z" fill="currentColor"/><path class="i-pause" d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z" fill="currentColor"/></svg></button></div>
   <div class="bar"><button type="button" class="pp" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-play" d="M8 5.5v13l11-6.5z" fill="currentColor"/><path class="i-pause" d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z" fill="currentColor"/></svg></button><input type="range" min="0" max="1000" value="0" step="1" aria-label="Seek"><span class="tm">0:00</span><button type="button" class="snd muted" aria-label="Sound on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path class="i-on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path class="i-off" d="M15.5 9.5l5 5m0-5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><button type="button" class="fs" aria-label="Full screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></figure>
 
 <section id="what">
@@ -560,14 +560,24 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
 })();
 </script>
 <script>
-// the film's bar: the picture plays with its sound once you press play; the bar under it follows it
+// the film's bar: the picture plays with its sound once you press play; the bar under it follows it. It plays only
+// while you can see it: scrolled away, in another tab or with you in another app it pauses, and goes on when you're back, unless
+// you paused it. It plays once, then the play button is back.
 (function () {
   var F = document.getElementById("film"), v = F.querySelector("video"), r = F.querySelector("input"), tm = F.querySelector(".tm"), snd = F.querySelector(".snd");
   var mmss = function (s) { s = Math.floor(s || 0); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+  var want = false, seen = false;                                      // you pressed play; it's on the screen
   function toggle() {
-    if (v.paused) { if (!F.classList.contains("started")) { v.muted = false; snd.classList.remove("muted"); snd.setAttribute("aria-label", "Sound off"); } F.classList.add("started"); v.play().catch(function () {}); }
-    else v.pause();
+    if (v.paused) { if (!F.classList.contains("started")) { v.muted = false; snd.classList.remove("muted"); snd.setAttribute("aria-label", "Sound off"); } F.classList.add("started"); want = true; v.play().catch(function () {}); }
+    else { want = false; v.pause(); }
   }
+  var away = false;                                                    // you're in another app
+  function follow() { if (want && seen && !away && !document.hidden) { if (v.paused) v.play().catch(function () {}); } else if (!v.paused) v.pause(); }
+  addEventListener("blur", function () { away = true; follow(); }); addEventListener("focus", function () { away = false; follow(); });
+  if ("IntersectionObserver" in window) new IntersectionObserver(function (e) { seen = e[0].isIntersecting; follow(); }, { threshold: .35 }).observe(v);
+  else seen = true;
+  document.addEventListener("visibilitychange", follow);
+  v.addEventListener("ended", function () { want = false; F.classList.remove("started"); });
   F.querySelector(".big").addEventListener("click", toggle); F.querySelector(".pp").addEventListener("click", toggle); v.addEventListener("click", toggle);
   v.addEventListener("play", function () { F.classList.add("playing"); F.querySelector(".pp").setAttribute("aria-label", "Pause"); });
   v.addEventListener("pause", function () { F.classList.remove("playing"); F.querySelector(".pp").setAttribute("aria-label", "Play"); });
