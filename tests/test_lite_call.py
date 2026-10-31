@@ -715,6 +715,23 @@ check("  more comes while still paused: worded again, with all of it, saying the
 ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": False})
 check("    Resume says the newest, once", wait(lambda: len(vs.told) > n) and vs.told[-1] == "Both are done now."
       and len(told_model) == n_model + 2 and (time.sleep(ui.LITE_QUIET_GAP + 0.3) or True) and len(vs.told) == n + 1, vs.told[n:])
+# More comes at the very moment of Resume (a message as they click, talk-20261031-013229): worded again with all of
+# it, the voice told its line was never said, and said; asked as a plain Resume, it took its line as said and was
+# quiet, so the click said nothing.
+wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+hand("wait thirty seconds")
+ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": True})
+n, n_model = len(vs.told), len(told_model)
+replies.append("Almost done.")
+back("Almost done: the pager is merged.")
+wait(lambda: len(told_model) == n_model + 1)
+replies.append("Almost done, and the release notes are written too.")
+ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": False})
+back("The release notes are written.")
+check("  more comes as they resume: worded again with all of it, told its line was never said, and said at once",
+      wait(lambda: len(vs.told) > n) and vs.told[-1] == "Almost done, and the release notes are written too."
+      and told_model[-1].startswith(ui.VOICE_TAG + ui.LITE_REWORDED) and "The release notes are written." in told_model[-1]
+      and "the pager is merged" in told_model[-1] and not ui.LITE_CALLS[sid].get("unheard"), (told_model[n_model:], vs.told[n:]))
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 hand("wait fifteen seconds")
 ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": True})

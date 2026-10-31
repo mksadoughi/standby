@@ -3992,13 +3992,14 @@ def _lite_tell(sid):
             trace(sid, "told", how=w["how"], alone=True, after_pause=True, ahead=True,
                   tasks=[t["id"] for t in picked if "id" in t], messages=len(picked) if w["messages"] else 0)
         else:
-            if ahead is not None and ahead["line"]:
-                c.setdefault("unheard", []).append(ahead["line"])    # its own turn had it; never said
-            typed = _lite_typed_words(sid, c)
+            # more came just as they were back (a message at the very moment of Resume, talk-20261031-013229): worded
+            # again with all of it, the voice told what it had worded ahead was never said; asked as a plain
+            # Resume, it took that line as said and stayed quiet
+            typed = "\n".join(x for x in ((ahead or {}).get("typed"), _lite_typed_words(sid, c)) if x)
             w0 = _lite_pick(picked)
-            trace(sid, "told", how="message" if w0[1] else "done", alone=True, after_pause=bool(resumed),
-                  tasks=[t["id"] for t in picked if "id" in t], messages=len(picked) if w0[1] else 0)
-            w = _lite_word(sid, c, picked, resumed, typed)
+            trace(sid, "told", how="message" if w0[1] else "done", alone=True, after_pause=bool(resumed or ahead),
+                  tasks=[t["id"] for t in picked if "id" in t], messages=len(picked) if w0[1] else 0, again=ahead is not None)
+            w = _lite_word(sid, c, picked, bool(resumed or ahead), typed, again=ahead is not None)
         news, how, failed, line, asked = picked, w["how"], w["failed"], w["line"], w["asked"]
         trace(sid, "told_done", how=how, ms=int((time.time() - t0) * 1000), said=line or None, failed=bool(failed))
         if sid not in LITE_CALLS or c.get("hanging_up"):
