@@ -906,7 +906,9 @@ test('End while connecting: the call is ended as soon as it starts, Ending meanw
 
 for (const [name, ev, want] of [['listening, nothing said: Listening', { phase: 'listening' }, 'Listening'],
     ['the voice thinking: Thinking, the dots moving', { phase: 'thinking' }, '\u273b Thinking .'],
-    ['work taken deeper: Working on it', { phase: 'listening', working: true }, '\u273b Working on it .']] as const)
+    ['work taken deeper, an older Standby saying no more: Working on it', { phase: 'listening', working: true }, '\u273b Working on it .'],
+    ['work taken deeper: what it is, and its last step', { phase: 'listening', working: true, doing: 'Working on: run the tests \u00b7 running npm test' },
+      '\u273b Working on: run the tests \u00b7 running npm test .']] as const)
   test('on the call, ' + name, async ($, on) => {
     const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1 } }
     mock.clock(on)

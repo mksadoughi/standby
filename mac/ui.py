@@ -3351,6 +3351,25 @@ def lite_task_list(sid):
             for t in lite_tasks(c)] if c else []
 
 
+LITE_DOING_WHAT = 48        # the band's line under a call: the task, cut at a word
+
+
+def lite_doing(c):
+    """What the call's work is, for the band's line under the call: the newest task running (and its last step),
+    else the newest waiting its turn, else "" (nothing is going on, so the line says nothing of work)."""
+    live = [t for t in (c or {}).get("tasks", {}).values() if t["state"] in LITE_LIVE]
+    if not live:
+        return ""
+    newest = lambda states: max((t for t in live if t["state"] in states), key=lambda t: int(t["id"]), default=None)
+    t = newest(("running",)) or newest(("stalled",)) or newest(("queued", "sent"))
+    what = t["what"] if len(t["what"]) <= LITE_DOING_WHAT else t["what"][:LITE_DOING_WHAT].rsplit(" ", 1)[0] + "\u2026"
+    if t["state"] == "running":
+        return "Working on: %s%s" % (what, " \u00b7 " + t["doing"][:40] if t["doing"] else "")
+    if t["state"] == "stalled":
+        return "No progress since %s: %s" % (time.strftime("%H:%M", time.localtime(t["last"])), what)
+    return "Waiting its turn in the session: %s" % what
+
+
 def _lite_watchdog(sid, c):
     """Running with no step for LITE_STALL: stalled (a session that did one step and stopped shows its turn's
     end as done; one that goes quiet mid-turn shows here)."""
@@ -3535,10 +3554,10 @@ def _lite_watch(sid):
         # what the band says under the call: the voice's phase, work taken deeper, the voice failing, and
         # its first download ("Getting the voice ready… 42%") while Connecting waits on it
         state = (phase, bool(c.get("running")), st.get("notice") or "", st.get("retrying_since"), lite_waiting(sid, st),
-                 st.get("preparing") or "")
+                 st.get("preparing") or "", lite_doing(c))
         if state != seen.get("state"):
             seen["state"] = state
-            _lite_out(c["cc"], dict({"call": "state", "session": sid, "phase": phase, "working": state[1]},
+            _lite_out(c["cc"], dict({"call": "state", "session": sid, "phase": phase, "working": state[1], "doing": state[6]},
                                     **({"notice": state[2]} if state[2] else {}),
                                     **({"retrying_since": state[3]} if state[3] else {}),
                                     **({"waiting": True} if state[4] else {}),
@@ -3782,6 +3801,12 @@ def lite_progress(b):
         if t is not None and t["state"] in ("sent", "queued"):
             t["last"] = time.time()
             _lite_set(sid, c, t, "running")
+            # Claude Code hands its queue in at once, in order: what was waiting before this went in with it (one
+            # left "queued" kept the band saying "Working on it" for half an hour, 2026-10-31)
+            for x in list(c.get("tasks", {}).values()):
+                if x is not t and x["state"] == "queued" and int(x["id"]) < int(t["id"]):
+                    x["last"] = t["last"]
+                    _lite_set(sid, c, x, "running")
         return {"ok": True}
     if kind == "undelivered":                      # Claude Code turned it away
         _lite_lost(sid, b.get("id"), text or "refused")

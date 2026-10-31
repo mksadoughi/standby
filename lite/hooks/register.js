@@ -49,7 +49,7 @@ const S = {
   starting: null,       // { kind, since, cancel? }: a call or listening starting, until it's live
   ending: null,         // { kind, since }: ended, until its summary's row is up
   flash: null,          // { mark, color, text, until }: a short line that then goes (declined, no answer, added)
-  callState: { phase: '', since: 0, working: false, workingSince: 0, notice: '', retrying: 0, waiting: false },   // the call's voice
+  callState: { phase: '', since: 0, working: false, workingSince: 0, doing: '', notice: '', retrying: 0, waiting: false },   // the call's voice
   unreach: 0,
   confirm: null,        // End asked on the band: { what, question, yes, no, until }
   keysNow: [],          // the terminal band's actions as last drawn: [[letter, what]], what a typed letter runs
@@ -212,6 +212,7 @@ async function heard($, ev) {
     const cs = S.callState, now = Date.now()
     if (ev.phase !== cs.phase) { cs.phase = ev.phase; cs.since = now }
     if (!!ev.working !== cs.working) { cs.working = !!ev.working; cs.workingSince = now }
+    cs.doing = ev.doing || ''                    // what the work is: the task, its last step (the Mac's words)
     cs.notice = ev.notice || ''
     cs.waiting = !!ev.waiting
     cs.preparing = ev.preparing || ''
@@ -493,7 +494,7 @@ async function startCall($) {
   if (!cancelled) S.starting = { kind: 'call', since, voice: true, until: Date.now() + VOICE_READY_MS }
   S.call = { session: r.session }
   S.caption = ''
-  S.callState = { phase: 'listening', since: Date.now(), working: false, workingSince: 0, notice: '', retrying: 0, waiting: false }
+  S.callState = { phase: 'listening', since: Date.now(), working: false, workingSince: 0, doing: '', notice: '', retrying: 0, waiting: false }
   await refresh($)
   if (cancelled) { await endCall($); return 'Call ended.' }            // End pressed while it was connecting
   return 'On a call. Talk; real work comes here.'
@@ -856,7 +857,7 @@ async function band($, e, next) {
     : paused ? below('Paused. Resume when you’re ready to talk')
     : cs.phase === 'speaking' ? below(said || '✻')
     : cs.phase === 'thinking' ? belowSlow('✻ Thinking', cs.since)
-    : cs.working ? belowSlow('✻ Working on it', cs.workingSince)
+    : cs.working ? belowSlow('✻ ' + (cs.doing || 'Working on it'), cs.workingSince)
     : cs.phase === 'listening' ? below(S.heard.you || 'Listening')
     : below(said || 'Listening')
   return Box({ flexDirection: 'column', children: [top, ...sub] })

@@ -520,10 +520,37 @@ check("queued in a busy session: queued, never called lost, nothing said for it 
       q["state"] == "queued" and len(told_model) == n_model and ui.lite_busy(sid), (q, told_model[n_model:]))
 ui.LITE_POST["/api/lite/progress"]({"session": sid, "id": ev["id"], "kind": "received"})
 check("  it starts: running", q["state"] == "running")
+check("  the band says what it is: the task, by its words", ui.lite_doing(ui.LITE_CALLS[sid]).startswith("Working on: wait ten seconds"),
+      ui.lite_doing(ui.LITE_CALLS[sid]))
 replies.append("Ten seconds are up.")
 back("Ten seconds are up.")
 wait(lambda: len(told_model) > n_model)
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+
+# Two waiting their turn; Claude Code takes its queue in at once: the later one's word brings the earlier in too
+# (one left "queued" kept the band at "Working on it" for half an hour, 2026-10-31)
+ui.LITE_DELIVER_WAIT, wait_was = 0.3, ui.LITE_DELIVER_WAIT
+q1, _s = handoff_of("add the next arrow", "add the next arrow", received=False)
+q2, _s = handoff_of("and the back arrow", "and the back arrow", received=False)
+ui.LITE_DELIVER_WAIT = wait_was
+for e in (q1, q2):
+    ui.LITE_POST["/api/lite/progress"]({"session": sid, "id": e["id"], "kind": "queued"})
+check("two waiting: the band says so, by the newest", ui.lite_doing(ui.LITE_CALLS[sid]) == "Waiting its turn in the session: and the back arrow",
+      ui.lite_doing(ui.LITE_CALLS[sid]))
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "id": q2["id"], "kind": "received"})
+check("  the later one goes in: the earlier with it, both running",
+      [ui._lite_of(ui.LITE_CALLS[sid], e["id"])["state"] for e in (q1, q2)] == ["running", "running"])
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "tool", "text": "editing card.js"})
+check("  its last step on the band", ui.lite_doing(ui.LITE_CALLS[sid]) == "Working on: and the back arrow \u00b7 editing card.js",
+      ui.lite_doing(ui.LITE_CALLS[sid]))
+back()
+check("  the turn ends: both done, and the band's line no longer names them",
+      [ui._lite_of(ui.LITE_CALLS[sid], e["id"])["state"] for e in (q1, q2)] == ["done", "done"]
+      and "arrow" not in ui.lite_doing(ui.LITE_CALLS[sid]), tasks_txt())
+check("  nothing live at all: the line says nothing of work", ui.lite_doing({"tasks": {}}) == "")
+long_t = ui._lite_task({"tasks": {}}, "handoff", "The user says that on the visuals card in the mini window the next arrow does nothing at all", "running")
+check("  a long task: cut at a word", ui.lite_doing({"tasks": {"1": long_t}}).startswith("Working on: The user says that on the visuals card in the\u2026")
+      or ui.lite_doing({"tasks": {"1": long_t}}).endswith("\u2026"), ui.lite_doing({"tasks": {"1": long_t}}))
 
 # Work back while they talk: not told over them; their turn carries it (in [TASKS]) and it's never told again.
 hand("build the panel")
