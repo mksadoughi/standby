@@ -197,7 +197,7 @@ font-size:11.5px;color:var(--c-muted)}
 /* the pager on the card's fixed side, the orb's (each visual has its own width): ‹ › never move under the pointer */
 body.r .vft{flex-direction:row-reverse}
 /* below the orb (a top corner) the fixed edge is the top: the pager in a top row, the close keeping its corner */
-[data-v=top] .vft{top:0;bottom:auto;padding:4px 44px 0 14px;justify-content:flex-start}body.r[data-v=top] .vft{justify-content:flex-start;padding:4px 44px 0 14px}
+[data-v=top] .vft{top:0;bottom:auto;padding:4px 44px 0 14px;justify-content:flex-start;gap:8px}body.r[data-v=top] .vft{justify-content:flex-start;padding:4px 44px 0 14px}
 .vft button{height:22px;min-width:22px;border-radius:6px;border:0;padding:0;display:flex;align-items:center;justify-content:center;gap:4px;
 color:var(--c-muted);background:var(--c-hover);font:inherit;cursor:default}
 .vft button:disabled{opacity:.4}.vft button:not(:disabled):hover{background:var(--c-press);color:var(--c-text)}
