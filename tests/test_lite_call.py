@@ -283,6 +283,24 @@ answers.append("Sure, what should it be called?")
 ui.ask_spoken(sid, "Write a file. But before you write it, confirm the name with me.", None, None)
 check("  their whole turn is asked, with what the dropped one carried", ui.LITE_RESUMED in asked[-1]
       and asked[-1].endswith("confirm the name with me.") and "handoff" not in kinds(), asked[-1])
+# A summary made after the hello goes with one turn. Its voice keeps its own conversation (the default), so an
+# early question they went on from has given it already: never again in front of their words (it went twice).
+ui.LITE_CALLS[sid]["gist"] = "The user is shipping the release."
+answers.append("Okay.")
+ui.ask_spoken(sid, "So the release", None, None, commit=lambda: False)
+first = asked[-1]
+answers.append("Okay.")
+ui.ask_spoken(sid, "So the release is today?", None, None)
+check("a summary with an early question they went on from: given once, never again with their turn",
+      "[SUMMARY]" in first and "[SUMMARY]" not in asked[-1], asked[-1][:200])
+os.environ["STANDBY_VOICE_LEDGER"] = "1"           # turns built from the record: the dropped one never counted
+ui.LITE_CALLS[sid]["gist"] = "The user is shipping the release."
+answers.append("Okay.")
+ui.ask_spoken(sid, "So the release", None, None, commit=lambda: False)
+answers.append("Okay.")
+ui.ask_spoken(sid, "So the release is today?", None, None)
+del os.environ["STANDBY_VOICE_LEDGER"]
+check("  turns built from the record: their turn carries it", "[SUMMARY]" in asked[-1], asked[-1][:200])
 answers.append("[HANDOFF] Run the tests.")
 ui.ask_spoken(sid, "Run the tests.", None, None, commit=lambda: True)
 check("  an early question that was their turn: its hand-off goes", kinds() == ["handoff"], out)

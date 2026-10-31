@@ -107,6 +107,11 @@ check("  one tool-less, throwaway call on Haiku, for this same session on a call
       argv[argv.index("--tools") + 1] == "" and "--no-session-persistence" in argv and "haiku" in argv[argv.index("--model") + 1]
       and "This same session, on a voice call, is about to talk with the user." in argv[argv.index("-p") + 1]
       and "at most 1000 words" in argv[argv.index("-p") + 1] and "User: Run the tests" in argv[argv.index("-p") + 1], argv)
+prompt = argv[argv.index("-p") + 1]
+check("  the session between tags, then the task again: last, it's not on the call nor talking to anyone (once it\n"
+      "    answered as the voice, \"Go ahead whenever you're ready\", and that was the call's summary)",
+      "<session>\nTitle: Routing cache TTL" in prompt and prompt.rstrip().endswith(getattr(sa, "CC_GIST_TASK", "(none)"))
+      and prompt.index("</session>") < prompt.index("You are not on the call"), prompt[-400:])
 usage = os.path.join(root, "agent", "usage.jsonl")
 check("  counted in Usage as its own kind", os.path.exists(usage) and any(json.loads(l).get("kind") == "cc-gist" for l in open(usage)))
 call_words = ("User: Let's keep the TTL at an hour, the PM agreed.\nVoice: Got it.\n"
@@ -199,7 +204,7 @@ def fake_talk(sid=None, wait=90, workspace=None, attach=None, copy=False, where=
 
 ui.start_talk, ui.live_session = fake_talk, (lambda *a, **k: live_now[0])
 ui.lite_publish = lambda cc, ev: None
-ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None: (ui.PENDING.pop(sid, None), asked.append(q), answers.pop(0))[2]
+ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None, commit=None: (ui.PENDING.pop(sid, None), asked.append(q), answers.pop(0))[2]
 os.environ["FAKE_REPLY"] = "Gist two: the changelog is next."
 t0 = time.time()
 r = ui.LITE_POST["/api/lite/call"]({"cc": CC})

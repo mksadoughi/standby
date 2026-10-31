@@ -3565,7 +3565,9 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
         return "I'm still on your last question." if "previous" in refused["error"] else refused["error"]
     answer = _run_ask(sid, told, voice=True, on_event=on_event, on_queued=on_queued, heard=heard, commit=commit)
     if commit is not None and not commit():        # asked early, and they went on: it did nothing, and
-        if gist and not c.get("gist"):             # what it carried once goes with the turn that is theirs
+        # what it carried once goes with the turn that is theirs, unless the voice keeps its own conversation,
+        # which has it already (the summary went twice in front of their first words: talk-20261030-153422)
+        if gist and not c.get("gist") and _agent_ledger():
             c["gist"] = gist
         if rang:
             c["rang"] = True

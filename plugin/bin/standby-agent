@@ -4303,6 +4303,10 @@ CC_GIST_PROMPT = (
     "or said, what was last being worked on, anything running, failing or waiting on the user, and "
     "anything to pick up on the call. Facts only: no advice, no greeting, no "
     "headings or markdown, short plain paragraphs. Call the person \"the user\".")
+# After the session, the task again: on a session that had just started a call ("Go ahead whenever you're
+# ready"), the model once answered as the voice, and that line was the call's summary (talk-20261030-153422).
+CC_GIST_TASK = ("That was the session, between the tags. You are not on the call and are talking to no one: "
+                "write only what its voice needs to know, as asked above.")
 
 
 def cc_condensed(rows, limit=CC_GIST_IN):
@@ -4369,7 +4373,7 @@ def cmd_cc_gist(args):
     if not text.strip():
         return 0
     asks = model_for(args.gist_model)
-    argv = [CLAUDE, "-p", CC_GIST_PROMPT + "\n\n" + text, "--model", asks, "--tools", "",
+    argv = [CLAUDE, "-p", "%s\n\n<session>\n%s\n</session>\n\n%s" % (CC_GIST_PROMPT, text, CC_GIST_TASK), "--model", asks, "--tools", "",
             "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"]
     try:
         r = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True,
