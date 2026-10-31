@@ -330,11 +330,12 @@ try:
           and "It's all you: same agent, same work, same memory, so never speak of a separate agent or helper." in call
           and "Anything else, like changing a file, running a command, searching the web or reading where your tools can't, is your deeper side's" in call
           and "reply [DEEP] and what to do, in your words; what was said goes with it." in call
-          and "Answer them first, then take it deeper; it works while you keep talking." in call
+          and "Whenever you take something deeper, they hear a few words first; after they've talked a while, say back "
+              "briefly what you understood, so a misreading shows at once." in call
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 300, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 360, (len(call.split()), call[:300]))
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
@@ -346,7 +347,7 @@ try:
           "Your own tools are only for looking: you can read and search where your session works, and ~/.standby." in call
           and "So whatever they ask for is yours to do" in call
           and "Don't try it yourself first; a tool refusing you only means it's your deeper side's to do, never that it can't be done." in call
-          and "this whole Claude Code session, with all its context and every tool and connection it has." in call
+          and "this whole Claude Code session, with every tool and connection it has." in call
           and "Never say you will look into something" not in call and "SUGGEST" not in call)
     check("  honest hand-offs: TASKS and its deeper side say what has happened; never a guess",
           "TASKS says what you've sent and whether it's running or ended; only that and your deeper side say what has "
@@ -457,6 +458,12 @@ try:
     json.dump({"handoff": True}, open(os.path.join(live, TALK + ".voice.json"), "w"))
     call = " ".join(sa.voice_prelude(TALK).split())
     check("  what they're saying comes first", "What they're saying comes first." in call, call[-700:])
+    check("  anything that matters is its deeper side's to answer, relied on, not its own summary; quick things are its own",
+          "It also has far more context than you and thinks harder, so anything that matters, like a decision, a plan, "
+          "what's left to do or something unclear, is its to answer: pass it their question and rely on what it says, not "
+          "your own summary; quick, simple things are yours." in call
+          and "It also has far more context than you and thinks harder, so anything that matters" in ledger
+          and "say back briefly what you understood, so a misreading shows at once" in ledger)
     check("  visuals on (the default): one plain paragraph, the tag's exact form, before the opening",
           sa.CALL_VISUALS in call and call.index(sa.CALL_VISUALS) < call.index("[CALL START] means") and "[VISUAL: what to show]" in call
           and "offer to put it up in the mini window" in call and "never say you've shown what they can't see" in call
