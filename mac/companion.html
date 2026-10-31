@@ -368,7 +368,8 @@ function visualCard() {
   if (key !== VC.key) { VC.key = key; if (lv) cardList() }
   if (!on || VC.closed || !VC.list.length) return cardPost(null);
   const m = VC.list.length, i = VC.at === null ? m - 1 : Math.min(VC.at, m - 1), v = VC.list[i];
-  const later = VC.list.slice(i + 1).some(x => !VC.seen.has(x.id)), fresh = !VC.seen.has(v.id);
+  // New: the newest while it's unseen; one gone back to was the newest once, so it's been seen
+  const later = VC.list.slice(i + 1).some(x => !VC.seen.has(x.id)), fresh = i === m - 1 && !VC.seen.has(v.id);
   if (fresh && !VC.seenT) VC.seenT = setTimeout(() => { VC.seen.add(v.id); VC.seenT = null; render() }, 5000);   // New until it's been up a while
   const maxW = Math.floor((screen.availWidth || 1440) / 2), maxH = Math.floor((screen.availHeight || 900) / 2), foot = m > 1 ? VFOOT : 0;
   const sz = VC.sz[v.id] || { want: "medium", w: 0, h: 0 }, drawing = v.state !== "ready";

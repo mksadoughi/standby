@@ -226,9 +226,10 @@ const CARD_CHECKS = `
   ok("a second: the card goes to it (2 / 2), the pager below, its New mark", last().id === 2 && els.vcard.innerHTML.includes("2 / 2")
      && els.vcard.innerHTML.includes("vnew") && last().h === last().area.h + 34 && last().hit.length === 2, [last(), els.vcard.innerHTML]);
   cardGo(-1);
-  ok("  ‹: back to 1 / 2", last().id === 1 && els.vcard.innerHTML.includes("1 / 2"), last());
+  ok("  ‹: back to 1 / 2, no New on it (it was seen as the newest)", last().id === 1 && els.vcard.innerHTML.includes("1 / 2") && !els.vcard.innerHTML.includes("vnew"), last());
   AT([V(1), V(2), V(3)]); await fresh();
-  ok("  a third while looking back: stays on 1, and › says New", last().id === 1 && els.vcard.innerHTML.includes("1 / 3") && els.vcard.innerHTML.includes('class="nx"'), els.vcard.innerHTML);
+  ok("  a third while looking back: stays on 1, and only › says New", last().id === 1 && els.vcard.innerHTML.includes("1 / 3") && els.vcard.innerHTML.includes('class="nx"')
+     && !els.vcard.innerHTML.includes("vnew"), els.vcard.innerHTML);
   cardClose();
   ok("closed: the card goes (w 0)", last().w === 0, last());
   await fresh();
