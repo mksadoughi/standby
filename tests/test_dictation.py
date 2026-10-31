@@ -56,8 +56,10 @@ def tap(t, key, hold=0.08):
     return [(t, "mod", key, True), (t + hold, "mod", key, False)]
 
 
-# Standby Dictation runs its own copy of the code, never the checkout (one in ~/Documents had macOS ask it for
-# that folder after every rebuild): mac/ and plugin/bin/, only what changed, what's gone removed.
+# Standby's apps run their own copy of the code, never the checkout (one in ~/Documents had macOS ask Standby
+# Dictation for that folder after every rebuild, and calls failed): mac/ and plugin/, only what changed, what's
+# gone removed, and only ever from the checkout it was installed from.
+import codecopy  # noqa: E402
 src, dest = root / "checkout", root / "copy"
 for rel, text in (("mac/dictation.py", "print(1)\n"), ("mac/native/macos/dictation_app.py", "x = 1\n"),
                   ("mac/__pycache__/dictation.cpython-312.pyc", "junk"), ("plugin/bin/standby-agent", "#!/bin/sh\n"),
@@ -65,16 +67,21 @@ for rel, text in (("mac/dictation.py", "print(1)\n"), ("mac/native/macos/dictati
     (src / rel).parent.mkdir(parents=True, exist_ok=True)
     (src / rel).write_text(text)
 os.chmod(src / "plugin/bin/standby-agent", 0o755)
-first = d.sync_code(src, dest)
-check("code copy: mac/ and plugin/bin/, no __pycache__, nothing else of the checkout",
+first = codecopy.sync(src, dest, install=True)
+check("code copy: mac/ and plugin/, no __pycache__, nothing else of the checkout",
       first == ["mac/dictation.py", "mac/native/macos/dictation_app.py", "plugin/bin/standby-agent"]
       and not (dest / "mac/__pycache__").exists() and not (dest / "tests").exists()
       and os.access(dest / "plugin/bin/standby-agent", os.X_OK), first)
-check("  again with nothing changed: nothing written (so its CodeWatch sees only real changes)", d.sync_code(src, dest) == [])
+check("  again with nothing changed: nothing written (so its CodeWatch sees only real changes)", codecopy.sync(src, dest) == [])
 time.sleep(0.01)
 (src / "mac/dictation.py").write_text("print(2)\n")
 (src / "mac/native/macos/dictation_app.py").unlink()
-check("  a change and a removal: exactly those", d.sync_code(src, dest) == ["mac/dictation.py", "mac/native/macos/dictation_app.py"]
+other = root / "worktree"
+(other / "mac").mkdir(parents=True)
+(other / "mac/dictation.py").write_text("print('a teammate')\n")
+check("  another checkout (a teammate's worktree, a test) never updates it", codecopy.sync(other, dest) == []
+      and (dest / "mac/dictation.py").read_text() == "print(1)\n" and codecopy.source(dest) == str(src.resolve()))
+check("  a change and a removal: exactly those", codecopy.sync(src, dest) == ["mac/dictation.py", "mac/native/macos/dictation_app.py"]
       and (dest / "mac/dictation.py").read_text() == "print(2)\n" and not (dest / "mac/native/macos/dictation_app.py").exists())
 app_was, d.APP = d.APP, root / "no such.app"
 check("  the login item without the app runs that copy, never the checkout",

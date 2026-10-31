@@ -55,6 +55,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import config  # noqa: E402  (config.json, shared with the app; never the code that reaches Claude Code)
 import vocabulary  # noqa: E402  (the user's words, learned on this Mac)
+import codecopy  # noqa: E402  (its own copy of the code, never the checkout)
 
 ROOT = config.ROOT
 WORDS = ROOT / "dictation-words.txt"
@@ -1148,56 +1149,8 @@ CRASH_WINDOW = 600.0                    # failed launches closer together than t
 GIVE_UP_AFTER = 3                       # and after this many in a row, launchd is not asked again
 
 
-# Standby Dictation runs from its own copy of the code, ~/.standby/code (mac/ and plugin/bin/), never the checkout:
-# one in ~/Documents (or Desktop, Downloads, iCloud) had macOS ask "Standby Dictation would like to access files
-# in your Documents folder" after every rebuild (an ad-hoc signature is a new app to macOS). Kept in step by
-# install.sh, by Standby as it starts, and by `standby dictation on`; CodeWatch then restarts into what changed.
-CODE = ROOT / "code"
-CODE_PARTS = ("mac", "plugin/bin")
-CODE_SKIP = ("__pycache__", ".DS_Store")
-
-
-def sync_code(src=None, dest=CODE):
-    """Copy the code Standby Dictation runs (CODE_PARTS of the checkout `src`) to `dest`, writing only what
-    changed (so its CodeWatch sees only real changes) and removing what's gone. The paths written, sorted."""
-    src = Path(src or REPO)
-    if src.resolve() == Path(dest).resolve():
-        return []
-    changed = []
-    for part in CODE_PARTS:
-        have = set()
-        for d, dirs, files in os.walk(src / part):
-            dirs[:] = [x for x in dirs if x not in CODE_SKIP]
-            for name in files:
-                if name in CODE_SKIP or name.endswith((".pyc", ".tmp")):
-                    continue
-                f = Path(d) / name
-                rel = f.relative_to(src)
-                have.add(rel)
-                out = Path(dest) / rel
-                st = f.stat()
-                try:
-                    was = out.stat()                # copied with its source's time: unchanged ones aren't read
-                    if (was.st_size, was.st_mtime_ns) == (st.st_size, st.st_mtime_ns):
-                        continue
-                except OSError:
-                    pass
-                data = f.read_bytes()
-                out.parent.mkdir(parents=True, exist_ok=True)
-                tmp = out.with_name(out.name + ".tmp")
-                tmp.write_bytes(data)
-                os.chmod(tmp, st.st_mode & 0o777)
-                os.utime(tmp, ns=(st.st_atime_ns, st.st_mtime_ns))
-                os.replace(tmp, out)
-                changed.append(str(rel))
-        for d, dirs, files in os.walk(Path(dest) / part):
-            dirs[:] = [x for x in dirs if x not in CODE_SKIP]
-            for name in files:
-                rel = (Path(d) / name).relative_to(dest)
-                if rel not in have and not name.endswith(".pyc"):
-                    os.remove(Path(d) / name)
-                    changed.append(str(rel))
-    return sorted(changed)
+# It runs its own copy of the code (codecopy: ~/.standby/code), never the checkout.
+CODE = codecopy.CODE
 
 
 def code_files(modules=None):
@@ -1490,7 +1443,7 @@ def write_agent():
 
 def cmd_on():
     from native import service
-    sync_code()                            # it runs its own copy, never the checkout (CODE)
+    codecopy.sync()                        # its own copy, up to date when started from the installed checkout
     launch_went_fine()                     # the user asks: forget earlier failed launches
     write_agent()
     if not service.stop(LABEL):
@@ -1623,10 +1576,6 @@ def main(argv=None):
         return _app().cmd_run(headless=True)
     if cmd == "on":
         return cmd_on()
-    if cmd == "sync-code":                 # install.sh names where, as its own ~/.standby
-        dest = Path(argv[1]) if len(argv) > 1 else CODE
-        print("%d file(s) of Standby Dictation's code updated in %s" % (len(sync_code(dest=dest)), dest))
-        return 0
     if cmd == "off":
         return cmd_off()
     if cmd == "status":

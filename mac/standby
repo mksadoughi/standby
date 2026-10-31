@@ -23,6 +23,12 @@ HERE="$(cd "$(dirname "$SELF")" && pwd)"
 PIDFILE="$ROOT/daemon.pid"
 LOGFILE="$ROOT/daemon.log"
 
+# The apps run their own copy of the code (codecopy.py): from the checkout it was installed from, bring it up
+# to date first, so a merge reaches them (codecopy does nothing for any other checkout).
+if [[ -x "$PY" && -f "$ROOT/code/.source" && "$(cat "$ROOT/code/.source")" == "$(cd "$HERE/.." && pwd -P)" ]]; then
+  "$PY" "$HERE/codecopy.py" "$ROOT/code" >&2 || true
+fi
+
 die() { echo "standby: $*" >&2; exit 1; }
 need_venv() { [[ -x "$PY" ]] || die "no venv at $VENV - run the installer first: $(dirname "$HERE")/install.sh"; }
 

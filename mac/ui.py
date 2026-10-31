@@ -6356,23 +6356,6 @@ def adopt_login_path():
     log("login PATH: +%d entries" % len(extra))
 
 
-DICTATION_SYNC = 5.0          # seconds between looks at the code Standby Dictation runs (its own copy)
-
-
-def _dictation_code_forever():
-    """Standby Dictation runs its own copy of the code, never the checkout (one in ~/Documents had macOS ask
-    it for that folder): kept in step from here, so a merge reaches it as before (its CodeWatch restarts it)."""
-    import dictation as dct
-    while True:
-        try:
-            changed = dct.sync_code()
-            if changed:
-                log("dictation: its copy of the code updated (%d file(s))" % len(changed))
-        except Exception as exc:
-            log("dictation: could not update its copy of the code: %r" % exc)
-        time.sleep(DICTATION_SYNC)
-
-
 def main():
     window_mode = "--window" in sys.argv
     cfg = transport.load_config()
@@ -6401,7 +6384,6 @@ def main():
         if not window_mode:                   # with a window, it watches the main thread too (after_start)
             watchdog.Watchdog(log).start()
         threading.Thread(target=_learn_words_forever, name="learn-words", daemon=True).start()
-        threading.Thread(target=_dictation_code_forever, name="dictation-code", daemon=True).start()
     if not window_mode:
         if server is None:
             return 1

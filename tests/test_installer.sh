@@ -125,8 +125,8 @@ check "app bundle: Info.plist valid, asks for the microphone, says why for the D
 E="$H/.standby/app-build/Standby.py"
 check "app built in alias mode from the generated entry point, with icon" \
   "[[ \"\$(cat $P/build.txt)\" == '$E|True|$ICON_STANDBY' ]]"
-check "entry point: venv packages, repo code, window mode, log file" \
-  "$REALPY -m py_compile $E && grep -q 'site.addsitedir(\"/' $E && grep -q 'sys.path.insert(0, \"$REPO/mac\")' $E && grep -q 'venv/bin/python\"' $E && grep -q -- '--window' $E && grep -q 'ui.log' $E"
+check "entry point: venv packages, its own copy of the code (never the checkout), window mode, log file" \
+  "$REALPY -m py_compile $E && grep -q 'site.addsitedir(\"/' $E && grep -q 'sys.path.insert(0, \"$H/.standby/code/mac\")' $E && grep -q 'venv/bin/python\"' $E && grep -q -- '--window' $E && grep -q 'ui.log' $E"
 check "installer says how to open the app" "grep -q 'open ~/Applications/Standby.app' $T/out.1"
 check "speech model: the one chosen, at its own size (not 'about 600 MB')" \
   "grep -q 'fetching the speech model, Small, English (about 0.5 GB, first time only)' $T/out.1 && ! grep -q '600 MB' $T/out.1 && grep -q 'speech model: Small, English (parakeet-tdt_ctc-110m; Settings > Recording to change it)' $T/out.1"
@@ -153,8 +153,8 @@ check "dictation app built in alias mode from its entry point, with icon" \
   "[[ \"\$(cat \"$DP/build.txt\")\" == '$DE|True|$ICON_DICT' ]]"
 check "dictation entry point: venv packages, its own copy of the code (never the checkout: macOS asked it for Documents), runs it, own log" \
   "$REALPY -m py_compile $DE && grep -q 'site.addsitedir(\"/' $DE && grep -q 'sys.path.insert(0, \"$H/.standby/code/mac\")' $DE && ! grep -q '$REPO' $DE && grep -qF 'dictation.main([\"run\"])' $DE && grep -q 'dictation.log' $DE"
-check "  that copy is there: its code and the agent's" \
-  "cmp -s $REPO/mac/dictation.py $H/.standby/code/mac/dictation.py && cmp -s $REPO/plugin/bin/standby-agent $H/.standby/code/plugin/bin/standby-agent && [[ ! -e $H/.standby/code/mac/__pycache__ ]]"
+check "  that copy is there, for both apps and all they start (calls failed: Operation not permitted), from this checkout" \
+  "cmp -s $REPO/mac/dictation.py $H/.standby/code/mac/dictation.py && cmp -s $REPO/mac/standby $H/.standby/code/mac/standby && cmp -s $REPO/plugin/bin/standby-agent $H/.standby/code/plugin/bin/standby-agent && [[ ! -e $H/.standby/code/mac/__pycache__ ]] && [[ \"\$(cat $H/.standby/code/.source)\" == \"\$(cd $REPO && pwd -P)\" ]]"
 check "installer says how to turn dictation on" "grep -q 'standby dictation on' $T/out.1"
 check "  and what macOS will ask, when, and that Standby takes only the sound" \
   "grep -q 'macOS will ask, the first time each is needed; choose Allow' $T/out.1 && grep -q 'Screen & System Audio Recording' $T/out.1 && grep -q 'takes only the sound, never the screen' $T/out.1 && grep -q 'Input Monitoring' $T/out.1 && grep -q 'Changed your mind: System Settings > Privacy & Security' $T/out.1"
