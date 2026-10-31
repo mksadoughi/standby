@@ -207,8 +207,9 @@ try:
           and last[-1]["pid"] == last[-2]["pid"], (got, last))
     said("can you dig into the logs", "Taking it deeper.")
     got = ask("[RESULT done] The build passes now.")
-    check("a result told alone: a RESULT block, never their words, and never handed on again",
-          turns()[-1]["blocks"][-1] == "RESULT (done): The build passes now." and got == "That's done.", (got, turns()[-1]["blocks"][-2:]))
+    check("a result told alone: a RESULT block, never their words; work it takes deeper from it goes on, as it said",
+          turns()[-1]["blocks"][-1] == "RESULT (done): The build passes now." and got == "That's done.\n[HANDOFF] redo it",
+          (got, turns()[-1]["blocks"][-2:]))
     vt = [r for r in tr if r["ev"] == "voice_turn"]
     check("the trace: each turn's Claude Code, whether it was the spare, its age and how long taking it took",
           vt and all("spare" in r and "age_ms" in r and "take_ms" in r for r in vt), vt[-2:])
