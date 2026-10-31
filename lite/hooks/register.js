@@ -637,7 +637,8 @@ const ASK_FIRST = {
   call: ['call', 'The user declined the call. Nothing was started.'],
   listen: ['meeting', 'The user declined listening. Nothing was started.'],
 }
-const ASK_WAIT_S = 31                     // the app declines it unanswered after 30 s
+const ASK_WAIT_S = 30                     // the app declines it unanswered after 30 s
+const ASK_LOOK_S = 5                      // the answer waited for in short looks: a fetch held long is cut by the host
 // Claude asking for a call or listening: { go: true } to start it now (nothing to ask: already on), { accepted:
 // true } once they said yes (it starts on the band, the tool answers at once), or { result } for Claude
 async function askToStart($, act) {
@@ -655,15 +656,28 @@ async function askToStart($, act) {
   // wait inside a $ call isn't counted): never a sleep loop, which would outlast the hook's budget.
   S.incoming = { id: r.id, kind: act, expires: Date.now() + 30000 }
   $.ui.invalidate('ui.render')
-  let a
+  // Looked for in short waits until it's answered or runs out: one long wait was cut short by the host while
+  // the app still held it, and the band, reading that as a no, took the question away and told Claude
+  // "Declined" though they were about to accept (the user's first call after an update, 2026-10-31).
+  let a = {}
+  const look = '/api/lite/incoming?id=' + encodeURIComponent(r.id)
   try {
-    a = await app($, '/api/lite/incoming?id=' + encodeURIComponent(r.id) + '&wait=' + ASK_WAIT_S)
+    const until = Date.now() + (ASK_WAIT_S + 5) * 1000
+    while (Date.now() < until) {
+      a = await app($, look + '&wait=' + ASK_LOOK_S)
+      if (a.error) a = await app($, look)              // once more, at once: a look cut short isn't an answer
+      if (a.error || a.answer || a.expired) break
+    }
   } finally {
     if (S.incoming && S.incoming.id === r.id) S.incoming = null
     $.ui.invalidate('ui.render')
   }
   if (a.answer === 'accept') return { accepted: true }
   const call = act === 'call'
+  if (a.error || !a.answer && !a.expired) {
+    flash($, '\u25c9', null, call ? 'Standby didn\u2019t answer \u00b7 the call wasn\u2019t started' : 'Standby didn\u2019t answer \u00b7 listening wasn\u2019t started')
+    return { result: (call ? 'The call wasn\u2019t started: ' : 'Listening wasn\u2019t started: ') + (a.error || 'Standby didn\u2019t answer') }
+  }
   if (a.expired) {
     flash($, '\u25c9', null, call ? 'No answer \u00b7 the call wasn\u2019t started' : 'No answer \u00b7 listening wasn\u2019t started')
     return { result: call ? 'No answer: the call wasn\u2019t started' : 'No answer: listening wasn\u2019t started' }

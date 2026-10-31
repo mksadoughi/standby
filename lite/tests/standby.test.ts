@@ -37,6 +37,10 @@ function fakeApp(on: any, events: any[], seen: any) {
   on('http.fetch', ($: any, e: any) => {
     const url = String(e.url)
     ;(seen.tokens ||= []).push(((e.init && e.init.headers) || {})['x-standby-token'])
+    // the host cutting a held wait short (a fetch held that long): an error, though the app still holds the question
+    if (seen.cut && url.includes('/api/lite/incoming?id=') && url.includes('&wait=')) { seen.cut--; if (seen.goneAfterCut) seen.down = true; throw new Error('timed out') }
+    // a look without waiting while the band still rings: no answer yet
+    if (seen.hold && url.includes('/api/lite/incoming?id=') && !url.includes('&wait=') && !seen.down) return { value: { status: 200, ok: true, headers: {}, text: '{"answer":null}' } }
     if (seen.hold && url.includes('/api/lite/incoming?id=') && url.includes('&wait='))      // held until the band answers
       return new Promise(res => { seen.held = (ans: string) => res({ value: { status: 200, ok: true, headers: {},
         text: JSON.stringify({ answer: ans === 'decline' ? 'decline' : 'accept' }) } }) })
@@ -771,6 +775,32 @@ test('the band rings while the tool waits: Accept, Decline, Always accept; the c
   expect(r.result).toBe('Accepted: the call is starting')
   await settle()                                   // the call starts on the band, after the tool's answer
   expect(await band.find({ type: 'Text', text: 'Incoming call' })).toBeUndefined()      // answered: the ring is gone
+})
+
+test('a wait the host cuts short is no answer: the ring stays, and Accept still starts the call (never "Declined")', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, hold: true, cut: 2 }
+  mock.clock(on)
+  ENGINE(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  const waiting = $.tool.call({ tool: 'mcp__standby__call' } as any)
+  await settle()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' } as any)
+  expect(seen.cut).toBe(0)                                                          // both short looks were cut
+  expect(await band.find({ type: 'Text', text: 'Incoming call' })).toBeDefined()   // and it still rings
+  await band.press({ key: 'accept' })
+  const r: any = await waiting
+  expect(r.result).toBe('Accepted: the call is starting')
+})
+
+test('Standby gone while it rings: the call wasn\u2019t started, and says why (not "Declined")', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, hold: true, cut: 1, goneAfterCut: true }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  const r: any = await $.tool.call({ tool: 'mcp__standby__call' } as any)     // the look cut, and the look again finds no Standby
+  expect(r.result).toContain('The call wasn\u2019t started')
+  expect(r.result).not.toBe('Declined')
 })
 
 test('in VS Code the ring is links; Decline starts nothing', async ($, on) => {
