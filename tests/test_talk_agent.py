@@ -329,7 +329,7 @@ try:
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and len(call.split()) < 300, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 300, (len(call.split()), call[:300]))
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
@@ -452,6 +452,18 @@ try:
     json.dump({"handoff": True}, open(os.path.join(live, TALK + ".voice.json"), "w"))
     call = " ".join(sa.voice_prelude(TALK).split())
     check("  what they're saying comes first", "What they're saying comes first." in call, call[-700:])
+    check("  visuals on (the default): one plain paragraph, the tag's exact form, before the opening",
+          sa.CALL_VISUALS in call and call.index(sa.CALL_VISUALS) < call.index("[CALL START] means") and "[VISUAL: what to show]" in call
+          and sa.CALL_VISUALS in ledger)
+    cfg = os.path.join(root, "config.json")
+    had = open(cfg).read() if os.path.exists(cfg) else None
+    json.dump({"call_visuals": False}, open(cfg, "w"))
+    check("  visuals off: the voice hears nothing of them", "VISUAL" not in sa.voice_prelude(TALK)
+          and "VISUAL" not in sa.voice_prelude(TALK, ledger=True))
+    if had is None:
+        os.remove(cfg)
+    else:
+        open(cfg, "w").write(had)
     check("  a call's voice ends the call itself: its own goodbye and [END]; if unsure, ask",
           "Ending the call is yours: when they ask, or are clearly done, say goodbye and add [END]; if unsure, ask." in call, call[-400:])
     json.dump({"handoff": True, "gist": "The user is raising the cache TTL."}, open(os.path.join(live, TALK + ".voice.json"), "w"))

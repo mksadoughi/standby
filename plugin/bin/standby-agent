@@ -929,13 +929,22 @@ def is_talk(session):
     return session_meta(session).get("kind") == "talk"
 
 
+# Show while talking, said to the voice only while it's on (visuals_on): off, the voice hears nothing of it
+CALL_VISUALS = ("When a picture would help them follow, or they ask to see something, put [VISUAL: what to show] in "
+                "your reply. It's drawn beside the call while you keep talking, so speak as if it weren't there.")
+
+
 def voice_prelude(session, ledger=False):
     """A call's voice's system prompt: the same for every call from one folder, so Claude Code's prompt
     cache serves the next call's first turn warm. What belongs to this call (its session, what the
     session has been working on) comes with its first turn instead (call_opening)."""
     meta = voice_meta(session)              # a call from the user's Claude Code session: the only voice
     folder = meta.get("folder")
-    return (CALL_LEDGER_PRELUDE if ledger else CALL_VOICE_PRELUDE).replace("{folder}", " in %s" % folder if isinstance(folder, str) and folder.strip() else "")
+    text = (CALL_LEDGER_PRELUDE if ledger else CALL_VOICE_PRELUDE).replace("{folder}", " in %s" % folder if isinstance(folder, str) and folder.strip() else "")
+    if visuals_on():
+        start = "[CALL START] means the call just connected"
+        text = text.replace(start, CALL_VISUALS + ("\n" if ledger else "\n\n") + start, 1)
+    return text
 
 
 def call_opening(session):
