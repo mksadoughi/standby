@@ -79,7 +79,7 @@ const ORB_CHECKS = `
   const shown = () => els.cmp.innerHTML + (els.rail.classList.contains("out") ? els.ctls.innerHTML : ""),
     last = t => posts.filter(m => m.type === t).slice(-1)[0];
   await fresh();
-  ok("a call, its voice not on yet: the orb alone, no red dot and no time", shown().includes("orb") && !shown().includes("rec") && !shown().includes("2:14"), shown());
+  ok("a call, its voice not on yet: the orb alone, no red dot and no time", shown().includes("orb") && !/class="[^"]*\brec\b/.test(shown()) && !shown().includes("2:14"), shown());
   ok("  the orb in C · Wave: three bars inside it", shown().includes('<span class="orb" id="orb"><i></i><i></i><i></i></span>'), shown());
   ok("  at rest the orb alone, 52: no glass, in a window of one size, 12 in from its corner", (m => m && m.glyph === 52 && m.glass === null && m.w === 360 && m.h === 112 && m.inset === 12)(last("orb")), last("orb"));
   ok("  and only the orb takes clicks: its circle", (m => m && m.areas.length === 1 && m.areas[0].r === 26 && m.areas[0].x === 360 - 12 - 26 && m.areas[0].y === 112 - 12 - 26)(last("hit")), last("hit"));
@@ -177,6 +177,16 @@ const ORB_CHECKS = `
   await visualsOnOff();
   ok("Visuals: the panel's button turns visuals off (Settings > Call's switch), and says so",
      calls.some(c => c[0] === "/api/settings" && JSON.parse(c[1]).call_visuals === false) && C.visuals_on === false, calls);
+  // the card closed, the call has visuals: a picture mark on the orb's edge, its own hit area; a click opens the card
+  STATE = LIVE({ visual_mark: true, voice: { state: "listening" } }); posts = []; calls = []; await fresh();
+  const hits = posts.filter(m => m.type === "hit").slice(-1)[0];
+  ok("visuals closed: the picture mark on the orb, with its own 28 px hit area", els.cmp.className.includes(" vis")
+     && hits && hits.areas.some(a => a.r === 14), [els.cmp.className, hits]);
+  await showVisuals();
+  ok("  a click on it: the app opens the card again (not the orb's pause)", calls.some(c => c[0] === "/api/visual/show")
+     && !calls.some(c => c[0] === "/api/voice"), calls);
+  STATE = LIVE({ voice: { state: "listening" } }); await fresh();
+  ok("  no visuals closed: no mark", !els.cmp.className.includes(" vis"), els.cmp.className);
   STATE = LIVE();
   words_page();
 })();
@@ -235,17 +245,15 @@ const CARD_CHECKS = `
   AT([V(1), V(2), V(3)]); await fresh();
   ok("  a third while looking back: stays on 1, and only › says New", last().id === 1 && els.vcard.innerHTML.includes("1 / 3") && els.vcard.innerHTML.includes('class="nx"')
      && !els.vcard.innerHTML.includes("vnew"), els.vcard.innerHTML);
-  cardClose();
-  ok("closed: the card folds to a small round tab, the picture and how many, no visual in it",
-     (m => m.w > 0 && m.h === 28 && m.radius === 14 && m.id === 0 && !m.hit)(last()) && els.vcard.innerHTML.includes("vtab")
-     && els.vcard.innerHTML.includes("<span>3</span>") && els.vcard.innerHTML.includes('title="Show visuals"'), [last(), els.vcard.innerHTML]);
+  calls = [];
+  cardClose(); await tick();
+  ok("closed: the card goes, and the app is told (the orb shows its picture mark meanwhile)", last().w === 0
+     && calls.some(c => c[0] === "/api/visual/closed" && JSON.parse(c[1]).closed === true), [last(), calls]);
   await fresh();
-  ok("  and stays folded while nothing new comes", last().h === 28, last());
-  cardOpen();
-  ok("  a click on the tab: the card again, at the newest (3 / 3)", last().id === 3 && els.vcard.innerHTML.includes("3 / 3"), last());
-  cardClose(); await fresh();
-  STATE.visual_open = 1; await fresh();
-  ok("  the voice asked to show it (on the user's ask): open again, at the newest", last().id === 3 && last().h > 28, last());
+  ok("  and stays gone while nothing new comes", last().w === 0, last());
+  calls = []; STATE.visual_open = 1; await fresh();
+  ok("  the orb's mark or the voice asked to show it: open again, at the newest, and the app told", last().id === 3 && last().h > 28
+     && calls.some(c => c[0] === "/api/visual/closed" && JSON.parse(c[1]).closed === false), [last(), calls]);
   cardClose(); await fresh();
   AT([V(1), V(2), V(3), V(4)]); await fresh();
   ok("  the next one opens it again by itself, at 4 / 4", last().id === 4 && els.vcard.innerHTML.includes("4 / 4"), last());

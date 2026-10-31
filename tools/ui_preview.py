@@ -428,7 +428,7 @@ SCENES = r"""
 CMP_SCENES = ["idle", "recording", "recording-roll", "recording-hover", "left-hover",
               "listening", "hearing", "thinking", "thinking-steps", "thinking-steps-hover", "holding", "speaking", "muted", "muted-waiting", "muted-waiting-hover", "voice-hover", "left-voice-hover",
               "preparing", "down", "down-hover", "micdenied", "words-micdenied", "words-speaking",
-              "visuals-hover", "visuals-off-hover", "card-drawing", "card-ready", "card-stack", "card-back-new", "card-line", "card-large", "card-diagram", "card-closed"]
+              "visuals-hover", "visuals-off-hover", "card-drawing", "card-ready", "card-stack", "card-back-new", "card-line", "card-large", "card-diagram", "visuals-mark", "visuals-mark-waiting"]
 # The visual card's scenes: the visuals in the call so far, the one the voice is on (n), and the documents
 # their sandboxes would hold (mac/visuals.py), here each in a frame where the panel lays the sandbox.
 CARD_VISUALS = {
@@ -466,13 +466,13 @@ const DATA = { idle: { live: null, voice: V("off") }, recording: { live: LIVE(),
   "recording-roll": { live: LIVE(), voice: V("off") },
   // on a call, just the orb: no time or captions above it
   "words-speaking": { live: LIVE(), voice: V("speaking", { claude: "Running them now." }) },
-  "visuals": { live: LIVE(), voice: V("listening") }, "visuals-off": { live: LIVE(), voice: V("listening"), visuals_on: false } };
+  "visuals": { live: LIVE(), voice: V("listening") }, "visuals-mark": { live: LIVE(), voice: V("listening"), visual_mark: true },
+  "visuals-mark-waiting": { live: LIVE(), voice: V("muted", { waiting: true }), visual_mark: true }, "visuals-off": { live: LIVE(), voice: V("listening"), visuals_on: false } };
 // the visual card: the call's visuals, the newest the voice's
 const VIS = (n, state) => ({ id: n, state: state || "ready", qid: "q" + n, at: 0, what: ["", "Where the meeting's sound goes", "How long a route is kept", "The tests", "Cache times, by route"][n] });
 const CARDS = { "card-drawing": [VIS(1, "drawing")], "card-ready": [VIS(1)], "card-stack": [VIS(2), VIS(3), VIS(1)].map((v, i) => Object.assign({}, v, { id: i + 1, at: i })),
-  "card-back-new": [VIS(1), VIS(2), VIS(3), VIS(4)], "card-line": [VIS(3)], "card-large": [VIS(4)], "card-diagram": [VIS(1)],
-  "card-closed": [VIS(1), VIS(2), VIS(3)] };
-const CDOC = { "card-diagram": { 1: 5 }, "card-closed": { 1: 1, 2: 2, 3: 3 }, "card-ready": { 1: 1 }, "card-stack": { 1: 2, 2: 3, 3: 1 }, "card-back-new": { 1: 1, 2: 2, 3: 3, 4: 4 }, "card-line": { 3: 3 }, "card-large": { 4: 4 } };   // visual -> its document
+  "card-back-new": [VIS(1), VIS(2), VIS(3), VIS(4)], "card-line": [VIS(3)], "card-large": [VIS(4)], "card-diagram": [VIS(1)] };
+const CDOC = { "card-diagram": { 1: 5 }, "card-ready": { 1: 1 }, "card-stack": { 1: 2, 2: 3, 3: 1 }, "card-back-new": { 1: 1, 2: 2, 3: 3, 4: 4 }, "card-line": { 3: 3 }, "card-large": { 4: 4 } };   // visual -> its document
 for (const k in CARDS) { const l = CARDS[k], top = l[l.length - 1]; DATA[k] = { live: LIVE(), voice: V("listening", { visual: Object.assign({ n: l.length }, top) }), visuals_on: true } }
 // ?live=1: your voice moves while it hears you, so a page can show the real orb moving
 const LIVEV = new URLSearchParams(location.search).get("live");
@@ -499,7 +499,6 @@ if (CARD) { const box = $("vcard"), bg = document.createElement("div");
     f.style.width = m.area.w + "px"; f.style.height = m.area.h + "px" };
   lay(); new MutationObserver(lay).observe(box, { attributes: true, attributeFilter: ["data-card"] });
   if (SCENE === "card-back-new") setTimeout(() => { cardGo(-1); cardGo(-1) }, 400);
-  if (SCENE === "card-closed") setTimeout(() => cardClose(), 400);
  }
 setTimeout(() => { if (SCENE.startsWith("left")) edge("left", "bottom");
   if (SCENE.endsWith("-hover")) { open = true; render() }

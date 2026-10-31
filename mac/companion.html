@@ -199,12 +199,17 @@ color:var(--c-muted);background:var(--c-hover);font:inherit;cursor:default}
 .vft button:disabled{opacity:.4}.vft button:not(:disabled):hover{background:var(--c-press);color:var(--c-text)}
 .vft button.nx{padding:0 8px 0 6px;background:rgba(80,70,229,.12);color:var(--c-claude)}.vft button.nx i{font-style:normal;font-weight:650;font-size:11px}
 .vnew{font-size:10.5px;font-weight:650;color:var(--c-claude);background:rgba(80,70,229,.12);padding:2px 6px;border-radius:5px}
-.vcard .vtab{position:absolute;left:0;top:0;height:28px;display:inline-flex;align-items:center;gap:6px;padding:0 11px;border:0;
-background:transparent;color:var(--c-muted);font:500 12px/1 -apple-system,system-ui,sans-serif;cursor:default;white-space:nowrap}
-.vcard .vtab svg{width:14px;height:14px}.vcard .vtab:hover{color:var(--c-text)}
 .preview .vcard{background:var(--c-surface);border-radius:16px;box-shadow:var(--c-shadow),0 0 0 .5px var(--c-edge)}
 @media (prefers-reduced-motion:reduce){.orb,.orb i,.orbs,.rail,.ctls,.says p,.vdraw i{animation:none!important;transition:none!important}}
 .cmp .orb{cursor:default}
+/* the call's visuals, its card closed: a small picture mark on the orb's edge, the red dot's size; a click opens the
+   card again (the user, 2026-10-31). With the red dot too, it sits behind it, a little inward, like stacked cards. */
+.vmk{display:none;position:absolute;top:4%;right:4%;width:22%;height:22%;border-radius:50%;background:#fff;color:#5046e5;
+box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.12);align-items:center;justify-content:center;pointer-events:auto;cursor:default}
+.vmk svg{width:62%;height:62%}.vmk:before{content:"";position:absolute;inset:-22%;border-radius:50%}
+.cmp.vis .vmk{display:flex}.cmp.vis.waiting .vmk{top:1%;right:15%}
+body:not(.r) .vmk{right:auto;left:4%}body:not(.r) .cmp.vis.waiting .vmk{right:auto;left:15%}
+@media (prefers-color-scheme:dark){.vmk{background:#242426;color:#8f86ff;box-shadow:0 0 0 .5px rgba(255,255,255,.14),0 1px 2px rgba(0,0,0,.4)}}
 </style></head><body>
 <div class="cmp idle" id="cmp" style="display:none"></div>
 <div class="says" id="says" style="display:none" aria-live="polite"><p id="sp"></p></div>
@@ -268,11 +273,12 @@ function render() {
   // The orb and the rail are built once and kept, so the orb's motion runs on and the pill can
   // roll; what changes is their classes, the orb's tip and what the pill holds.
   if (!el.firstChild) el.innerHTML = '<button class="talk" onclick="orb()"><span class="orbs"><span class="halo"></span><span class="orb" id="orb"><i></i><i></i><i></i></span><span class="rp"></span><span class="rp"></span>' +
+    '<span class="vmk" title="Show visuals" aria-label="Show visuals" onclick="event.stopPropagation();showVisuals()">' + ICON.vis.replace('stroke-width="1.6"', 'stroke-width="1.8"') + '</span>' +
     '</span></button><span class="rail"><span class="ctls"></span></span>';
   if (vs === "listening" && (v.level || 0) > HEARD) heardAt = Date.now();
   const hearing = vs === "listening" && Date.now() - heardAt < 700;
   const cls = "cmp " + state + (vs ? " voice" : "") + (blinking ? " blink" : "") + (hearing ? " hearing" : "") + (v.holding ? " holding" : "") + (down ? " down" : "") +
-    ((vs === "muted" || v.muted) && v.waiting ? " waiting" : "") +
+    ((vs === "muted" || v.muted) && v.waiting ? " waiting" : "") + (C && C.visual_mark ? " vis" : "") +
     (vs && v.preparing ? " prep" + (pp === null ? " unknown" : "") : "");
   if (el.className !== cls) el.className = cls;
   const t = el.querySelector(".talk");
@@ -319,7 +325,11 @@ function size(el, g, c, r_, top) {
   const m = { type: "orb", w: W, h: H, glyph: g, inset: INSET, glass, under, ms: glass ? 340 : 260 }, k = JSON.stringify(m);
   if (k !== lastSize) { lastSize = k; post(m) }
   const cx = r_ ? W - INSET - g / 2 : INSET + g / 2, cy = top ? INSET + g / 2 : H - INSET - g / 2;
-  const hit = { type: "hit", areas: [{ x: cx, y: cy, r: g / 2 }].concat(pill ? [pill] : []) }, hk = JSON.stringify(hit);
+  // the picture mark on the orb's edge takes its clicks too (most of it is over the orb already)
+  // (where .vmk sits: its centre .35 of the orb out from the orb's, .24 and .38 behind the red dot; 28 px across)
+  const wt = $("cmp").classList.contains("waiting"), dx = g * (wt ? .24 : .35), dy = g * (wt ? .38 : .35);
+  const mk = C && C.visual_mark ? [{ x: cx + (r_ ? dx : -dx), y: top ? cy + dy : cy - dy, r: 14 }] : [];
+  const hit = { type: "hit", areas: [{ x: cx, y: cy, r: g / 2 }].concat(pill ? [pill] : [], mk) }, hk = JSON.stringify(hit);
   if (hk !== lastHit) { lastHit = hk; post(hit) }
 }
 
@@ -374,7 +384,8 @@ function visualCard() {
   if (VC.opens === undefined) VC.opens = asked;
   if (asked > VC.opens) { VC.opens = asked; VC.closed = false; VC.at = null }
   if (!on || !VC.list.length) return cardPost(null);
-  if (VC.closed) return cardTab();
+  cardSaid(VC.closed);
+  if (VC.closed) return cardPost(null);
   const m = VC.list.length, i = VC.at === null ? m - 1 : Math.min(VC.at, m - 1), v = VC.list[i];
   // New: the newest while it's unseen; one gone back to was the newest once, so it's been seen
   const later = VC.list.slice(i + 1).some(x => !VC.seen.has(x.id)), fresh = i === m - 1 && !VC.seen.has(v.id);
@@ -398,17 +409,9 @@ function visualCard() {
   const hit = [{ x: W - 32, y: 10, w: 22, h: 22, radius: 11 }].concat(foot ? [{ x: 0, y: H - VFOOT, w: W, h: VFOOT, radius: 0 }] : []);
   cardPost({ type: "card", w: W, h: H, area: { x: 0, y: 0, w: W, h: H - foot }, session: VC.sid, id: drawing ? 0 : v.id, hit, ms: 180 });
 }
-// Closed, with visuals in the call: a small tab where the card was, the picture and how many; a click opens the
-// card again at the newest. Quiet: no colour, no motion (the next visual opens the card by itself anyway).
-function cardTab() {
-  const box = $("vcard"), m = VC.list.length;
-  const html = `<button class="vtab" id="vtab" title="Show visuals" aria-label="Show visuals, ${m}" onclick="cardOpen()">${ICON.vis}<span>${m}</span></button>`;
-  if (VC.html !== html) { VC.html = html; box.innerHTML = html }
-  box.style.display = "";
-  const w = Math.ceil(($("vtab") || box).getBoundingClientRect().width) || 52;
-  cardPost({ type: "card", w, h: 28, radius: 14, area: { x: 0, y: 0, w: 0, h: 0 }, session: VC.sid, id: 0, hit: null, ms: 180 });
-}
 function cardOpen() { VC.closed = false; VC.at = null; render() }
+// the app keeps whether the card is closed: the orb shows its picture mark meanwhile, to open it again
+function cardSaid(closed) { if (VC.toldClosed !== closed) { VC.toldClosed = closed; api("/api/visual/closed", { session: VC.sid, closed }).catch(() => {}) } }
 function cardPost(m) {
   const box = $("vcard");
   if (!m) { box.style.display = "none"; box.innerHTML = ""; VC.html = ""; m = { type: "card", w: 0, h: 0 } }
@@ -449,6 +452,8 @@ async function menu(x, y) { post({ type: "menu", x, y }) }
 // End: as the menu's End Call (the panel says so and goes); Full window: Standby's window, at the call
 function end() { if (now().l) post({ type: "end" }) }
 function full() { post({ type: "expand" }) }
+// The orb's picture mark: the call's visual card again, at the newest
+async function showVisuals() { const { l } = now(); if (l) { try { await api("/api/visual/show", { session: l.id }) } catch (e) {} poll(true) } }
 // Visuals: Settings > Call's "Show visuals during calls", from here (off: none are made)
 async function visualsOnOff() { const on = !C || C.visuals_on !== false;
   try { await api("/api/settings", { call_visuals: !on }) } catch (e) {}

@@ -153,6 +153,14 @@ check("  visuals off: off", ui.visual_where(sid) == "off")
 ui.set_settings({"call_visuals": True})
 check("  no call live: refused", "error" in ui.visual_show({"session": "talk-20990101-000000"}))
 
+ui.visual_closed({"session": sid, "closed": True})
+check("the card closed: the orb's picture mark", ui.companion_state().get("visual_mark") is True)
+ui.visual_show({"session": sid})
+check("  asked open again: no mark", ui.companion_state().get("visual_mark") is False)
+ui.visual_closed({"session": sid, "closed": True}); ui.set_settings({"call_visuals": False})
+check("  visuals turned off: no mark", ui.companion_state().get("visual_mark") is False)
+ui.set_settings({"call_visuals": True}); ui.visual_closed({"session": sid, "closed": False})
+
 print("the sandbox's document")
 d = visuals.doc('<div data-size="small"><p>x <sb-math>x^2</sb-math></p></div>', root / "no-libs")
 check("the kit first, then the fragment, under a policy that lets nothing in or out",

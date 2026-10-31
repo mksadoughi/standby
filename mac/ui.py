@@ -5308,7 +5308,8 @@ def session_visuals(sid):
     return visuals.listed(SESSIONS / sid)
 
 
-VISUAL_OPEN = {}                      # session -> how many times the card was asked to open (the voice, the tab)
+VISUAL_OPEN = {}                      # session -> how many times the card was asked to open (the voice, the orb's mark)
+VISUAL_CLOSED = set()                 # sessions whose card the user closed: the orb's picture mark shows, to open it again
 MINI_WINDOW = {}                        # "presence": the mini window (native companion), once it's up
 
 
@@ -5342,6 +5343,7 @@ def visual_show(b):
         return {"error": "No call is live"}
     with _lock:
         VISUAL_OPEN[sid] = VISUAL_OPEN.get(sid, 0) + 1
+        VISUAL_CLOSED.discard(sid)
     if visual_where(sid) is None:
         LITE_ORB.add(sid)
         p = MINI_WINDOW.get("presence")
@@ -5349,6 +5351,16 @@ def visual_show(b):
             window.on_main(p.update)
         log("visual: the mini window brought up to show the call's visuals")
     return {"ok": True, "where": visual_where(sid) or "the mini window"}
+
+
+def visual_closed(b):
+    """POST /api/visual/closed {session, closed}: the card closed (the orb shows its picture mark), or open again."""
+    sid = str(b.get("session") or "")
+    if not valid_id(sid):
+        return {"error": "no such session"}
+    with _lock:
+        (VISUAL_CLOSED.add if b.get("closed") else VISUAL_CLOSED.discard)(sid)
+    return {"ok": True}
 
 
 def visual_latest(sid):
@@ -5431,6 +5443,8 @@ def companion_state():
     if live:
         out["visuals_on"] = visuals_on()                               # the panel's Visuals button, and the card
         out["visual_open"] = VISUAL_OPEN.get(live, 0)                  # asked to open again (the voice, on request)
+        # the card closed and the call has visuals: the orb's small picture mark, which opens it again
+        out["visual_mark"] = live in VISUAL_CLOSED and out["visuals_on"] and bool(visual_latest(live))
     if live and (SESSIONS / live).is_dir() and is_talk(live):
         sdir = SESSIONS / live
         out["live"] = {"id": live, "kind": "talk"}
@@ -6296,6 +6310,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(copy_to_clipboard(str(b.get("text") or "")))
         if self.path == "/api/mic-test":
             return self._json(start_mic_test())
+        if self.path == "/api/visual/closed":
+            return self._json(visual_closed(b))
         if self.path == "/api/visual/show":
             return self._json(visual_show(b))
         if self.path == "/api/permissions":
