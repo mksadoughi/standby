@@ -428,7 +428,7 @@ SCENES = r"""
 CMP_SCENES = ["idle", "recording", "recording-roll", "recording-hover", "left-hover",
               "listening", "hearing", "thinking", "thinking-steps", "thinking-steps-hover", "holding", "speaking", "muted", "muted-waiting", "muted-waiting-hover", "voice-hover", "left-voice-hover",
               "preparing", "down", "down-hover", "micdenied", "words-micdenied", "words-speaking",
-              "visuals-hover", "visuals-off-hover", "card-drawing", "card-ready", "card-stack", "card-back-new", "card-line", "card-large", "card-diagram", "visuals-mark", "visuals-mark-waiting", "card-stack-top", "card-stack-left"]
+              "visuals-hover", "visuals-off-hover", "card-drawing", "card-ready", "card-stack", "card-back-new", "card-line", "card-large", "card-diagram", "visuals-mark", "visuals-mark-waiting", "card-stack-top", "card-stack-left", "card-choices"]
 # The visual card's scenes: the visuals in the call so far, the one the voice is on (n), and the documents
 # their sandboxes would hold (mac/visuals.py), here each in a frame where the panel lays the sandbox.
 CARD_VISUALS = {
@@ -440,6 +440,8 @@ CARD_VISUALS = {
   A[You speak] --> B[Voice listens]
   B --> C[Deeper side works]
   C --> D[Answer comes back]</sb-diagram></div>""",
+    6: """<div data-size="medium"><h1>Which should ship first?</h1><p class="muted">Pick one, or just say it.</p>
+<button data-choice="Guest TTL">Guest TTL</button><button data-choice="Regional fares">Regional fares</button><button data-choice="Both, this week" class="chosen">Both, this week</button></div>""",
     4: """<div data-size="large"><h1>Cache times, by route</h1><table><tr><th>Route</th><th>Members</th><th>Guests</th><th>Warm on start</th></tr>
 <tr><td>/fares</td><td>15 min</td><td>2 min</td><td>yes</td></tr><tr><td>/routes</td><td>15 min</td><td>2 min</td><td>yes</td></tr>
 <tr><td>/regional</td><td>30 min</td><td>5 min</td><td>no</td></tr><tr><td>/search</td><td>5 min</td><td>1 min</td><td>no</td></tr>
@@ -471,9 +473,9 @@ const DATA = { idle: { live: null, voice: V("off") }, recording: { live: LIVE(),
 // the visual card: the call's visuals, the newest the voice's
 const VIS = (n, state) => ({ id: n, state: state || "ready", qid: "q" + n, at: 0, what: ["", "Where the meeting's sound goes", "How long a route is kept", "The tests", "Cache times, by route"][n] });
 const CARDS = { "card-drawing": [VIS(1, "drawing")], "card-ready": [VIS(1)], "card-stack": [VIS(2), VIS(3), VIS(1)].map((v, i) => Object.assign({}, v, { id: i + 1, at: i })),
-  "card-back-new": [VIS(1), VIS(2), VIS(3), VIS(4)], "card-line": [VIS(3)], "card-large": [VIS(4)], "card-diagram": [VIS(1)],
+  "card-back-new": [VIS(1), VIS(2), VIS(3), VIS(4)], "card-line": [VIS(3)], "card-large": [VIS(4)], "card-diagram": [VIS(1)], "card-choices": [VIS(1)],
   "card-stack-top": [VIS(2), VIS(3), VIS(1)].map((v, i) => Object.assign({}, v, { id: i + 1 })), "card-stack-left": [VIS(2), VIS(3), VIS(1)].map((v, i) => Object.assign({}, v, { id: i + 1 })) };
-const CDOC = { "card-stack-top": { 1: 2, 2: 3, 3: 1 }, "card-stack-left": { 1: 2, 2: 3, 3: 1 }, "card-diagram": { 1: 5 }, "card-ready": { 1: 1 }, "card-stack": { 1: 2, 2: 3, 3: 1 }, "card-back-new": { 1: 1, 2: 2, 3: 3, 4: 4 }, "card-line": { 3: 3 }, "card-large": { 4: 4 } };   // visual -> its document
+const CDOC = { "card-choices": { 1: 6 }, "card-stack-top": { 1: 2, 2: 3, 3: 1 }, "card-stack-left": { 1: 2, 2: 3, 3: 1 }, "card-diagram": { 1: 5 }, "card-ready": { 1: 1 }, "card-stack": { 1: 2, 2: 3, 3: 1 }, "card-back-new": { 1: 1, 2: 2, 3: 3, 4: 4 }, "card-line": { 3: 3 }, "card-large": { 4: 4 } };   // visual -> its document
 for (const k in CARDS) { const l = CARDS[k], top = l[l.length - 1]; DATA[k] = { live: LIVE(), voice: V("listening", { visual: Object.assign({ n: l.length }, top) }), visuals_on: true } }
 // ?live=1: your voice moves while it hears you, so a page can show the real orb moving
 const LIVEV = new URLSearchParams(location.search).get("live");

@@ -1,7 +1,8 @@
 /* Standby's visual kit, the script half (kit.css is the look). It runs before the fragment, in the visual's
    sandbox: no network, no storage, no Standby API. It gives the fragment sb.* helpers and <sb-math> and
    <sb-diagram>, and it is the visual's one way out, a message to its card: {sb: "size"} as its content
-   changes, and {sb: "open", href} when an https link is clicked (the card opens it in the browser). */
+   changes, {sb: "open", href} when an https link is clicked (the card opens it in the browser), and {sb: "chose",
+   label} when one of its choices (data-choice) is clicked: their answer, which the card checks and tells the voice. */
 (function () {
   "use strict";
   const send = m => {
@@ -37,6 +38,14 @@
   };
   // links: only https, only on a click, and only by the card: the visual itself never navigates
   document.addEventListener("click", e => {
+    // a choice (data-choice): their answer, to the voice; marked as theirs here, the card's check decides the rest
+    const c = e.target.closest && e.target.closest("[data-choice]");
+    if (c) {
+      e.preventDefault();
+      const label = (c.getAttribute("data-choice") || c.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
+      if (label) { document.querySelectorAll("[data-choice].chosen").forEach(o => o.classList.remove("chosen")); c.classList.add("chosen"); send({ sb: "chose", label }) }
+      return;
+    }
     const a = e.target.closest && e.target.closest("a[href]");
     if (!a) return;
     e.preventDefault();

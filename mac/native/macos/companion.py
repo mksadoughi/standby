@@ -1180,9 +1180,14 @@ class Presence(object):
 
     def _visual_said(self, m):
         """The visual's one way out: its size, to the card's page; an https link clicked, opened in the browser
-        while the pointer is on the card, one a second and a half at most (never one it opens by itself)."""
+        while the pointer is on the card, one a second and a half at most (never one it opens by itself); a choice
+        clicked with the pointer on the card, to the app, which checks it and tells the voice."""
         if m["sb"] == "size":
             self.card.call("visualSize", m)
+        elif m["sb"] == "chose" and self.card_shows and self._pointer_on_card():
+            chose = getattr(self.hooks, "visual_chose", None)
+            if chose is not None:
+                chose(self.card_shows[0], self.card_shows[1], m["label"])
         elif m["sb"] == "open" and time.monotonic() - self.opened_at > 1.5 and self._pointer_on_card():
             self.opened_at = time.monotonic()
             opener = getattr(self.hooks, "open_url", None)

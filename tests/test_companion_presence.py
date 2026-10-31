@@ -513,6 +513,16 @@ companion._mouse = lambda: (10.0, 10.0)
 p._visual_said({"sb": "open", "href": "https://example.com/c"})
 check("a link in the visual: opened only with the pointer on the card, one a second and a half",
       opened == ["https://example.com/a"], opened)
+chosen = []
+hooks.visual_chose = lambda sid, n, label: chosen.append((sid, n, label))
+p.card_shows = ("talk-1", 3)
+companion._mouse = lambda: (1010.0, 210.0)
+p._visual_said({"sb": "chose", "label": "Option 1"})
+companion._mouse = lambda: (10.0, 10.0)
+p._visual_said({"sb": "chose", "label": "Option 2"})
+check("a choice clicked in the visual: to the app with its call and visual, only with the pointer on the card",
+      chosen == [("talk-1", 3, "Option 1")], chosen)
+p.card_shows = None
 p._visual_said({"sb": "size", "want": "small", "w": 260, "h": 90})
 check("  its size: passed to the card's page", card.calls[-1] == ("visualSize", {"sb": "size", "want": "small", "w": 260, "h": 90}))
 pill.glyph, pill.corner, pill._frame = 26.0, "bottom-right", [1300.0, 16.0, 196.0, 44.0]

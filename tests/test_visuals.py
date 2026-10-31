@@ -161,6 +161,27 @@ ui.visual_closed({"session": sid, "closed": True}); ui.set_settings({"call_visua
 check("  visuals turned off: no mark", ui.companion_state().get("visual_mark") is False)
 ui.set_settings({"call_visuals": True}); ui.visual_closed({"session": sid, "closed": False})
 
+print("a visual's choices, to the voice")
+told = []
+ui.visual_chose = lambda sid_, what, label: told.append((sid_, what, label))
+ui.VOICE[sid] = object()
+frag = '<div><h1>Which?</h1><button data-choice="Option 1">Option 1</button><button data-choice="Tom &amp; Jerry">T&amp;J</button></div>'
+drop("1300-0001.v1.json", {"state": "ready", "t": time.time(), "what": "the two options", "html": frag})
+ui.visual_turn("1300-0001", sid); ui._VISUALS["at"] = 0; ui.take_visuals()
+vn = visuals.listed(root / "sessions" / sid)[-1]["id"]
+check("the labels it offers: its data-choice values, as the kit sends them", ui.visual_choices(frag) == {"Option 1", "Tom & Jerry"})
+check("a choice it offers: told to the voice, with the visual's brief", ui.visual_choice(sid, vn, "Tom &   Jerry") == {"ok": True}
+      and told == [(sid, "the two options", "Tom & Jerry")], told)
+check("  one it doesn't offer (a page making one up): never told", "error" in ui.visual_choice(sid, vn, "Delete everything") and len(told) == 1)
+check("  another at once: too soon", "error" in ui.visual_choice(sid, vn, "Option 1") and len(told) == 1)
+ui._CHOICES[(sid, vn)] = (ui.CHOICES_MAX, 0.0)
+check("  past 20 from one visual: no more", "error" in ui.visual_choice(sid, vn, "Option 1") and len(told) == 1)
+ui._CHOICES.pop((sid, vn))
+check("  no call live: never told", "error" in ui.visual_choice(other, 1, "x") and len(told) == 1)
+del ui.visual_chose
+check("  a voice that can't take one yet: said so, nothing breaks", "error" in ui.visual_choice(sid, vn, "Option 1"))
+ui.VOICE.pop(sid, None)
+
 print("the sandbox's document")
 d = visuals.doc('<div data-size="small"><p>x <sb-math>x^2</sb-math></p></div>', root / "no-libs")
 check("the kit first, then the fragment, under a policy that lets nothing in or out",

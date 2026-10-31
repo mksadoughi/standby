@@ -831,6 +831,11 @@ addEventListener("message", e => {
   const f = [...document.querySelectorAll(".mx-vis iframe")].find(x => x.contentWindow === e.source), m = e.data;
   if (!f || !m || typeof m !== "object") return;
   if (m.sb === "size") f.style.height = Math.max(28, Math.min(480, Math.ceil(+m.h || 0))) + "px";
+  // a choice clicked on it, the pointer on it: the app checks it's one it offers, and tells the voice
+  else if (m.sb === "chose" && typeof m.label === "string" && f.matches(":hover")) {
+    const box = f.closest(".mx-vis");
+    if (box) api("/api/visual/chose", {session: box.dataset.s, id: +box.dataset.v, label: m.label.slice(0, 80)}).catch(() => {});
+  }
   // a link: https only, while the pointer is on that visual, one a second and a half: never one it opens by itself
   else if (m.sb === "open" && typeof m.href === "string" && /^https:\/\/[^\s]+$/i.test(m.href) && f.matches(":hover") && Date.now() - MXVOPEN > 1500) {
     MXVOPEN = Date.now();

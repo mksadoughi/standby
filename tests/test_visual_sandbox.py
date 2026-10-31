@@ -30,17 +30,20 @@ check("  its messages: a size, or an https link; nothing else",
       and visualview.message({"sb": "open", "href": "https://example.com/a"}) == {"sb": "open", "href": "https://example.com/a"}
       and visualview.message({"sb": "open", "href": "http://example.com/"}) is None
       and visualview.message({"sb": "open", "href": "javascript:alert(1)"}) is None
-      and visualview.message({"sb": "open", "href": "https://a b"}) is None and visualview.message("x") is None)
+      and visualview.message({"sb": "open", "href": "https://a b"}) is None and visualview.message("x") is None
+      and visualview.message({"sb": "chose", "label": " Option\n 3 " + "x" * 200})["label"] == ("Option 3 " + "x" * 200)[:80]
+      and visualview.message({"sb": "chose", "label": "  "}) is None and visualview.message({"sb": "chose", "label": 3}) is None)
 
 AppKit.NSApplication.sharedApplication()
 got = []
-FRAG = """<div data-size="small"><h1>Probe</h1>
+FRAG = """<div data-size="small"><h1>Probe</h1><button data-choice="Option  2">Two</button>
 <script>
 const out = [];
 fetch("http://127.0.0.1:1/api/state").then(() => out.push("fetch")).catch(() => {});
 const i = new Image(); i.onload = () => out.push("image"); i.src = "https://example.com/a.png";
 const f = document.createElement("iframe"); f.src = "https://example.com/"; document.body.appendChild(f);
 try { window.open("https://example.com/"); } catch (e) {}
+setTimeout(() => document.querySelector("[data-choice]").click(), 1200);
 setTimeout(() => webkit.messageHandlers.card.postMessage({ sb: "open", href: "https://report.invalid/" + (out.join("+") || "nothing") }), 1500);
 setTimeout(() => { location.href = "https://example.com/away" }, 1800);
 </script></div>"""
@@ -56,6 +59,8 @@ sizes = [m for m in got if m["sb"] == "size"]
 said = [m["href"] for m in got if m["sb"] == "open"]
 check("loaded from its own scheme: its size came out (small, its content's height)", sizes and sizes[-1]["want"] == "small" and 20 < sizes[-1]["h"] < 400, got)
 check("  nothing in or out: no request to Standby's server, no web image", said == ["https://report.invalid/nothing"], said)
+check("a choice clicked: one message, its label as the kit sends it, and marked chosen there",
+      [m["label"] for m in got if m["sb"] == "chose"] == ["Option 2"], got)
 check("  and it never left its own document", str(view.web.URL().absoluteString()) == visualview.HOME, view.web.URL())
 view.close()
 check("closed: let go, its messages no longer heard", view.web is None and view.on_message({"sb": "size"}) is None)

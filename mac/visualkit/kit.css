@@ -31,6 +31,12 @@ table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:ta
 th,td{text-align:left;padding:4px 6px;border-bottom:.5px solid var(--line)}th{color:var(--muted);font-weight:600}
 input[type=range]{width:100%;accent-color:var(--accent)}
 button{font:inherit;color:var(--accent);background:var(--soft);border:0;border-radius:6px;padding:4px 10px;cursor:pointer}
+/* a choice the voice offers (data-choice): a pill; a click is their answer, told to the voice. The only thing in a
+   visual that answers the call, so it alone looks like this */
+[data-choice]{display:inline-flex;align-items:center;min-height:28px;margin:3px 6px 3px 0;padding:0 13px;border-radius:999px;
+  border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);background:transparent;color:var(--accent);font-weight:550;
+  cursor:pointer;-webkit-user-select:none;user-select:none}
+[data-choice]:hover{background:var(--soft)}[data-choice].chosen{background:var(--accent);border-color:var(--accent);color:var(--bg)}
 code{font:12px ui-monospace,Menlo,monospace;background:var(--soft);padding:1px 4px;border-radius:4px}
 sb-math{display:inline-block}sb-math[display]{display:block;text-align:center;margin:6px 0;font-size:15px}
 sb-math.raw,sb-diagram.raw{font:12px ui-monospace,Menlo,monospace;color:var(--muted);white-space:pre-wrap}

@@ -5364,6 +5364,45 @@ def visual_closed(b):
     return {"ok": True}
 
 
+# A visual's choices (data-choice): a click is the user's answer. Checked here, wherever it came from (the mini
+# window's card, the main window's frame), then handed to the voice as a turn of its own (visual_chose).
+CHOICE_EVERY = 1.5                    # seconds: one choice at most this often
+CHOICES_MAX = 20                      # choices taken from one visual
+_CHOICES = {}                         # (session, visual) -> [how many taken, when the last one was]
+
+
+def visual_choices(html):
+    """The labels a visual's fragment really offers (its data-choice values), as the kit sends them."""
+    import html as h
+    return {" ".join(h.unescape(v).split())[:80] for v in re.findall(r'data-choice\s*=\s*"([^"]*)"', html or "")}
+
+
+def visual_choice(sid, n, label):
+    """A choice clicked on visual n of call sid: told to the voice if it's a choice that visual really offers, the
+    call is live, and it isn't one too many or too soon. The pointer was on the card (the window checked)."""
+    import visuals
+    label = " ".join(str(label or "").split())[:80]
+    if not valid_id(sid) or sid != _live_now() or sid not in LITE_CALLS and sid not in VOICE:
+        return {"error": "No call is live"}
+    got = visuals.one(SESSIONS / sid, n)
+    if not got or got.get("state") != "ready" or label not in visual_choices(got.get("html")):
+        log("visual: a choice it doesn't offer, not told to the voice")
+        return {"error": "That isn't one of its choices"}
+    key, now = (sid, int(n)), time.time()
+    with _lock:
+        taken, last = _CHOICES.get(key, (0, 0.0))
+        if taken >= CHOICES_MAX or now - last < CHOICE_EVERY:
+            return {"error": "Too many choices at once"}
+        _CHOICES[key] = (taken + 1, now)
+    tell = globals().get("visual_chose")              # the voice's side: a turn of its own, at the next quiet moment
+    if tell is None:
+        log("visual: a choice made, but this voice can't take one yet")
+        return {"error": "The voice can't take a choice yet"}
+    log("visual: a choice made on visual %s" % n)
+    tell(sid, got.get("what") or "", label)
+    return {"ok": True}
+
+
 def visual_latest(sid):
     """{n, id, state} of the call's newest visual, or None."""
     import visuals
@@ -5513,6 +5552,10 @@ class CompanionHooks(object):
         if not got or got.get("state") != "ready" or not got.get("html"):
             return None
         return visuals.doc(got["html"], ROOT / "kit", inline=True), visuals.CSP       # clear: on the card's own ground
+
+    def visual_chose(self, sid, n, label):
+        """A choice clicked on the card's visual (the pointer on the card): checked, then told to the voice."""
+        threading.Thread(target=visual_choice, args=(sid, n, label), name="visual-choice", daemon=True).start()
 
     def open_url(self, url):
         """A link clicked in the card's visual: https only, in the browser."""
@@ -6311,6 +6354,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(copy_to_clipboard(str(b.get("text") or "")))
         if self.path == "/api/mic-test":
             return self._json(start_mic_test())
+        if self.path == "/api/visual/chose":          # the main window's frame: a choice clicked on it
+            return self._json(visual_choice(str(b.get("session") or ""), b.get("id"), b.get("label")))
         if self.path == "/api/visual/closed":
             return self._json(visual_closed(b))
         if self.path == "/api/visual/show":

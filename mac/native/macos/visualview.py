@@ -23,7 +23,8 @@ def may_load(url, loaded):
 
 
 def message(body):
-    """The visual's message as the card takes it: {"sb": "size", want, w, h} or {"sb": "open", href} (https), else None."""
+    """The visual's message as the card takes it: {"sb": "size", want, w, h, need}, {"sb": "open", href} (https), or
+    {"sb": "chose", label} (a choice clicked, 80 characters at most), else None."""
     if not isinstance(body, dict):
         return None
     if body.get("sb") == "size":
@@ -33,6 +34,10 @@ def message(body):
                     "need": max(0, min(4000, int(body.get("need") or 0)))}
         except (TypeError, ValueError):
             return None
+    label = body.get("label")
+    if body.get("sb") == "chose" and isinstance(label, str):
+        label = " ".join(label.split())[:80]
+        return {"sb": "chose", "label": label} if label else None
     href = body.get("href")
     if body.get("sb") == "open" and isinstance(href, str) and href.lower().startswith("https://") and len(href) < 2048 \
             and not any(c.isspace() for c in href):
