@@ -64,8 +64,12 @@
       if (!window.mermaid) { el.classList.add("raw"); return; }
       // its own size, its text at the kit's 13 px: the card grows for it, or it scrolls; it's never scaled down
       const own = { useMaxWidth: false };
-      window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark() ? "dark" : "neutral",
-        fontFamily: "-apple-system, system-ui, sans-serif", themeVariables: { fontSize: "13px" },
+      // in Standby's colours (the visual card drafts): soft accent boxes, the accent's edge, quiet lines
+      const d = dark(), sys = "-apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+      window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", fontFamily: sys,
+        themeVariables: Object.assign({ fontSize: "13px", fontFamily: sys }, d
+          ? { primaryColor: "#2f2c55", primaryBorderColor: "#8f86ff", primaryTextColor: "#f2f2f4", lineColor: "#a1a1a6", edgeLabelBackground: "#242426" }
+          : { primaryColor: "#eeedff", primaryBorderColor: "#5046e5", primaryTextColor: "#1d1d1f", lineColor: "#8e8e96", edgeLabelBackground: "#ffffff" }),
         flowchart: own, sequence: own, gantt: own, class: own, state: own, er: own, journey: own, pie: own, mindmap: own, timeline: own });
       window.mermaid.render("sb-d" + (++n), src).then(r => { el.innerHTML = r.svg; sb.size(); })
         .catch(() => { el.textContent = src; el.classList.add("raw"); sb.size(); });
