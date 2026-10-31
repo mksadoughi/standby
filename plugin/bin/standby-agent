@@ -3130,13 +3130,15 @@ VISUAL_PROMPT = (
     "bottom (flowchart TD) unless it has 3 boxes or fewer; with more than about 6, make it a list (.steps) "
     "instead; and give a diagram wider than 2 boxes data-size=\"large\". A house kit is loaded first and follows light and dark, so "
     "never hard-code colours: use var(--text), var(--muted), var(--faint), var(--accent), var(--soft), "
-    "var(--line), var(--bg), var(--ok), var(--warn), var(--bad). Styled for you: h1 (the title), h2 (a muted "
-    "subhead), p, ul, ol, li, a (https only), table, input[type=range], button, code. Classes: .muted, .ok, .warn, "
+    "var(--line), var(--bg), var(--ok), var(--warn), var(--bad). It's a card beside the call, not a page: no "
+    "title or heading. Styled for you: p, ul, ol, li, a (https only), table, input[type=range], button, code. Classes: .muted, .ok, .warn, "
     ".bad; <ol class=\"steps\" id=\"...\"> for steps its reader presses through (then sb.steps(\"#...\"); "
     "sb.light(sel, n) lights item n); .big for one large figure or phrase; .row for a line of small labels; .grid "
     "for tiles; .tag for a small label. sb.num(v, digits) writes a number with separators. <sb-math>TeX</sb-math> "
     "inline or <sb-math display>TeX</sb-math> as a block; <sb-diagram>mermaid</sb-diagram> for a diagram. Say as "
-    "little as still helps (the card's size is for reading it); make it interactive only when that helps understanding. Reply with the "
+    "little as still helps (the card's size is for reading it). The voice never sees a click, so make it "
+    "interactive only where what it does shows on the card itself (stepping through, a slider that recalculates), "
+    "and only when that helps understanding; never anything that looks like a choice to make. Reply with the "
     "fragment only.")
 
 
