@@ -191,24 +191,51 @@ class LocalTransport(object):
         while time.time() < end and self.agent_alive():
             time.sleep(0.1)
 
-    def ensure_agent(self, model=None):
+    def agent_owner(self):
+        """Who started the running agent: "claude-code" (the mod, from the user's own Claude Code), "app"
+        (Standby), "cli" (a terminal), or None (unknown, or not running)."""
+        try:
+            pid = int((self.root / "agent" / "server.pid").read_text().strip())
+            got = json.loads((self.root / "agent" / "started_by.json").read_text())
+        except (OSError, ValueError):
+            return None
+        return got.get("by") if isinstance(got, dict) and got.get("pid") == pid else None
+
+    def ensure_agent(self, model=None, by=None, start=None):
+        """The agent server running: (ok, message). by: who asks (STANDBY_AGENT_BY, else "cli"). The agent and
+        every Claude Code it starts count, to macOS, as the app that started it: started by Standby, a project in
+        ~/Documents needed Standby's own grant for that folder (refused, every turn of a call failed). So the
+        user's Claude Code starts it (the mod, "claude-code"), and replaces one Standby started; Standby itself
+        only looks (start=False), unless it has no Claude Code to ask (ui._agent_from_claude_code)."""
+        by = by or os.environ.get("STANDBY_AGENT_BY") or "cli"
+        start = (by != "app") if start is None else start
         if not LOCAL_AGENT.exists():
             return False, "agent not found at %s" % LOCAL_AGENT
         if self.agent_alive():
+            if by == "app":
+                return True, "agent running on this Mac"   # Standby never retires one: it would start it again as its own
             running = self.agent_program()
-            if running is None or str(LOCAL_AGENT) in running:
+            mine = running is None or str(LOCAL_AGENT) in running
+            if mine and not (by == "claude-code" and self.agent_owner() not in ("claude-code", "cli")):
                 return True, "agent running on this Mac"
             # one started from somewhere else (the checkout, before the apps ran their own copy): it restarts
-            # in place from there, and run by Standby it can lose that folder (a call: "can't open file")
+            # in place from there, and run by Standby it can lose that folder (a call: "can't open file");
+            # or one Standby started, which your Claude Code now starts as its own
             self.retire_agent()
+        if not start:
+            return False, "the agent is started by your Claude Code"
         log = self.root / "agent" / "serve.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         find_claude(full=True)             # noted in agent/, where the agent's own quick look finds it
         with open(log, "ab") as out:
-            subprocess.Popen(self.agent_cmd(["serve", "--model", model or self.settings["model"],
-                                             "--voice-model", self.settings["voice_model"]]),
-                             stdin=subprocess.DEVNULL, stdout=out, stderr=out,
-                             start_new_session=True)
+            proc = subprocess.Popen(self.agent_cmd(["serve", "--model", model or self.settings["model"],
+                                                    "--voice-model", self.settings["voice_model"]]),
+                                    stdin=subprocess.DEVNULL, stdout=out, stderr=out,
+                                    start_new_session=True)
+        try:
+            (self.root / "agent" / "started_by.json").write_text(json.dumps({"by": by, "pid": proc.pid}))
+        except OSError:
+            pass
         for _ in range(40):
             time.sleep(0.25)
             if self.agent_alive():

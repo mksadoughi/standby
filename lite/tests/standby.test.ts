@@ -74,7 +74,12 @@ function fakeApp(on: any, events: any[], seen: any) {
     return reply
   })
   on('process.spawn', async function* ($: any, e: any) {
-    seen.spawned = (e && (e.argv || e.args)) || []
+    const argv = (e && (e.argv || e.args)) || []
+    if (argv[0] === '/usr/bin/env') {                   // the agent started from here (startAgent): no stream
+      (seen.agentStarts ||= []).push(argv)
+      return { value: { code: 0, signal: null } }
+    }
+    seen.spawned = argv
     seen.spawns = (seen.spawns || 0) + 1
     // the stream comes in pieces that aren't lines
     const text = events.map(ev => JSON.stringify(ev)).join('\n') + '\n'
@@ -138,6 +143,19 @@ test('a call hands the spoken words to this session, and an interruption aborts 
   // the session has it: said back, so the voice only says it went once it did
   expect(seen.posts.find(p => p.path === '/api/lite/progress' && p.body.kind === 'received').body).toEqual(
     { session: 'c1', id: 'c1-1', kind: 'received', text: '' })
+})
+
+test('Standby asks: the agent is started from here, as this Claude Code, and only ever agentctl ensure', async ($, on) => {
+  // started by Standby, the agent and its Claude Codes counted as Standby to macOS: a project in ~/Documents
+  // needed Standby's own grant (refused, a call failed every turn); started here, they count as this app
+  const seen = { posts: [] as any[], submitted: [], aborted: [], status: [] } as any
+  mock.clock(on)
+  const ok = ['/Users/you/.standby/venv/bin/python', '/Users/you/.standby/code/mac/agentctl.py', 'ensure']
+  fakeApp(on, [{ call: 'agent', argv: ok }, { call: 'agent', argv: ['/bin/rm', '-rf', '/tmp/x'] },
+               { call: 'agent', argv: ['/x/python', '/x/evil.py', 'ensure'] }], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  expect(seen.agentStarts).toEqual([['/usr/bin/env', 'STANDBY_AGENT_BY=claude-code'].concat(ok)])
 })
 
 test('a hand-off while the session is busy: said back as queued at once, then received when it enters', async ($, on) => {

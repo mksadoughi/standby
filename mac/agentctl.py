@@ -23,12 +23,17 @@ def ask(question, out=sys.stdout, err=sys.stderr, on_progress=None, on_queued=No
     ended talk, continued by typing)."""
     t = transport.for_config()
     ok, msg = t.ensure_agent()
+    end = time.time() + AGENT_WAIT
+    while not ok and t.agent_alive() is False and time.time() < end and os.environ.get("STANDBY_AGENT_BY") == "app":
+        time.sleep(0.25)                          # its Claude Code is starting it (ui._agent_from_claude_code)
+        ok = t.agent_alive()
     if not ok:
         return "Agent not available: %s" % msg
     answer, problem = _ask(t, question.strip(), session, err, on_progress, on_queued)
     return (answer or problem or "(no answer)").strip()
 
 
+AGENT_WAIT = 30.0       # Standby asks: the agent its Claude Code starts, waited for (Standby never starts it)
 VOICE = "[VOICE] "      # ui.VOICE_TAG: a voice mode question, whose wait is timed
 POLL = 0.03             # as standby-agent's: the spool is looked at this often, which adds to every answer
 GONE_FOR = 10.0         # the agent's server gone this long: the question has no answer coming

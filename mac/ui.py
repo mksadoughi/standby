@@ -1935,13 +1935,45 @@ def _restart_agent():
         _ensure_agent(live)
 
 
+AGENT_FROM_CC_WAIT = 20.0      # seconds a call waits for its Claude Code to start the agent (logged after)
+
+
 def _ensure_agent(sid=None):
+    data = read_json(SESSIONS / sid / "agent.json") if sid else {}
+    owner = str((data or {}).get("agent") or "")
+    if owner.startswith("lite:"):
+        return _agent_from_claude_code(owner[len("lite:"):])
     try:
         t = transport.for_config()
-        ok, msg = t.ensure_agent(transport.agent_settings(transport.load_config()).get("model"))
+        ok, msg = t.ensure_agent(transport.agent_settings(transport.load_config()).get("model"), by="app", start=True)
         log("agent: %s" % (msg if not ok else "ready on %s" % t.label))
     except Exception as exc:
         log("agent start failed: %r" % exc)
+
+
+def _agent_from_claude_code(cc, wait=None):
+    """The agent server, started by the call's own Claude Code (the mod runs agentctl ensure there): macOS then
+    counts it, and every Claude Code it starts, as the app Claude Code runs in, which already reads the project.
+    Started by Standby, a project in ~/Documents needed Standby's own grant for that folder, and refused, every
+    turn of a call failed ("sorry, couldn't ask Claude"). Standby never starts it for a call, even when no word
+    comes: one of its own would be charged to it again (the call's questions say the agent isn't there)."""
+    t = transport.for_config()
+    try:
+        if t.agent_alive() and t.agent_owner() in ("claude-code", "cli"):
+            return True
+        lite_publish(cc, {"call": "agent", "argv": [sys.executable, str(HERE / "agentctl.py"), "ensure"]})
+        end = time.time() + (AGENT_FROM_CC_WAIT if wait is None else wait)
+        while time.time() < end:
+            if t.agent_alive() and t.agent_owner() == "claude-code":
+                log("agent: started by Claude Code session %s" % cc[:8])
+                return True
+            time.sleep(0.25)
+        log("agent: Claude Code session %s didn't start it within %.0fs" % (cc[:8], AGENT_FROM_CC_WAIT if wait is None
+                                                                             else wait))
+        return False
+    except Exception as exc:
+        log("agent start failed: %r" % exc)
+        return False
 
 
 def wait_delivered(sid, seconds=30):
@@ -3430,30 +3462,20 @@ def cc_signed_in():
 
 
 def _cc_work_dirs(cc, folder=None, limit=12):
-    """Where a Claude Code session works: the folders its transcript shows it in (its cwd, and the projects of
-    the files it read or changed), each as its project's top (the git root, else the file's folder), and the
-    additional directories its settings give it. Not the home folder itself, nor the folder the call runs in."""
-    home = os.path.realpath(os.path.expanduser("~"))
+    """Where a Claude Code session works, as its transcript and settings name them: its cwd, the files it read or
+    changed, the additional directories its settings give it. Names only: Standby never looks in a project folder
+    itself (with it in ~/Documents, macOS asked Standby for that folder, and refused, a call failed every turn), so
+    the call's voice works out each one's project top, from where your Claude Code started it (voice_dirs)."""
+    home = os.path.normpath(os.path.expanduser("~"))
     found = []
-
-    def top(path):
-        d = os.path.realpath(os.path.expanduser(path))
-        d = d if os.path.isdir(d) else os.path.dirname(d)
-        probe = d
-        while probe.startswith(home + os.sep) and probe != home:
-            if os.path.isdir(os.path.join(probe, ".git")):
-                return probe
-            probe = os.path.dirname(probe)
-        return d
 
     def add(path):
         if not isinstance(path, str) or not path.startswith(("/", "~")):
             return
-        d = top(path)
-        if d in (home, "/") or not os.path.isdir(d) or (folder and d == os.path.realpath(folder)):
+        d = os.path.normpath(os.path.expanduser(path))
+        if d in (home, "/") or (folder and d == os.path.normpath(folder)) or d in found:
             return
-        if d not in found:
-            found.append(d)
+        found.append(d)
 
     t = _cc_transcript(cc)
     try:
@@ -3469,11 +3491,10 @@ def _cc_work_dirs(cc, folder=None, limit=12):
         for blk in ((r.get("message") or {}).get("content") or []) if r.get("type") == "assistant" else []:
             if isinstance(blk, dict) and blk.get("type") == "tool_use" and isinstance(blk.get("input"), dict):
                 add(blk["input"].get("file_path") or blk["input"].get("notebook_path") or blk["input"].get("path"))
-    for f in [os.path.expanduser("~/.claude/settings.json")] + ([os.path.join(folder, ".claude", n)
-              for n in ("settings.json", "settings.local.json")] if folder else []):
-        for d in ((read_json(Path(f)).get("permissions") or {}).get("additionalDirectories") or []):
-            add(d)
-    return found[-limit:]
+    for d in ((read_json(Path(os.path.expanduser("~/.claude/settings.json"))).get("permissions") or {})
+              .get("additionalDirectories") or []):
+        add(d)                                     # the project's own settings: the voice reads those (voice_dirs)
+    return found[-limit * 4:]
 
 
 def lite_call(b):
@@ -3494,7 +3515,7 @@ def lite_call(b):
     if held:
         return held
     cwd = str(b.get("cwd") or "").strip()
-    folder = cwd if cwd and os.path.isdir(os.path.expanduser(cwd)) else None
+    folder = os.path.normpath(os.path.expanduser(cwd)) if cwd.startswith(("/", "~")) else None   # never looked in here
     # Who the voice is and what Claude Code is to it: standby-agent's call prelude, with the folder.
     # Its voice starts afresh each call (what the session did comes as its summary) and is deleted when
     # the call is over (forget_call): never a conversation left in the user's Claude Code list
@@ -3522,6 +3543,7 @@ def lite_call(b):
     # Bound like a Lite meeting ("lite:<cc>"), as a call: the card (keep or forget) is served as theirs.
     write_json(SESSIONS / sid / "agent.json", {"agent": "lite:" + cc, "kind": "call", "name": "Claude Code",
                                               "copy": True, "meeting_audio": False, "mic": True, "started": started})
+    threading.Thread(target=_agent_from_claude_code, args=(cc,), name="agent-from-cc", daemon=True).start()
     _lite_out(cc, {"call": "note", "session": sid, "text": LITE_CALL_NOTE})     # the session knows it's on a call
     vs = VOICE.get(sid)
     if vs is not None and hasattr(vs, "open_with"):
@@ -6627,6 +6649,9 @@ def adopt_login_path():
 
 
 def main():
+    # the agent server is started by the user's Claude Code, never by Standby or what it runs (the recorder's
+    # `standby start` only looks): transport.ensure_agent, _agent_from_claude_code
+    os.environ.setdefault("STANDBY_AGENT_BY", "app")
     window_mode = "--window" in sys.argv
     cfg = transport.load_config()
     pinned, was = cfg.get("mic_device"), cfg.get("mode")

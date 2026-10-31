@@ -1663,10 +1663,53 @@ def fence(dirs):
     return {"blockReadsOutsideWorkingDirectories": True, "deny": deny}
 
 
-def voice_dirs(session):
-    """The folders a call's voice reads besides its own (voice.json "dirs": where its session works)."""
+_DIRS = {}                                # session: (when, its voice.json as read, the folders): voice_dirs, per turn
+
+
+def voice_dirs(session, limit=12):
+    """voice_dirs_now, kept 30 s while the call's voice.json is unchanged (it's asked on every turn)."""
     meta = voice_meta(session)
-    return [d for d in (meta.get("dirs") or []) if isinstance(d, str) and os.path.isdir(d)] if meta else []
+    was = _DIRS.get(session)
+    if was and was[1] == meta and time.time() - was[0] < 30:
+        return list(was[2])
+    found = voice_dirs_now(session, meta, limit)
+    _DIRS[session] = (time.time(), meta, found)
+    return list(found)
+
+
+def voice_dirs_now(session, meta, limit=12):
+    """The folders a call's voice reads besides its own: where its session works (voice.json "dirs", names the Mac
+    read from its transcript, and the project's own .claude settings), each as its project's top (the git root,
+    else the file's folder). Looked at here, by the agent your Claude Code started: Standby itself never looks in a
+    project folder (macOS asked it for ~/Documents; refused, every turn of the call failed)."""
+    if not meta:
+        return []
+    home = os.path.realpath(os.path.expanduser("~"))
+    folder = meta.get("folder")
+    here = os.path.realpath(folder) if isinstance(folder, str) and folder else None
+    names = [d for d in (meta.get("dirs") or []) if isinstance(d, str)]
+    for n in ("settings.json", "settings.local.json") if here else ():
+        try:
+            with open(os.path.join(here, ".claude", n)) as fh:
+                names += ((json.load(fh) or {}).get("permissions") or {}).get("additionalDirectories") or []
+        except (IOError, OSError, ValueError, AttributeError):
+            pass
+    found = []
+    for name in names:
+        if not isinstance(name, str) or not name.startswith(("/", "~")):
+            continue
+        d = os.path.realpath(os.path.expanduser(name))
+        d = d if os.path.isdir(d) else os.path.dirname(d)
+        probe = d
+        while probe.startswith(home + os.sep) and probe != home:
+            if os.path.isdir(os.path.join(probe, ".git")):
+                d = probe
+                break
+            probe = os.path.dirname(probe)
+        if d in (home, "/") or not os.path.isdir(d) or d == here or d in found:
+            continue
+        found.append(d)
+    return found[-limit:]
 
 
 def voice_shape(session):

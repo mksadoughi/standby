@@ -92,4 +92,31 @@ check("  one started from elsewhere: stopped, and this one started instead",
 if not gone(other):
     os.kill(other, 9)
 subprocess.run(t.agent_cmd(["stop"]), capture_output=True)
+
+# Who starts it: the user's Claude Code (the mod), never Standby. Started by Standby, the agent and every Claude
+# Code it starts counted as Standby to macOS, so a project in ~/Documents needed Standby's own grant (refused, a
+# call failed every turn); started from a terminal or an editor, they count as that app (a VM, 2026-10-31).
+for _ in range(40):
+    if not t.agent_alive():
+        break
+    time.sleep(0.1)
+ok, msg = t.ensure_agent(by="app")
+check("Standby asks with no agent running: it doesn't start one, it says who does", not ok and not t.agent_alive(), msg)
+ok, msg = t.ensure_agent(by="claude-code")
+pid = int((root / "agent" / "server.pid").read_text()) if ok else None
+check("  the user's Claude Code starts it, and it's marked as theirs", ok and t.agent_owner() == "claude-code", (msg, t.agent_owner()))
+ok, msg = t.ensure_agent(by="app")
+check("  Standby asking again: the same agent, never retired or started again", ok
+      and int((root / "agent" / "server.pid").read_text()) == pid, msg)
+subprocess.run(t.agent_cmd(["stop"]), capture_output=True)
+for _ in range(40):
+    if not t.agent_alive():
+        break
+    time.sleep(0.1)
+t.ensure_agent(by="app", start=True)                  # one Standby started (as before)
+was = int((root / "agent" / "server.pid").read_text())
+ok, msg = t.ensure_agent(by="claude-code")
+check("  one Standby started: the user's Claude Code replaces it with its own", ok and t.agent_owner() == "claude-code"
+      and int((root / "agent" / "server.pid").read_text()) != was, (msg, t.agent_owner()))
+subprocess.run(t.agent_cmd(["stop"]), capture_output=True)
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails)); sys.exit(1 if fails else 0)

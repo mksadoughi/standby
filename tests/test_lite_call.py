@@ -50,6 +50,7 @@ def wait(pred, secs=5):
 CC = "0f3c2a77-1111-4222-8333-944455556666"
 out, talks, live, asked, answers = [], [], [None], [], []
 ui.lite_publish = lambda cc, event: out.append((cc, dict(event)))
+real_agent_from_cc, ui._agent_from_claude_code = ui._agent_from_claude_code, (lambda cc, wait=None: True)   # P.40: its own block
 ui.live_session = lambda: live[0]
 ui._live_now = lambda ttl=0.5: live[0]
 
@@ -332,6 +333,41 @@ ui.LITE_CALLS[sid]["visual_told"] = ui.LITE_VISUALS_OFF
 ui.visual_where, ui.visual_show = where_was, show_was
 for t in ui.LITE_CALLS[sid]["tasks"].values():
     t["seen"] = True
+# P.40: the call's agent is started by its own Claude Code (the mod runs agentctl ensure there), never by Standby:
+# started by Standby, it and its Claude Codes counted as Standby to macOS, which asked Standby for ~/Documents and,
+# refused, every turn failed. And Standby itself never looks in the project folder.
+class FakeT(object):
+    def __init__(self): self.alive, self.owner, self.ensured = False, None, []
+    def agent_alive(self): return self.alive
+    def agent_owner(self): return self.owner
+    def ensure_agent(self, *a, **k): self.ensured.append(k); return False, "no"
+ft, for_config_was = FakeT(), ui.transport.for_config
+ui.transport.for_config = lambda *a, **k: ft
+out.clear()
+started = real_agent_from_cc(CC, wait=0.3)
+ev = [e for _c, e in out if e.get("call") == "agent"]
+check("a call's agent: Standby asks its Claude Code to start it (agentctl ensure), and never starts it itself",
+      ev and ev[-1]["argv"][1].endswith("/agentctl.py") and ev[-1]["argv"][2] == "ensure" and started is False
+      and ft.ensured == [], (ev, ft.ensured))
+ft.alive, ft.owner = True, "claude-code"
+out.clear()
+check("  one its Claude Code started: nothing asked", real_agent_from_cc(CC, wait=0.3) is True and not out, out)
+ft.owner = "app"
+threading.Timer(0.1, lambda: setattr(ft, "owner", "claude-code")).start()
+check("  one Standby started: its Claude Code is asked, and its own counts once it's up",
+      real_agent_from_cc(CC, wait=2.0) is True and any(e.get("call") == "agent" for _c, e in out), out)
+ui.transport.for_config = for_config_was
+looked, isdir_was, realpath_was = [], os.path.isdir, os.path.realpath
+os.path.isdir = lambda x: (looked.append(x), isdir_was(x))[1]
+os.path.realpath = lambda x, **k: (looked.append(x), realpath_was(x, **k))[1]
+try:
+    ui._cc_work_dirs(CC, folder=os.path.expanduser("~/Documents/standby"))
+finally:
+    os.path.isdir, os.path.realpath = isdir_was, realpath_was
+check("  Standby never looks in a project folder itself: the session's work dirs are names it hands the agent",
+      not any(str(x).startswith(os.path.expanduser("~/Documents")) for x in looked), looked[:5])
+out[:] = [x for x in out if x[1].get("call") != "agent"]     # this block's own events: the next checks count theirs
+
 # A summary made after the hello goes with one turn. Its voice keeps its own conversation (the default), so an
 # early question they went on from has given it already: never again in front of their words (it went twice).
 ui.LITE_CALLS[sid]["gist"] = "The user is shipping the release."

@@ -244,8 +244,28 @@ async function heard($, ev) {
     await note($, ev.text)
   } else if (ev.call === 'abort') {
     if (S.turn) await $.turn.abort({ turnId: S.turn })
+  } else if (ev.call === 'agent') {
+    void startAgent($, ev.argv)
   }
   $.ui.invalidate('ui.render')
+}
+
+// The agent server, started from here: macOS then counts it, and every Claude Code it starts, as the app this
+// Claude Code runs in (a terminal, an editor), which already reads the project. Started by Standby, a project in
+// ~/Documents needed Standby's own grant, and refused, a call failed every turn. Only ever agentctl's ensure.
+async function startAgent($, argv) {
+  const ok = Array.isArray(argv) && argv.length === 3 && typeof argv[0] === 'string' && argv[0].startsWith('/')
+    && typeof argv[1] === 'string' && argv[1].endsWith('/agentctl.py') && argv[2] === 'ensure'
+  if (!ok || S.agentStarting) return
+  S.agentStarting = true
+  try {
+    const p = $.process.spawn({ argv: ['/usr/bin/env', 'STANDBY_AGENT_BY=claude-code'].concat(argv) })
+    for await (const chunk of p) { void chunk }       // until it's up; Standby reads the agent's state itself
+  } catch (err) {
+    // Standby waits a while, then starts it itself
+  } finally {
+    S.agentStarting = false
+  }
 }
 
 // The engine decides when a batch is due (its push policy); each one is a quiet note here

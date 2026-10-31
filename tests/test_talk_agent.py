@@ -401,7 +401,8 @@ try:
     check("  and the home folder is never one: it runs in the agent's own", sa.run_dir(home) == sa.AGENT and sa.run_dir(os.path.join(home, "x")) == os.path.join(home, "x"))
     # A call's voice reads where its session works (the Mac lists those folders in voice.json "dirs"): the
     # snake game the session built in its own folder (talk-20261024-232831), not only the Standby repo.
-    snake, qa = tempfile.mkdtemp(prefix="sbsnake-"), tempfile.mkdtemp(prefix="sbqa-")
+    # (real paths: the agent works each one out, links resolved; the Mac hands it names only)
+    snake, qa = (os.path.realpath(tempfile.mkdtemp(prefix=x)) for x in ("sbsnake-", "sbqa-"))
     json.dump({"handoff": True, "folder": "/Users/you/code/orion", "dirs": [snake, qa, "/no/such/folder"]},
               open(os.path.join(live, TALK + ".voice.json"), "w"))
     argv = sa.build_argv(TALK, "haiku", True, "00000000-0000-4000-8000-000000000003", stream=False, kind="voice")
@@ -534,6 +535,23 @@ try:
     check("projects listed for Standby Dictation: none in a guarded folder, and nothing there even looked at",
           real(guarded_proj) in everything and unguarded == [real(open_proj)]
           and not any(t.startswith(os.path.join(fake_home, "Documents")) for t in touched), (everything, unguarded, touched))
+    # A call's voice reads where its session works: the Mac hands it names only, and the agent (started by the
+    # user's Claude Code) works out each one's project top and reads the project's own settings.
+    proj = tempfile.mkdtemp(prefix="sbproj-", dir=os.path.expanduser("~")) if False else tempfile.mkdtemp(prefix="sbproj-")
+    os.makedirs(os.path.join(proj, "app", ".git")); os.makedirs(os.path.join(proj, "app", "src"))
+    os.makedirs(os.path.join(proj, "lib")); os.makedirs(os.path.join(proj, "call", ".claude"))
+    json.dump({"permissions": {"additionalDirectories": [os.path.join(proj, "lib")]}},
+              open(os.path.join(proj, "call", ".claude", "settings.json"), "w"))
+    home_was = os.environ["HOME"]
+    os.environ["HOME"] = proj                        # the project tops are looked for under home
+    try:
+        got = sa.voice_dirs_now(TALK, {"folder": os.path.join(proj, "call"),
+                                       "dirs": [os.path.join(proj, "app", "src", "main.py"), os.path.join(proj, "gone")]})
+    finally:
+        os.environ["HOME"] = home_was
+    real = os.path.realpath
+    check("a call's work dirs: worked out by the agent (git top), the project's own settings read there, gone ones out",
+          got == [real(os.path.join(proj, "app")), real(os.path.join(proj, "lib"))], got)
     # Show while talking: "[VISUAL: …]" is never said; a fork of the voice's conversation draws it in the
     # background, its file in the spool for the Mac (drawing, then ready), counted in Usage as its own kind.
     ids = []
