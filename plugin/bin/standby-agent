@@ -3715,7 +3715,9 @@ class Voice(object):
                     left.stop(hard=True)
                 with self.cv:
                     self.busy = False
-                    if task[0] != "spawn":            # warm-ups and turns mean voice mode is in use
+                    # warm-ups and turns mean voice mode is in use; so does a call's spawn: a call is voice from the
+                    # start, and counted idle the spare just started for its first turn was retired at once
+                    if task[0] != "spawn" or is_talk(task[1]):
                         self.last_used = time.time()
 
     def _feeder(self, session):

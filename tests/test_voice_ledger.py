@@ -137,6 +137,15 @@ try:
     ahead = wait(lambda: voice_starts(), 90)
     check("a call: its first turn's Claude Code is started before the call's first word (a spare)", ahead,
           records()[-3:])
+    spare = (voice_starts() or [{}])[0].get("pid")
+    time.sleep(1.0)                               # several of the voice thread's idle looks (POLL)
+
+
+    def alive(pid):                               # running: there, and not a zombie (stopped, not yet reaped)
+        r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
+        return bool(pid) and r.returncode == 0 and r.stdout.strip()[:1] not in ("", "Z")
+    check("  and kept, not retired as idle the moment after (a call is voice from the start: a race under load)",
+          alive(spare), spare)
     if not ahead:
         ask("[CALL START]")                       # what the rest needs: a first turn's Claude Code
         wait(lambda: voice_starts(), 60)
