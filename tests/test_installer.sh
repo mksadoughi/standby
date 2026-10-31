@@ -90,6 +90,7 @@ def setup(app, name, options):
     c = os.path.join("dist", name + ".app", "Contents")
     os.makedirs(os.path.join(c, "MacOS"))
     plistlib.dump(dict(o["plist"], CFBundleExecutable=name), open(os.path.join(c, "Info.plist"), "wb"))
+    import shutil; shutil.copy("/usr/bin/true", os.path.join(c, "MacOS", name))    # a real program: it gets signed
     open(os.path.join(c, "build.txt"), "w").write("%s|%s|%s" % (os.path.abspath(app[0]), o.get("alias"), o.get("iconfile")))
 EOF
 
@@ -187,8 +188,17 @@ check "an old config's SSH host: moved to this Mac (local mode), the host gone" 
   "$REALPY -c \"import json,sys; c=json.load(open('$H/.standby/config.json')); sys.exit(not (c['agent']=={'mode':'local'} and 'host' not in c and 'mic_device' not in c and c['loopback_device']=='BlackHole 2ch'))\""
 check "PATH line added to ~/.zshrc" "[[ \$(grep -c '.local/bin' $H/.zshrc) -eq 1 ]]"
 check "private dirs are owner-only" "[[ \$(mode_of $H/.standby) == 700 && \$(mode_of $H/.standby/sessions) == 700 ]]"
+DR_APP="$(codesign -d -r- "$H/Applications/Standby.app" 2>&1 | sed -n 's/^designated => //p')"
+DR_DICT="$(codesign -d -r- "$H/Applications/Standby Dictation.app" 2>&1 | sed -n 's/^designated => //p')"
+check "both apps signed with a certificate of this Mac's own, so their identity is no code hash (a rebuild lost every permission)" \
+  "[[ \"\$DR_APP\" == 'identifier \"dev.standby.app\" and certificate leaf = H\"'* && \"\$DR_DICT\" == 'identifier \"dev.standby.dictation\" and certificate leaf = H\"'* ]] && codesign --verify \"$H/Applications/Standby.app\" && grep -q \"a code-signing certificate of this Mac's own\" $T/out.1"
+check "  kept in its own keychain under ~/.standby, owner-only, never in the login keychain's list" \
+  "[[ -f $H/.standby/signing/standby.keychain-db && \$(mode_of $H/.standby/signing) == 700 && \$(mode_of $H/.standby/signing/password) == 600 ]] && ! security list-keychains -d user | grep -q '$H'"
+APP_INODE="$(ls -i "$H/Applications/Standby.app/Contents/Info.plist" | awk '{print $1}')"
 run 2; rc=$?
 check "re-run succeeds (update in place)" "[[ $rc -eq 0 ]]"
+check "  nothing changed: the apps are kept as they are, the same identity" \
+  "[[ \"\$(ls -i \"$H/Applications/Standby.app/Contents/Info.plist\" | awk '{print \$1}')\" == '$APP_INODE' && \"\$(codesign -d -r- \"$H/Applications/Standby Dictation.app\" 2>&1 | sed -n 's/^designated => //p')\" == \"\$DR_DICT\" ]]"
 check "Claude Code plugin: this repo added as its marketplace, standby installed for every folder" \
   "grep -qx 'plugin marketplace add $REPO' $T/claude.args && grep -qx 'plugin install standby@standby --scope user' $T/claude.args && grep -q 'plugin standby@standby, in every folder' $T/out.1"
 check "  a re-run asks the same again (harmless: Claude Code says it's already there)" \
@@ -221,11 +231,17 @@ check "re-run: the speech model is here, not fetched again" \
 check "re-run keeps the migrated config" "! grep -q devbox.example.com $H/.standby/config.json && grep -q '\"mode\": \"local\"' $H/.standby/config.json"
 check "a first install says nothing of asking again" "! grep -q 'permissions once more' $T/out.1"
 check "  nor a rebuild with nothing changed (the same app: macOS keeps its permissions)" "! grep -q 'permissions once more' $T/out.2"
-# An older build whose Info.plist differs (as when a key was added): macOS sees a new app.
+# An app that changed (a key added to its Info.plist): rebuilt, and with the same certificate it's the same
+# app to macOS, its permissions kept.
 "$REALPY" -c "import plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,'rb')); d['OldKey']=1; plistlib.dump(d, open(p,'wb'))" \
   "$H/Applications/Standby.app/Contents/Info.plist"
+run 3; rc=$?
+check "an app that changed: rebuilt, the same identity, so nothing is asked again" \
+  "[[ $rc -eq 0 ]] && ! grep -q 'permissions once more' $T/out.3 && codesign --verify \"$H/Applications/Standby.app\" && [[ \"\$(codesign -d -r- \"$H/Applications/Standby.app\" 2>&1 | sed -n 's/^designated => //p')\" == \"\$DR_APP\" ]]"
+# One installed before, signed ad hoc: moving it to the certificate is a new app to macOS, once.
+codesign --force --sign - "$H/Applications/Standby.app" >/dev/null 2>&1
 run 5; rc=$?
-check "an app that changed: macOS will ask for its permissions once more, and the install says so" \
+check "an app signed ad hoc before: macOS will ask for its permissions once more, and the install says so" \
   "[[ $rc -eq 0 ]] && grep -q \"macOS will ask for Standby's permissions once more\" $T/out.5"
 check "  and what to do if it keeps asking with the switch already on: the button, or the reset" \
   "grep -q \"click \\\"It's on already\\\" on the call's sound in Standby\" $T/out.5 && grep -q 'tccutil reset ScreenCapture dev.standby.app' $T/out.5"

@@ -349,13 +349,63 @@ json.dump(cfg, open(p, "w"), indent=2)
 print("   \033[32m✓\033[0m %s" % p)
 PYCODE
 
-# What macOS keys an app's permissions on: its ad-hoc signature's CDHash (else its Info.plist).
-# A rebuild with nothing changed gives the same one, and keeps them; a new one is asked once more.
+# What macOS keys an app's permissions on: its designated requirement. Signed ad hoc, that is the code's own
+# hash, so any rebuild that changed a byte made a new app to macOS and every permission went stale (the
+# microphone, the meeting's sound, Documents: calls failed). So both apps are signed with a local code-signing
+# certificate, made once on this Mac and kept in its own keychain under ~/.standby/signing (never the login
+# keychain, never sent anywhere): their requirement is then 'identifier "dev.standby.app" and certificate
+# leaf = H"..."', the same after every rebuild. If it can't be made, ad hoc as before.
 app_mark() {
   [[ -d "$1" ]] || return 0
-  { codesign -dvvv "$1" 2>&1 | sed -n 's/^CDHash=//p' | grep . ; } \
-    || { shasum "$1/Contents/Info.plist" 2>/dev/null | cut -d' ' -f1; } || true
+  codesign -d -r- "$1" 2>&1 | sed -n 's/^[# ]*designated => //p' || true     # ad hoc, it's a comment: "# designated =>"
 }
+SIGN_DIR="$ROOT/signing"
+SIGN_KC="$SIGN_DIR/standby.keychain-db"
+SIGN_NAME="Standby Local Code Signing"
+SIGN_ID=""
+SIGN_LEAF=""
+signing_identity() {
+  local pw tmp
+  mkdir -p "$SIGN_DIR" && chmod 700 "$SIGN_DIR" || return 1
+  if [[ ! -f "$SIGN_KC" || ! -s "$SIGN_DIR/password" ]]; then
+    rm -f "$SIGN_KC"
+    tmp="$(mktemp -d)" || return 1
+    pw="$(/usr/bin/openssl rand -hex 24)" || return 1
+    printf '[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=%s\n[ext]\nbasicConstraints=critical,CA:false\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=critical,codeSigning\n' \
+      "$SIGN_NAME" > "$tmp/cert.cnf"
+    { /usr/bin/openssl req -new -newkey rsa:2048 -nodes -x509 -days 7300 -config "$tmp/cert.cnf" \
+        -keyout "$tmp/key.pem" -out "$tmp/cert.pem" &&
+      /usr/bin/openssl pkcs12 -export -inkey "$tmp/key.pem" -in "$tmp/cert.pem" -name "$SIGN_NAME" \
+        -passout "pass:$pw" -out "$tmp/id.p12" &&
+      security create-keychain -p "$pw" "$SIGN_KC" &&
+      security set-keychain-settings "$SIGN_KC" &&
+      security unlock-keychain -p "$pw" "$SIGN_KC" &&
+      security import "$tmp/id.p12" -k "$SIGN_KC" -P "$pw" -T /usr/bin/codesign &&
+      security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$SIGN_KC"
+    } >>"$ROOT/signing.log" 2>&1
+    local rc=$?
+    rm -rf "$tmp"
+    if [[ $rc -ne 0 ]]; then rm -f "$SIGN_KC"; return 1; fi
+    ( umask 077; printf '%s\n' "$pw" > "$SIGN_DIR/password" )
+  fi
+  security unlock-keychain -p "$(cat "$SIGN_DIR/password")" "$SIGN_KC" >>"$ROOT/signing.log" 2>&1 || return 1
+  SIGN_ID="$(security find-identity -p codesigning "$SIGN_KC" 2>/dev/null | awk -v n="\"$SIGN_NAME\"" 'index($0, n) {print $2; exit}')"
+  SIGN_LEAF="$(printf '%s' "$SIGN_ID" | tr 'A-F' 'a-f')"     # as the requirement names it
+  [[ -n "$SIGN_ID" ]]
+}
+# Signed with that identity, or ad hoc as py2app left it.
+sign_app() {
+  [[ -n "$SIGN_ID" ]] || return 0
+  codesign --force --deep --sign "$SIGN_ID" --keychain "$SIGN_KC" "$1" >>"$ROOT/signing.log" 2>&1 ||
+    warn "could not sign $(basename "$1") with Standby's own certificate: macOS will ask again after the next reinstall"
+}
+# What went into an app: the same, and the app already there is kept as it is.
+build_key() { { cat "$@" 2>/dev/null || true; } | shasum | cut -d' ' -f1; }    # a file not there (no icon) counts as empty
+if signing_identity; then
+  ok "a code-signing certificate of this Mac's own, so a reinstall keeps the apps' permissions"
+else
+  warn "no code-signing certificate (log: $ROOT/signing.log): after a reinstall macOS may ask for the apps' permissions again"
+fi
 ASK_AGAIN=()
 
 say "Standby.app"
@@ -412,10 +462,18 @@ if "$VENV/bin/pip" install --quiet "${PINS[@]}" py2app >"$BUILD/build.log" 2>&1 
    (cd "$BUILD" && "$VENV/bin/python" setup.py py2app -A >>"$BUILD/build.log" 2>&1) &&
    [[ -d "$BUILD/dist/Standby.app" ]]; then
   WAS="$(app_mark "$APP")"
-  rm -rf "$APP"
-  mkdir -p "$(dirname "$APP")"
-  mv "$BUILD/dist/Standby.app" "$APP"
-  touch "$APP"
+  KEY="$(build_key "$BUILD/setup.py" "$BUILD/Standby.py" "$BUILD/Standby.icns" "$BUILD/dist/Standby.app/Contents/MacOS/Standby")"
+  if [[ -n "$SIGN_ID" && "$(cat "$APP/Contents/Resources/standby-build" 2>/dev/null)" == "$KEY" && "$WAS" == *"$SIGN_LEAF"* ]] &&
+     codesign --verify "$APP" >/dev/null 2>&1; then
+    rm -rf "$BUILD/dist/Standby.app"     # nothing changed: the one there stays, untouched
+  else
+    rm -rf "$APP"
+    mkdir -p "$(dirname "$APP")"
+    mv "$BUILD/dist/Standby.app" "$APP"
+    mkdir -p "$APP/Contents/Resources" && echo "$KEY" > "$APP/Contents/Resources/standby-build"
+    sign_app "$APP"
+    touch "$APP"
+  fi
   [[ -n "$WAS" && "$WAS" != "$(app_mark "$APP")" ]] && ASK_AGAIN+=("Standby")
   ok "$APP  (open it from Spotlight, Finder or the Dock)"
   OPEN="open ~/Applications/Standby.app     (or from Terminal: standby app)"
@@ -467,10 +525,18 @@ PYSETUP
 if (cd "$DBUILD" && "$VENV/bin/python" setup.py py2app -A >>"$BUILD/build.log" 2>&1) &&
    [[ -d "$DBUILD/dist/Standby Dictation.app" ]]; then
   WAS="$(app_mark "$DAPP")"
-  rm -rf "$DAPP"
-  mkdir -p "$(dirname "$DAPP")"
-  mv "$DBUILD/dist/Standby Dictation.app" "$DAPP"
-  touch "$DAPP"
+  KEY="$(build_key "$DBUILD/setup.py" "$DBUILD/StandbyDictation.py" "$DBUILD/Dictation.icns" "$DBUILD/dist/Standby Dictation.app/Contents/MacOS/Standby Dictation")"
+  if [[ -n "$SIGN_ID" && "$(cat "$DAPP/Contents/Resources/standby-build" 2>/dev/null)" == "$KEY" && "$WAS" == *"$SIGN_LEAF"* ]] &&
+     codesign --verify "$DAPP" >/dev/null 2>&1; then
+    rm -rf "$DBUILD/dist/Standby Dictation.app"
+  else
+    rm -rf "$DAPP"
+    mkdir -p "$(dirname "$DAPP")"
+    mv "$DBUILD/dist/Standby Dictation.app" "$DAPP"
+    mkdir -p "$DAPP/Contents/Resources" && echo "$KEY" > "$DAPP/Contents/Resources/standby-build"
+    sign_app "$DAPP"
+    touch "$DAPP"
+  fi
   [[ -n "$WAS" && "$WAS" != "$(app_mark "$DAPP")" ]] && ASK_AGAIN+=("Standby Dictation")
   ok "$DAPP  (turn it on with: standby dictation on)"
   # Already on: restart it, so it runs this version.
@@ -495,7 +561,7 @@ HF_HUB_VERBOSITY=error "$VENV/bin/python" "$REPO/mac/prepare.py" \
 
 say "Done"
 if [[ ${#ASK_AGAIN[@]} -gt 0 ]]; then
-  # The app changed in a way macOS sees (its Info.plist, or where it was built from).
+  # The app changed in a way macOS sees: once, from ad hoc to this Mac's own certificate (or with none).
   warn "macOS will ask for $(printf "%s's and " "${ASK_AGAIN[@]}" | sed 's/ and *$//') permissions once more"
   # macOS keeps a permission per copy of the app, so a switch that is already on may be the
   # old copy's: what to do then, for the one that records the call.
