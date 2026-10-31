@@ -22,7 +22,12 @@ function fakeApp(on: any, events: any[], seen: any) {
   })
   on('process.run', ($: any, e: any) => {
     const argv = (e && (e.argv || e.args || e.command)) || []
-    if (Array.isArray(argv) && argv[0] === 'open') { (seen.launched ||= []).push(argv.join(' ')); seen.down = false }
+    if (Array.isArray(argv) && argv[0] === 'open') {
+      (seen.launched ||= []).push(argv.join(' '))
+      // Standby opening slowly (a new Mac's first start): up once the test says so
+      if (seen.slowOpen) return new Promise(r => { seen.openDone = () => { seen.down = false; r({ value: { exitCode: 0, stdout: '', stderr: '' } }) } })
+      seen.down = false
+    }
     // the mod's waits sleep here: a real moment, so a test's own timers run while it waits
     if (Array.isArray(argv) && argv[0] === '/bin/sleep') return new Promise(r => setTimeout(() => r({ value: { exitCode: 0, stdout: '', stderr: '' } }), 25))
     return { value: { exitCode: 0, stdout: '', stderr: '' } }
@@ -826,6 +831,29 @@ test('Connecting: after Accept, the moving dots and End, until the call is live'
   band = await bandOf($)
   expect(await textOn(band, 'On a call with Claude')).toBeDefined()         // its greeting: on the call
   expect(await textOn(band, 'Connecting . .')).toBeUndefined()
+  seen.more(null)
+})
+
+test('Connecting says why it waits: Standby opening, then the voice’s first download, and nothing once it’s ready', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, down: true, slowOpen: true, waitMore: true }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  const started = $.command.run({ command: 'standby', args: 'call' })
+  await settle()
+  let band = await bandOf($)
+  expect(await textOn(band, 'Connecting .')).toBeDefined()
+  expect(await textOn(band, 'Opening Standby')).toMatchObject({ props: { dimColor: true } })
+  seen.slowOpen = false; seen.openDone()
+  seen.idle = false; seen.live = { kind: 'call', session: 'c1', started: 1, phase: 'listening' }
+  expect((await started).text).toBe('On a call. Talk; real work comes here.')
+  seen.more([{ call: 'state', session: 'c1', phase: 'listening', preparing: 'Getting the voice ready\u2026 42%' }]); await settle()
+  band = await bandOf($)
+  expect(await textOn(band, 'Opening Standby')).toBeUndefined()
+  expect(await textOn(band, 'First time: getting the voice ready\u2026 42%')).toMatchObject({ props: { dimColor: true } })
+  seen.more([{ call: 'state', session: 'c1', phase: 'listening' }]); await settle()      // ready: just Connecting until its greeting
+  band = await bandOf($)
+  expect(await textOn(band, 'First time: getting the voice ready\u2026 42%')).toBeUndefined()
+  expect(await textOn(band, 'Connecting .')).toBeDefined()
   seen.more(null)
 })
 

@@ -170,10 +170,10 @@ ok "speech (parakeet-mlx), speakers (sherpa-onnx), app window (pywebview)"
   || warn "AVFoundation for Python did not install: in voice mode, use headphones or tap to interrupt Claude"
 # Voice mode's own voice: Pocket TTS by Kyutai (CC BY 4.0) on the GPU, about 145 MB of packages.
 # mlx-audio pinned (constraints.txt): mac/tts.py uses its Pocket TTS directly. The model (about
-# 240 MB) comes from Hugging Face the first time voice mode opens, not here.
+# 240 MB) comes from Hugging Face at the end (mac/prepare.py), so a first call doesn't wait for it.
 "$VENV/bin/pip" install --progress-bar off "${PINS[@]}" mlx-audio sentencepiece | grep -E "^(Successfully|ERROR)" || true
 if "$VENV/bin/python" -c "import mlx_audio, sentencepiece" 2>/dev/null; then
-  ok "voice mode's voice (Pocket TTS; its model comes the first time voice mode opens)"
+  ok "voice mode's voice (Pocket TTS; its model comes at the end)"
 else
   warn "Pocket TTS did not install: voice mode speaks with a macOS voice"
 fi
@@ -480,6 +480,13 @@ else
   warn "'standby dictation on' still works: it runs the script instead of the app (macOS then asks for its"
   warn "permissions as Python, not Standby Dictation)."
 fi
+
+# What a first start would load (the app's frameworks, the speech model, the voice), loaded once
+# now, and the voice downloaded: macOS checks each new library the first time it's loaded, and on a
+# fresh Mac that held the first call and meeting 10-30 s (mac/prepare.py). Never fatal.
+say "Getting ready for the first call (once)"
+HF_HUB_VERBOSITY=error "$VENV/bin/python" "$REPO/mac/prepare.py" \
+  || warn "the first call or meeting may take a little longer to start, once"
 
 
 say "Done"

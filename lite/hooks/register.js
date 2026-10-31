@@ -214,6 +214,7 @@ async function heard($, ev) {
     if (!!ev.working !== cs.working) { cs.working = !!ev.working; cs.workingSince = now }
     cs.notice = ev.notice || ''
     cs.waiting = !!ev.waiting
+    cs.preparing = ev.preparing || ''
     cs.retrying = ev.retrying_since ? ev.retrying_since * 1000 : 0
     if (S.starting && S.starting.voice && (ev.phase === 'speaking' || ev.phase === 'ended')) S.starting = null
     if (ev.phase === 'ended') { S.call = null; S.caption = ''; S.said = null; S.last = null; S.heard = { you: '', said: '' }; void cardOf($, ev.session) }
@@ -326,6 +327,7 @@ async function ensureApp($, quiet) {
   await where($)
   await refresh($)
   if (!S.st.app && !quiet) {
+    if (S.starting) { S.starting.launching = true; $.ui.invalidate('ui.render') }     // the band says why it waits
     await $.process.run(['open', '-g', '-a', 'Standby', '--args', '--background'])   // its window stays closed until asked for
     for (let i = 0; i < 30; i++) {             // up to about 15 s while it starts
       await where($)
@@ -334,6 +336,7 @@ async function ensureApp($, quiet) {
       // waited in a $ call: a hook's own time (10 s) would run out on clock sleeps while the app starts
       await $.process.run(['/bin/sleep', '0.5']).catch(() => {})
     }
+    if (S.starting) S.starting.launching = false
     if (S.st.app) void listen($)
   }
   return !!S.st.app
@@ -764,8 +767,12 @@ async function band($, e, next) {
     const call = S.starting.kind === 'call'
     const top = line([...mark, fixed(call ? '◉' : '●', { color: call ? MARK : 'red' }), ...slow(call ? 'Connecting' : 'Starting to listen', S.starting.since),
       ...keyset([['end', 'e', 'end', 'cancelStart']], [['end', 'End', 'cancelStart', true]])])
+    // why it's slow, when that's known, dim, under it: Standby opening, or its voice's first download
+    const prep = call && S.starting.voice && S.callState && S.callState.preparing
+    const why = S.starting.launching ? 'Opening Standby'
+      : prep ? 'First time: ' + prep.charAt(0).toLowerCase() + prep.slice(1) : ''
     // waiting on Standby's setup window (a first call or meeting): where to go, dim, under it
-    if (!S.starting.setup) return top
+    if (!S.starting.setup) return why ? Box({ flexDirection: 'column', rowGap: 0, children: [top, ...below(why)] }) : top
     return Box({ flexDirection: 'column', rowGap: 0, children: [top,
       ...below(call ? 'Allow the mic in Standby\u2019s window to start' : 'Finish setup in Standby\u2019s window')] })
   }

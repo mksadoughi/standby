@@ -3501,14 +3501,17 @@ def _lite_watch(sid):
                 log("lite: call %s: its Claude Code (pid %s) has quit; the call ends" % (sid, c.get("cc_pid")))
                 lite_call_end({"session": sid})
                 break
-        # what the band says under the call: the voice's phase, work taken deeper, the voice failing
-        state = (phase, bool(c.get("running")), st.get("notice") or "", st.get("retrying_since"), lite_waiting(sid, st))
+        # what the band says under the call: the voice's phase, work taken deeper, the voice failing, and
+        # its first download ("Getting the voice ready… 42%") while Connecting waits on it
+        state = (phase, bool(c.get("running")), st.get("notice") or "", st.get("retrying_since"), lite_waiting(sid, st),
+                 st.get("preparing") or "")
         if state != seen.get("state"):
             seen["state"] = state
             _lite_out(c["cc"], dict({"call": "state", "session": sid, "phase": phase, "working": state[1]},
                                     **({"notice": state[2]} if state[2] else {}),
                                     **({"retrying_since": state[3]} if state[3] else {}),
-                                    **({"waiting": True} if state[4] else {})))
+                                    **({"waiting": True} if state[4] else {}),
+                                    **({"preparing": state[5]} if state[5] else {})))
         time.sleep(0.15)
 
 
