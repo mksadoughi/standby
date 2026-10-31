@@ -5213,6 +5213,49 @@ def session_visuals(sid):
     return visuals.listed(SESSIONS / sid)
 
 
+VISUAL_OPEN = {}                      # session -> how many times the card was asked to open (the voice, the tab)
+MINI_WINDOW = {}                        # "presence": the mini window (native companion), once it's up
+
+
+def visual_where(sid):
+    """Where a visual of this call would be seen now, for the voice's own context (so it never says it shows
+    one nobody can see): "the main window", "the mini window", or None (neither is up), or "off" (visuals off)."""
+    if not visuals_on():
+        return "off"
+    win = APP_WINDOW.get("win")
+    try:
+        native = getattr(win, "native", None)
+        if native is not None and native.isVisible() and not native.isMiniaturized():
+            return "the main window"
+    except Exception:
+        pass
+    p = MINI_WINDOW.get("presence")
+    try:
+        if p is not None and p.pill.visible and sid in LITE_ORB:
+            return "the mini window"
+    except Exception:
+        pass
+    return None
+
+
+def visual_show(b):
+    """POST /api/visual/show {session}: the call's visuals brought into view, on the user's ask (the voice, told
+    to): the mini window up if no window is (the call sent to it, as the user's Mini window does), and its card
+    open again at the newest."""
+    sid = str(b.get("session") or "") or _live_now() or ""
+    if not valid_id(sid) or sid != _live_now() or not is_talk(sid):
+        return {"error": "No call is live"}
+    with _lock:
+        VISUAL_OPEN[sid] = VISUAL_OPEN.get(sid, 0) + 1
+    if visual_where(sid) is None:
+        LITE_ORB.add(sid)
+        p = MINI_WINDOW.get("presence")
+        if p is not None:
+            window.on_main(p.update)
+        log("visual: the mini window brought up to show the call's visuals")
+    return {"ok": True, "where": visual_where(sid) or "the mini window"}
+
+
 def visual_latest(sid):
     """{n, id, state} of the call's newest visual, or None."""
     import visuals
@@ -5292,6 +5335,7 @@ def companion_state():
            "claude_error": claude_error(page_machine(live))}           # live known: no second lookup
     if live:
         out["visuals_on"] = visuals_on()                               # the panel's Visuals button, and the card
+        out["visual_open"] = VISUAL_OPEN.get(live, 0)                  # asked to open again (the voice, on request)
     if live and (SESSIONS / live).is_dir() and is_talk(live):
         sdir = SESSIONS / live
         out["live"] = {"id": live, "kind": "talk"}
@@ -6157,6 +6201,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(copy_to_clipboard(str(b.get("text") or "")))
         if self.path == "/api/mic-test":
             return self._json(start_mic_test())
+        if self.path == "/api/visual/show":
+            return self._json(visual_show(b))
         if self.path == "/api/permissions":
             return self._json(permissions_act(b))
         if self.path == "/api/dictation-app":
@@ -6480,7 +6526,7 @@ def main():
 
     def start_companion():
         try:
-            present["companion"] = api.companion = window.companion(win, "http://127.0.0.1:%d" % PORT, CompanionHooks())
+            present["companion"] = api.companion = MINI_WINDOW["presence"] = window.companion(win, "http://127.0.0.1:%d" % PORT, CompanionHooks())
             log("companion: up")
         except Exception as exc:
             log("companion: not available (%r); closing the window stops the recording, as before" % exc)

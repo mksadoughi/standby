@@ -275,6 +275,27 @@ def words_frame(orb, glyph, size, corner, screen, gap=WORDS_GAP, inset=None):
     return x, y, w, h
 
 
+def card_frame(orb, glyph, size, corner, screen, gap=WORDS_GAP, inset=None):
+    """The visual card's frame (the visual card drafts): lined up with the glyph's outer edge, away from the
+    corner (above the orb at a bottom corner, below it at a top one), `gap` beyond the glyph's near edge
+    (more when the words are up there); if it doesn't fit there, on the orb's other side; if neither, beside
+    it, toward the screen's middle, its top level with the glyph's. Never over the orb, always on the screen."""
+    gx, gy, g, _g = glyph_rect(orb, glyph, corner, screen, inset)
+    w, h = size
+    sx, sy, sw, sh = screen
+    hs, vs = edges(orb, corner, screen)
+    x = gx + g - w if hs == "right" else gx
+    x = max(sx, min(x, sx + sw - w))
+    above, below = gy + g + gap, gy - gap - h
+    fits_above, fits_below = above + h <= sy + sh, below >= sy
+    for y, fits in ((above, fits_above), (below, fits_below)) if vs == "bottom" else ((below, fits_below), (above, fits_above)):
+        if fits:
+            return x, y, w, h
+    x = gx - WORDS_GAP - w if hs == "right" else gx + g + WORDS_GAP
+    y = max(sy, min(gy + g - h, sy + sh - h))
+    return max(sx, min(x, sx + sw - w)), y, w, h
+
+
 def glass_fills(glass, w, h):
     """Whether the page's glass is the whole window (rest, rest hovered), not
     part of it (voice hovered) or none (voice)."""

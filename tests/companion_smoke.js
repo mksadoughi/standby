@@ -236,11 +236,19 @@ const CARD_CHECKS = `
   ok("  a third while looking back: stays on 1, and only › says New", last().id === 1 && els.vcard.innerHTML.includes("1 / 3") && els.vcard.innerHTML.includes('class="nx"')
      && !els.vcard.innerHTML.includes("vnew"), els.vcard.innerHTML);
   cardClose();
-  ok("closed: the card goes (w 0)", last().w === 0, last());
+  ok("closed: the card folds to a small round tab, the picture and how many, no visual in it",
+     (m => m.w > 0 && m.h === 28 && m.radius === 14 && m.id === 0 && !m.hit)(last()) && els.vcard.innerHTML.includes("vtab")
+     && els.vcard.innerHTML.includes("<span>3</span>") && els.vcard.innerHTML.includes('title="Show visuals"'), [last(), els.vcard.innerHTML]);
   await fresh();
-  ok("  and stays closed while nothing new comes", last().w === 0, last());
+  ok("  and stays folded while nothing new comes", last().h === 28, last());
+  cardOpen();
+  ok("  a click on the tab: the card again, at the newest (3 / 3)", last().id === 3 && els.vcard.innerHTML.includes("3 / 3"), last());
+  cardClose(); await fresh();
+  STATE.visual_open = 1; await fresh();
+  ok("  the voice asked to show it (on the user's ask): open again, at the newest", last().id === 3 && last().h > 28, last());
+  cardClose(); await fresh();
   AT([V(1), V(2), V(3), V(4)]); await fresh();
-  ok("  the next one opens it again, at 4 / 4", last().id === 4 && els.vcard.innerHTML.includes("4 / 4"), last());
+  ok("  the next one opens it again by itself, at 4 / 4", last().id === 4 && els.vcard.innerHTML.includes("4 / 4"), last());
   window.visualSize({ want: "line", w: 150, h: 30 });
   ok("sizes: a line at least 240 wide; its own height, the pager under it", last().w === 240 && last().h === 30 + 34, last());
   window.visualSize({ want: "large", w: 900, h: 2000 });

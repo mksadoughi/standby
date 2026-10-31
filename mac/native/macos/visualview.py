@@ -29,7 +29,8 @@ def message(body):
     if body.get("sb") == "size":
         try:
             return {"sb": "size", "want": str(body.get("want") or "medium")[:12],
-                    "w": max(0, min(4000, int(body.get("w") or 0))), "h": max(0, min(4000, int(body.get("h") or 0)))}
+                    "w": max(0, min(4000, int(body.get("w") or 0))), "h": max(0, min(4000, int(body.get("h") or 0))),
+                    "need": max(0, min(4000, int(body.get("need") or 0)))}
         except (TypeError, ValueError):
             return None
     href = body.get("href")
@@ -122,6 +123,9 @@ class VisualView(object):
                 pass
         web = _Web.alloc().initWithFrame_configuration_(Foundation.NSMakeRect(*rect), config)
         web.setValue_forKey_(False, "drawsBackground")
+        web.setWantsLayer_(True)                     # its content kept inside the card's round corners
+        web.layer().setCornerRadius_(16)
+        web.layer().setMasksToBounds_(True)
         web.setNavigationDelegate_(self._guard)
         web.setUIDelegate_(self._guard)
         web.setAllowsBackForwardNavigationGestures_(False)

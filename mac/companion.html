@@ -199,6 +199,9 @@ color:var(--c-muted);background:var(--c-hover);font:inherit;cursor:default}
 .vft button:disabled{opacity:.4}.vft button:not(:disabled):hover{background:var(--c-press);color:var(--c-text)}
 .vft button.nx{padding:0 8px 0 6px;background:rgba(80,70,229,.12);color:var(--c-claude)}.vft button.nx i{font-style:normal;font-weight:650;font-size:11px}
 .vnew{font-size:10.5px;font-weight:650;color:var(--c-claude);background:rgba(80,70,229,.12);padding:2px 6px;border-radius:5px}
+.vcard .vtab{position:absolute;left:0;top:0;height:28px;display:inline-flex;align-items:center;gap:6px;padding:0 11px;border:0;
+background:transparent;color:var(--c-muted);font:500 12px/1 -apple-system,system-ui,sans-serif;cursor:default;white-space:nowrap}
+.vcard .vtab svg{width:14px;height:14px}.vcard .vtab:hover{color:var(--c-text)}
 .preview .vcard{background:var(--c-surface);border-radius:16px;box-shadow:var(--c-shadow),0 0 0 .5px var(--c-edge)}
 @media (prefers-reduced-motion:reduce){.orb,.orb i,.orbs,.rail,.ctls,.says p,.vdraw i{animation:none!important;transition:none!important}}
 .cmp .orb{cursor:default}
@@ -366,14 +369,20 @@ function visualCard() {
   if (VC.sid !== l.id) cardReset(l.id);
   const key = lv ? lv.id + ":" + lv.state + ":" + lv.n : "";
   if (key !== VC.key) { VC.key = key; if (lv) cardList() }
-  if (!on || VC.closed || !VC.list.length) return cardPost(null);
+  // asked to open again (the voice, on the user's ask): at the newest
+  const asked = C && C.visual_open || 0;
+  if (VC.opens === undefined) VC.opens = asked;
+  if (asked > VC.opens) { VC.opens = asked; VC.closed = false; VC.at = null }
+  if (!on || !VC.list.length) return cardPost(null);
+  if (VC.closed) return cardTab();
   const m = VC.list.length, i = VC.at === null ? m - 1 : Math.min(VC.at, m - 1), v = VC.list[i];
   // New: the newest while it's unseen; one gone back to was the newest once, so it's been seen
   const later = VC.list.slice(i + 1).some(x => !VC.seen.has(x.id)), fresh = i === m - 1 && !VC.seen.has(v.id);
   if (fresh && !VC.seenT) VC.seenT = setTimeout(() => { VC.seen.add(v.id); VC.seenT = null; render() }, 5000);   // New until it's been up a while
   const maxW = Math.floor((screen.availWidth || 1440) / 2), maxH = Math.floor((screen.availHeight || 900) / 2), foot = m > 1 ? VFOOT : 0;
   const sz = VC.sz[v.id] || { want: "medium", w: 0, h: 0 }, drawing = v.state !== "ready";
-  const W = drawing ? 300 : cardWidth(sz.want, sz.w, maxW);
+  // a diagram's own width wins over the size asked for (its text never shrinks), up to the most a card may be
+  const W = drawing ? 300 : Math.min(maxW, Math.max(cardWidth(sz.want, sz.w, maxW), sz.need || 0));
   let html = `<button class="vx" title="Close" aria-label="Close" onclick="cardClose()">${VX}</button>`;
   if (drawing) html += `<div class="vdraw" id="vdraw"><b>Drawing\u2026</b>${v.what ? `<span>${esc(v.what)}</span>` : ""}<i></i><i></i></div>`;
   if (foot) html += `<div class="vft"><span class="pager"><button title="Back" aria-label="Back" onclick="cardGo(-1)"${i ? "" : " disabled"}>${CHEV("M10 3.5 5.5 8l4.5 4.5")}</button>` +
@@ -389,6 +398,17 @@ function visualCard() {
   const hit = [{ x: W - 32, y: 10, w: 22, h: 22, radius: 11 }].concat(foot ? [{ x: 0, y: H - VFOOT, w: W, h: VFOOT, radius: 0 }] : []);
   cardPost({ type: "card", w: W, h: H, area: { x: 0, y: 0, w: W, h: H - foot }, session: VC.sid, id: drawing ? 0 : v.id, hit, ms: 180 });
 }
+// Closed, with visuals in the call: a small tab where the card was, the picture and how many; a click opens the
+// card again at the newest. Quiet: no colour, no motion (the next visual opens the card by itself anyway).
+function cardTab() {
+  const box = $("vcard"), m = VC.list.length;
+  const html = `<button class="vtab" id="vtab" title="Show visuals" aria-label="Show visuals, ${m}" onclick="cardOpen()">${ICON.vis}<span>${m}</span></button>`;
+  if (VC.html !== html) { VC.html = html; box.innerHTML = html }
+  box.style.display = "";
+  const w = Math.ceil(($("vtab") || box).getBoundingClientRect().width) || 52;
+  cardPost({ type: "card", w, h: 28, radius: 14, area: { x: 0, y: 0, w: 0, h: 0 }, session: VC.sid, id: 0, hit: null, ms: 180 });
+}
+function cardOpen() { VC.closed = false; VC.at = null; render() }
 function cardPost(m) {
   const box = $("vcard");
   if (!m) { box.style.display = "none"; box.innerHTML = ""; VC.html = ""; m = { type: "card", w: 0, h: 0 } }
@@ -402,7 +422,7 @@ function cardGo(d) {
 function cardClose() { VC.closed = true; VC.at = null; VC.list.forEach(v => VC.seen.add(v.id)); render() }
 // the visual says its size as its content changes (the panel passes it on): the card follows
 window.visualSize = m => { const v = VC.list[VC.at === null ? VC.list.length - 1 : VC.at];
-  if (v && m) { const o = VC.sz[v.id]; if (!o || o.want !== m.want || o.w !== m.w || o.h !== m.h) { VC.sz[v.id] = m; render() } } };
+  if (v && m) { const o = VC.sz[v.id]; if (!o || o.want !== m.want || o.w !== m.w || o.h !== m.h || o.need !== m.need) { VC.sz[v.id] = m; render() } } };
 
 // What the panel and its menu call.
 // The corner it sits nearest: the controls grow away from h, the words open away from v.

@@ -106,6 +106,24 @@ orb_tl = (tl[0], tl[1], 96, 96)
 f = cp.words_frame(orb_tl, 72, (300, 37), "top-left", screen)
 check("at a top-left corner: mirrored, below the glyph and aligned left",
       round(f[0]) == round(orb_tl[0] + 12) and round(f[1] + 37) == round(orb_tl[1] + 12 - 8), (f, orb_tl))
+# the visual card: above the orb at a bottom corner (its right edge on the glyph's), else below, else beside it
+f = cp.card_frame(orb, 72, (320, 200), "bottom-right", screen)
+check("the visual card: above the glyph at a bottom corner, its outer edge on the glyph's",
+      round(f[0] + 320) == round(orb[0] + 96 - 12) and round(f[1]) == round(orb[1] + 96 - 12 + 8), (f, orb))
+high = (orb[0], 945 - 300, 96, 96)                              # the orb dragged high: no room above for 470
+f = cp.card_frame(high, 72, (320, 470), "bottom-right", screen)
+check("  no room above: below it, the same edge", round(f[0] + 320) == round(high[0] + 96 - 12) and round(f[1] + 470) == round(high[1] + 12 - 8), (f, high))
+mid = (orb[0], 420, 96, 96)                                     # a card taller than either side: beside, toward the middle
+f = cp.card_frame(mid, 72, (320, 470), "bottom-right", screen)
+check("  room on neither side: beside it, toward the screen's middle, its top level with the glyph's",
+      f[0] + 320 <= mid[0] + 12 and round(f[1] + 470) == round(mid[1] + 12 + 72) and f[1] >= 0, (f, mid))
+f = cp.card_frame(orb_tl, 72, (320, 200), "top-left", screen)
+check("  at a top-left corner: below it, its left edge on the glyph's", round(f[0]) == round(orb_tl[0] + 12)
+      and round(f[1] + 200) == round(orb_tl[1] + 12 - 8), (f, orb_tl))
+check("  always on the screen, at every corner and size", all(
+      (lambda fr: fr[0] >= 0 and fr[1] >= 0 and fr[0] + fr[2] <= 1512 and fr[1] + fr[3] <= 945)(
+          cp.card_frame(cp.orb_at_corner(c, 96, 72, screen)[:2] + (96, 96), 72, size, c, screen))
+      for c in cp.CORNERS for size in ((240, 44), (756, 472), (500, 300))))
 check("  every words window stays on the screen",
       all(0 <= cp.words_frame(cp.orb_at_corner(c, 96, 72, screen)[:2] + (96, 96), 72, (300, 58), c, screen)[0]
           and cp.words_frame(cp.orb_at_corner(c, 96, 72, screen)[:2] + (96, 96), 72, (300, 58), c, screen)[1] >= 0

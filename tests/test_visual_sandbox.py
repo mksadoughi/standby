@@ -26,7 +26,7 @@ check("its rules: its own document once, then nothing", visualview.may_load(visu
       and not visualview.may_load(visualview.HOME, True) and not visualview.may_load("https://example.com/", False)
       and not visualview.may_load("file:///etc/hosts", False))
 check("  its messages: a size, or an https link; nothing else",
-      visualview.message({"sb": "size", "want": "small", "w": "300", "h": 9e9}) == {"sb": "size", "want": "small", "w": 300, "h": 4000}
+      visualview.message({"sb": "size", "want": "small", "w": "300", "h": 9e9}) == {"sb": "size", "want": "small", "w": 300, "h": 4000, "need": 0}
       and visualview.message({"sb": "open", "href": "https://example.com/a"}) == {"sb": "open", "href": "https://example.com/a"}
       and visualview.message({"sb": "open", "href": "http://example.com/"}) is None
       and visualview.message({"sb": "open", "href": "javascript:alert(1)"}) is None

@@ -25,11 +25,14 @@
     // what the card needs: the width the visual asks for (data-size on its root) and its content's height
     size() {
       const root = document.querySelector("#sb-root > *") || document.body;
-      const want = root.getAttribute && root.getAttribute("data-size") || "medium";
+      // a diagram asks for room unless the fragment says otherwise: its text never shrinks to fit
+      const want = root.getAttribute && root.getAttribute("data-size") || (document.querySelector("sb-diagram") ? "large" : "medium");
       if (want === "line") document.documentElement.classList.add("sb-line");
       // the content's own size, never the view's (the view is the card's, and the card follows this)
-      const r = document.body.getBoundingClientRect();
-      send({ sb: "size", want, w: Math.ceil(r.width), h: Math.ceil(r.height) });
+      const r = document.body.getBoundingClientRect(), pad = 32;
+      // a diagram drawn at its own size (never shrunk below readable text): the width the card should give it
+      const need = Math.max(0, ...[...document.querySelectorAll("sb-diagram svg")].map(s => Math.ceil(s.getBoundingClientRect().width) + pad));
+      send({ sb: "size", want, w: Math.ceil(r.width), h: Math.ceil(r.height), need });
     },
   };
   // links: only https, only on a click, and only by the card: the visual itself never navigates
@@ -59,8 +62,11 @@
     draw() {
       const src = this.textContent, el = this;
       if (!window.mermaid) { el.classList.add("raw"); return; }
+      // its own size, its text at the kit's 13 px: the card grows for it, or it scrolls; it's never scaled down
+      const own = { useMaxWidth: false };
       window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark() ? "dark" : "neutral",
-        fontFamily: "-apple-system, system-ui, sans-serif" });
+        fontFamily: "-apple-system, system-ui, sans-serif", themeVariables: { fontSize: "13px" },
+        flowchart: own, sequence: own, gantt: own, class: own, state: own, er: own, journey: own, pie: own, mindmap: own, timeline: own });
       window.mermaid.render("sb-d" + (++n), src).then(r => { el.innerHTML = r.svg; sb.size(); })
         .catch(() => { el.textContent = src; el.classList.add("raw"); sb.size(); });
     }

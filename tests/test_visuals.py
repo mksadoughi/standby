@@ -2,7 +2,7 @@
 (<qid>.v<k>.json: drawing, then ready with its fragment, or failed); the windows' polls move it into the call's
 folder, numbered in order, and the windows list them and fetch one's fragment. "Show visuals during calls" is
 on by default, saved like the other switches, and settable by name. No agent, no window: files and the server."""
-import json, os, socket, sys, tempfile, threading, time, urllib.request
+import json, os, socket, sys, tempfile, threading, time, types, urllib.request
 from pathlib import Path
 
 root = Path(tempfile.mkdtemp(prefix="sbvis-"))
@@ -131,6 +131,27 @@ except urllib.error.HTTPError as e:
     refused = e.code in (401, 403)
 check("  without this launch's token: refused", refused)
 srv.shutdown()
+
+print("where a visual would be seen, for the voice")
+ui._live_now = lambda ttl=0.5: sid
+(root / "sessions" / sid / "meta.json").write_text(json.dumps({"kind": "talk"}))
+ui.APP_WINDOW.pop("win", None); ui.MINI_WINDOW.pop("presence", None); ui.LITE_ORB.discard(sid)
+check("no window up: nowhere (the voice offers the mini window, never says it's showing)", ui.visual_where(sid) is None)
+win = types.SimpleNamespace(native=types.SimpleNamespace(isVisible=lambda: True, isMiniaturized=lambda: False))
+ui.APP_WINDOW["win"] = win
+check("  Standby's window up: there", ui.visual_where(sid) == "the main window")
+ui.APP_WINDOW.pop("win")
+updates = []
+ui.MINI_WINDOW["presence"] = types.SimpleNamespace(pill=types.SimpleNamespace(visible=True), update=lambda: updates.append(1))
+check("  the mini window up, but this call not sent to it: nowhere", ui.visual_where(sid) is None)
+ui.window = types.SimpleNamespace(on_main=lambda fn, *a: fn(*a))
+r = ui.visual_show({"session": sid})
+check("the voice, on the user's yes: the call sent to the mini window, its card asked open", r == {"ok": True, "where": "the mini window"}
+      and sid in ui.LITE_ORB and updates and ui.VISUAL_OPEN[sid] == 1 and ui.companion_state().get("visual_open") == 1, (r, updates))
+ui.set_settings({"call_visuals": False})
+check("  visuals off: off", ui.visual_where(sid) == "off")
+ui.set_settings({"call_visuals": True})
+check("  no call live: refused", "error" in ui.visual_show({"session": "talk-20990101-000000"}))
 
 print("the sandbox's document")
 d = visuals.doc('<div data-size="small"><p>x <sb-math>x^2</sb-math></p></div>', root / "no-libs")

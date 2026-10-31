@@ -87,6 +87,8 @@ def _material_view(material, rect):
     glass there as "a white box with border and shadow"). None for none."""
     if material == "glass":
         return objc.lookUpClass("NSGlassEffectView").alloc().initWithFrame_(rect)
+    if material == "card":
+        return _card_ground(rect)
     if material not in ("vibrancy", "soft"):
         return None
     fx = AppKit.NSVisualEffectView.alloc().initWithFrame_(rect)
@@ -98,6 +100,27 @@ def _material_view(material, rect):
         fx.setWantsLayer_(True)
         fx.layer().setMasksToBounds_(True)
     return fx
+
+
+def _dynamic(light, dark):
+    """A colour for light and dark: (r, g, b, a) each."""
+    def pick(appearance):
+        dim = appearance.bestMatchFromAppearancesWithNames_([AppKit.NSAppearanceNameAqua, AppKit.NSAppearanceNameDarkAqua])
+        return AppKit.NSColor.colorWithSRGBRed_green_blue_alpha_(*(dark if dim == AppKit.NSAppearanceNameDarkAqua else light))
+    return AppKit.NSColor.colorWithName_dynamicProvider_(None, pick)
+
+
+def _card_ground(rect):
+    """The visual card's ground (the user: white, not grey): solid white, #242426 in dark with a faint edge so it
+    holds on a dark wallpaper; the panel's shadow around it."""
+    box = AppKit.NSBox.alloc().initWithFrame_(rect)
+    box.setBoxType_(AppKit.NSBoxCustom)
+    box.setTitlePosition_(AppKit.NSNoTitle)
+    box.setContentViewMargins_(Foundation.NSMakeSize(0, 0))
+    box.setFillColor_(_dynamic((1.0, 1.0, 1.0, 1.0), (0x24 / 255.0, 0x24 / 255.0, 0x26 / 255.0, 1.0)))
+    box.setBorderColor_(_dynamic((0.0, 0.0, 0.0, 0.09), (1.0, 1.0, 1.0, 0.1)))
+    box.setBorderWidth_(0.5)
+    return box
 
 
 def _rounded_mask(r):
@@ -407,7 +430,7 @@ class Companion(object):
         return box
 
     def _set_radius(self, r):
-        if self.material == "glass":
+        if self.material in ("glass", "card"):
             self.fx.setCornerRadius_(r)
         elif self.material == "soft":
             self.fx.setMaskImage_(_rounded_mask(r))
@@ -827,11 +850,11 @@ class Presence(object):
         # The call's visual card: its frame (close, ‹ n / m ›, New, Drawing…) is this page; the visual in it
         # is a sandbox of its own (visualview), laid over the area the page leaves for it.
         self.card = make(url=base + "/companion" + q + "#card", size=(300, 120), draggable=False, log=say,
-                         radius=16, material="soft", parent=self.pill, on_message=self._message)
+                         radius=16, material="card", parent=self.pill, on_message=self._message)
         self.pill.follow = self._follow
         self.native = native
         if native and getattr(self.card, "panel", None) is not None:
-            self.card.panel.setHasShadow_(True)     # the soft ground has none of its own: the card floats
+            self.card.panel.setHasShadow_(True)     # the card floats
         if native:
             self._hook_into_app()
         self.update()
@@ -1098,6 +1121,7 @@ class Presence(object):
             self.card.hide()
             return
         self.card_size = self.card.size = (w, h)
+        self.card.backdrop(float(m.get("radius") or 16))     # the card's corners, or the closed card's round tab
         # its buttons (close, ‹ ›) take clicks; anywhere else the visual's own view, under the card's page, does
         self.card.hit = rules.hit_shapes({"areas": m["hit"]}) if isinstance(m.get("hit"), list) and m["hit"] else None
         if self.card.visible:
@@ -1110,7 +1134,7 @@ class Presence(object):
         pill, gap = self.pill, rules.WORDS_GAP
         if self.words.visible and self.words_size:
             gap += self.words_size[1] + rules.WORDS_GAP
-        return rules.words_frame(tuple(orb), pill.glyph, self.card.size, pill.corner, pill._screen(), gap=gap)
+        return rules.card_frame(tuple(orb), pill.glyph, self.card.size, pill.corner, pill._screen(), gap=gap)
 
     def _place_card(self, seconds=0, ease=None):
         if self.card_size:
