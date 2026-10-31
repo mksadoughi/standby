@@ -17,7 +17,7 @@
 <meta property="og:url" content="https://mksadoughi.github.io/standby/">
 <meta property="og:image" content="https://mksadoughi.github.io/standby/img/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Standby", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 14 or later (Apple Silicon)", "description": "Standby is a free, open-source Claude Code plugin for your Mac: call your Claude Code session and brainstorm by voice, bring it to your meetings, and dictate anywhere. Speech runs on your Mac; Claude Code gets your words as text.", "url": "https://mksadoughi.github.io/standby/", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "license": "https://opensource.org/licenses/MIT", "codeRepository": "https://github.com/mksadoughi/standby"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Standby", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 14.4 or later (Apple Silicon)", "description": "Standby is a free, open-source Claude Code plugin for your Mac: call your Claude Code session and brainstorm by voice, bring it to your meetings, and dictate anywhere. Speech runs on your Mac; Claude Code gets your words as text.", "url": "https://mksadoughi.github.io/standby/", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "license": "https://opensource.org/licenses/MIT", "codeRepository": "https://github.com/mksadoughi/standby"}</script>
 <link rel="icon" href="img/icon.png">
 <style>
 :root{--ink:#1b1b2f;--muted:#66667a;--line:#e5e3dc;--card:#ffffffcc;--accent:#4f46e5;--accent-soft:#ebeafd;--mark:#f6e3a1;
@@ -45,21 +45,24 @@ h1,h2,h3{font-family:var(--serif);font-weight:700;letter-spacing:-.01em;margin:0
 .hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:40px;align-items:center;padding:40px 0 0}
 h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 .lead{font-size:19px;color:var(--muted);margin:22px 0 0;max-width:540px}.lead b{color:var(--ink)}
-.ul{text-decoration:underline;text-decoration-color:var(--accent);text-decoration-thickness:2px;text-underline-offset:5px}
+/* "Claude Code plugin" gets the same hand-drawn stroke as Calls and Meetings below, and draws first */
+.ul{position:relative;display:inline-block;white-space:nowrap}
+.ul svg{position:absolute;left:-2px;bottom:-4px;width:calc(100% + 6px);height:10px;overflow:visible}
 .points{list-style:none;padding:0;margin:22px 0 0;display:grid;gap:10px;font-size:16px;color:var(--muted)}
 /* the two things it does, as two short columns on the page itself: no box, no icon. Each name in the serif with a
-   hand-drawn stroke under it in its colour (calls the indigo, meetings the warm orange), drawn in once on load;
-   a fine warm rule between them. */
+   hand-drawn stroke under it in its colour (calls the indigo, meetings the warm orange), drawn in once on load,
+   one after the other: the plugin, then calls, then meetings; a fine warm rule between them. */
 .uses{list-style:none;padding:0;margin:34px 0 0;display:grid;grid-template-columns:1fr 1fr;max-width:580px}
 .uses li{position:relative;padding:0 28px 0 0}
 .uses li+li{padding:0 0 0 28px;border-left:1px solid var(--line)}
 .uses b{position:relative;display:inline-block;font:700 24px/1.2 var(--serif);color:var(--ink);letter-spacing:-.01em;padding-bottom:9px}
 .uses b svg{position:absolute;left:-2px;bottom:0;width:calc(100% + 10px);height:10px;overflow:visible}
-.uses b path{fill:none;stroke:var(--accent);stroke-width:2.6;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;animation:swash .9s cubic-bezier(.5,0,.2,1) .35s forwards}
-.uses .meet b path{stroke:#d97757;animation-delay:.6s}
+.ul path,.uses b path{fill:none;stroke:var(--accent);stroke-width:2.6;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;animation:swash .8s cubic-bezier(.5,0,.2,1) .35s forwards}
+.uses .call b path{animation-delay:1s}
+.uses .meet b path{stroke:#d97757;animation-delay:1.65s}
 .uses span{display:block;margin-top:10px;font-size:15.5px;line-height:1.55;color:var(--muted)}
 @keyframes swash{to{stroke-dashoffset:0}}
-@media (prefers-reduced-motion:reduce){.uses b path{animation:none;stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.ul path,.uses b path{animation:none;stroke-dashoffset:0}}
 .points li{display:block}.points b{color:var(--ink)}
 .points svg{width:19px;height:19px;flex-shrink:0;margin-top:3px;stroke:var(--accent)}
 .draw img{width:100%;height:auto;max-width:520px;margin:0 auto}
@@ -74,7 +77,13 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 .why{list-style:none;padding:0;margin:44px auto 0;max-width:1080px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px 40px}
 .why li{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr);gap:2px 12px;align-content:start;cursor:default;outline:none}
 .why li:before{content:"";grid-row:1;width:22px;height:12px;margin-top:8px;background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%2722%27%20height%3D%2712%27%20viewBox%3D%270%200%2022%2012%27%3E%3Cpath%20d%3D%27M1%206%20Q6%200%2011%206%20T21%206%27%20fill%3D%27none%27%20stroke%3D%27%23d97757%27%20stroke-width%3D%272.2%27%20stroke-linecap%3D%27round%27/%3E%3C/svg%3E") no-repeat center/22px 12px}
-.why b{font:700 20px/1.4 var(--serif);color:#c2603d;display:flex;align-items:center;gap:8px}
+.why b{--c:#c2603d;font:700 20px/1.4 var(--serif);color:var(--c);display:flex;align-items:center;gap:8px}
+/* each name catches a light once the strokes above are drawn, one after another, and again every few seconds */
+.why b{background:linear-gradient(105deg,var(--c) 0 34%,#fac6a0 50%,var(--c) 66% 100%) 100% 0/260% 100%;-webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;animation:shine 7s ease-in-out 2.5s infinite}
+.why li:nth-child(2) b{animation-delay:2.85s}.why li:nth-child(3) b{animation-delay:3.2s}
+@keyframes shine{0%{background-position:100% 0}22%,100%{background-position:0 0}}
+@media (prefers-reduced-motion:reduce){.why b{animation:none}}
 .why b:after{content:"";width:6px;height:6px;border-right:1.6px solid #d9a58f;border-bottom:1.6px solid #d9a58f;transform:rotate(45deg);margin-top:-4px;transition:transform .25s}
 .why .short{grid-column:2;color:var(--muted);font-size:15.5px;line-height:1.5}
 .why .full{position:absolute;left:24px;top:calc(100% + 8px);z-index:4;width:300px;padding:12px 14px;border:1px solid #ecd9cf;border-radius:12px;background:#fff;
@@ -113,6 +122,27 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 @media (prefers-reduced-motion:reduce){.howto,.howto .steps{transition:none}}
 .film{position:relative;margin:64px auto 0;border-radius:20px;overflow:hidden;background:var(--card);border:1px solid var(--line);padding:12px;box-shadow:0 30px 60px -40px rgba(20,20,50,.3)}
 .film video{display:block;width:100%;height:auto;border-radius:12px}
+/* the film's own bar, under the picture so nothing ever covers it (the spoken words sit at the film's bottom edge):
+   play, where it is, the time, sound and full screen; and a play button over the picture until it first plays */
+.film .screen{position:relative}
+.film .big{all:unset;cursor:pointer;position:absolute;left:50%;top:50%;width:76px;height:76px;margin:-38px 0 0 -38px;border-radius:50%;display:grid;place-items:center;
+  background:var(--accent);color:#fff;box-shadow:0 14px 34px -12px rgba(79,70,229,.7);transition:transform .2s,opacity .25s}
+.film .big svg{width:34px;height:34px;margin-left:3px}.film .big:hover{transform:scale(1.06)}
+.film.started .big{opacity:0;pointer-events:none}
+.film .bar{display:flex;align-items:center;gap:10px;padding:10px 4px 0}
+.film .bar button{all:unset;cursor:pointer;flex:none;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+.film .bar button:hover{color:var(--ink);background:var(--accent-soft)}
+.film .bar button:focus-visible,.film .big:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.film .bar svg{width:20px;height:20px}
+.film .bar .pp{color:var(--accent)}
+.film .i-pause,.film.playing .bar .i-play,.film .snd.muted .i-on,.film .snd:not(.muted) .i-off{display:none}
+.film.playing .bar .i-pause{display:inline}
+.film input[type=range]{flex:1;min-width:0;height:18px;margin:0;-webkit-appearance:none;appearance:none;background:none;cursor:pointer}
+.film input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:4px;background:linear-gradient(var(--accent),var(--accent)) 0/var(--p,0%) 100% no-repeat,var(--line)}
+.film input[type=range]::-moz-range-track{height:4px;border-radius:4px;background:linear-gradient(var(--accent),var(--accent)) 0/var(--p,0%) 100% no-repeat,var(--line)}
+.film input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:var(--accent);border:0}
+.film input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:0}
+.film .tm{flex:none;min-width:84px;font:13px ui-monospace,Menlo,monospace;color:var(--muted);text-align:right}
 .cap{text-align:center;color:var(--muted);font-size:15px;margin:14px 0 0}
 /* sections */
 section{padding:0}#what{padding-top:120px}
@@ -230,7 +260,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   .loop:has(video[src*="card-orb-story"]){--x0:.04;--y0:.08;--cw:.94;--ch:.84}
   .loop:has(video[src*="card-hear-sources"]){--x0:.06;--y0:.04;--cw:.82;--ch:.88}
   .loop:has(video[src*="card-who-naming"]){--x0:0;--y0:0;--cw:.72;--ch:1}
-  .loop:has(video[src*="card-learn"]){--x0:.05;--y0:.06;--cw:.81;--ch:.56}
+  .loop:has(video[src*="card-visual"]){--x0:.03;--y0:.08;--cw:.94;--ch:.9}
   .loop:has(video[src*="card-plan"]){--x0:.1;--y0:.16;--cw:.8;--ch:.7}
   .joint{height:48px}.joint.tall{height:56px}
   .faq{margin-top:24px}
@@ -294,7 +324,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
   .why{position:relative;display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:30px auto 0}
   .why li{position:static;display:block;padding:7px 13px;border-radius:999px;background:#fbf3ee;border:1px solid #f0dfd5;cursor:pointer}
   .why li:before{display:none}
-  .why b{font:650 14px/1.3 -apple-system,system-ui;color:#b4552f}
+  .why b{--c:#b4552f;font:650 14px/1.3 -apple-system,system-ui}
   .why b:after{width:5px;height:5px;margin:-3px 0 0 6px}
   .why .short{display:none}
   .why li.open{background:#fff;border-color:#e8cfc2}
@@ -307,6 +337,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 @media (max-width:560px){
   .film{margin-left:-20px;margin-right:-20px;padding:0;border-radius:0;border-left:0;border-right:0;box-shadow:none}
   .film video{border-radius:0}
+  .film .bar{padding:8px 12px 6px;gap:6px}.film .tm{min-width:76px}.film .big{width:64px;height:64px;margin:-32px 0 0 -32px}
   .loop{margin:0 -20px 6px;border-radius:0;border:0}
 }
 /* the end of the page: a plain note pointing to the essay (why.html), in its warm paper and serif
@@ -364,8 +395,8 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 <div class="hero">
   <div>
     <h1>Talk to your<br>Claude Code.</h1>
-    <p class="lead short-lead">A free <span class="ul">Claude Code plugin</span> that works inside the session you already use.</p>
-    <p class="lead long-lead">Standby is a free <span class="ul">Claude Code plugin</span>. It works inside the session you already use, with your
+    <p class="lead short-lead">A free <span class="ul">Claude Code plugin<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M2 5.2C22 2.8 46 3.4 64 5S88 6.6 98 3.8"/></svg></span> that works inside the session you already use.</p>
+    <p class="lead long-lead">Standby is a free <span class="ul">Claude Code plugin<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M2 5.2C22 2.8 46 3.4 64 5S88 6.6 98 3.8"/></svg></span>. It works inside the session you already use, with your
       code and everything you've done so far.</p>
     <ul class="uses">
       <li class="call"><b>Calls<svg viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><path pathLength="100" d="M2 6.5C20 3.2 44 2.6 62 4.2S88 7.6 98 4"/></svg></b><span class="long">Brainstorm out loud. It answers by voice and makes the changes while you keep talking.</span><span class="brief">Brainstorm out loud.</span></li>
@@ -385,7 +416,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-copy="cmd">Copy</button></div>
           <p class="use"><span class="n">2</span><span>Ask your Claude Code to call you or join your meeting. Or run <code>/standby call</code> or <code>/standby listen</code> yourself.</span></p>
         </div>
-        <p class="req-line">An Apple Silicon Mac with macOS 14 or later, Claude Code signed in, and a one-time download of about 4.5 GB.</p>
+        <p class="req-line">An Apple Silicon Mac with macOS 14.4 or later, Claude Code signed in, and a one-time download of about 4.5 GB.</p>
       </div>
     </div></div>
   </div>
@@ -404,23 +435,24 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
 </ul>
 
 
-<figure class="film" id="film"><video src="video/story.mp4" poster="video/story.jpg" muted loop playsinline preload="metadata" controls></video></figure>
+<figure class="film" id="film"><div class="screen"><video src="video/story.mp4" poster="video/story.jpg" muted playsinline preload="metadata"></video><button type="button" class="big" aria-label="Play the film"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-play" d="M8 5.5v13l11-6.5z" fill="currentColor"/><path class="i-pause" d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z" fill="currentColor"/></svg></button></div>
+  <div class="bar"><button type="button" class="pp" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="i-play" d="M8 5.5v13l11-6.5z" fill="currentColor"/><path class="i-pause" d="M7 5h3.6v14H7zM13.4 5H17v14h-3.6z" fill="currentColor"/></svg></button><input type="range" min="0" max="1000" value="0" step="1" aria-label="Seek"><span class="tm">0:00</span><button type="button" class="snd muted" aria-label="Sound on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/><path class="i-on" d="M15.5 9a4.2 4.2 0 0 1 0 6M18 6.5a7.8 7.8 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path class="i-off" d="M15.5 9.5l5 5m0-5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button><button type="button" class="fs" aria-label="Full screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></figure>
 
 <section id="what">
   <div class="head"><h2>What it does</h2></div>
   <div class="thread">
     <div class="card"><figure class="loop"><video data-rate=".833" src="video/card-plugin-slides.mp4" poster="video/card-plugin-slides.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Built on Claude Code's plugins</h3><p><span class="say-long">Standby is a Claude Code plugin, not a separate app. It runs inside your own session, in the terminal, VS Code or the Claude app, with your CLAUDE.md, skills and tools.</span><span class="say-short">A plugin, not a separate app: it runs in your own session, in the terminal, VS Code or the Claude app.</span></p></div>
+      <h3>Built on Claude Code's plugins</h3><p><span class="say-long">Standby is a Claude Code plugin, not a separate app. It runs inside your own session, in the terminal, VS Code or the Claude app, with your CLAUDE.md, skills and tools. On a call, the voice is that session: when the work needs your OK, has a question or is done, the voice tells you at a good moment.</span><span class="say-short">A plugin, not a separate app: it runs in your own session, in the terminal, VS Code or the Claude app. On a call, the voice is that session, and tells you when the work needs you.</span></p></div>
     <div class="card"><figure class="loop"><video data-rate=".833" src="video/card-orb-story.mp4" poster="video/card-orb-story.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
       <h3>Stays out of your way</h3><p><span class="say-long">Put a call away and it shrinks into the mini window in the corner of your screen, above every app. Click it to pause or resume; point at it for Full window, Settings and End. It never takes the keyboard from whatever you're typing in.</span><span class="say-short">Put a call away and it waits as a mini window in the corner, above every app. Click it to pause or resume.</span></p></div>
+    <div class="card"><figure class="loop"><video src="video/card-visual.mp4" poster="video/card-visual.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
+      <h3>Shows while it talks</h3><p><span class="say-long">When a picture helps, or you ask for one, a card above the mini window shows a list, a table, a diagram or an equation that goes with what it's saying. It's drawn alongside, so the voice never waits. Each new one stacks on the last; in the full window they sit in the conversation. You can turn them off in Settings.</span><span class="say-short">When a picture helps, or you ask, a card above the mini window shows a list, a diagram or an equation for what it's saying. The voice never waits for it.</span></p></div>
     <div class="card"><figure class="loop"><video data-rate=".833" src="video/card-hear-sources.mp4" poster="video/card-hear-sources.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
       <h3>Hears what you want it to</h3><p><span class="say-long">Your mic, any meeting app, a video, a phone on speaker, the people in the room: Standby hears them straight from your Mac, with no bot in the call. The meeting window shows each one, and you untick what you'd rather it didn't hear.</span><span class="say-short">Your mic, any meeting app, a video or the room, straight from your Mac, with no bot in the call. Untick any source you'd rather it didn't hear.</span></p></div>
     <div class="card"><figure class="loop"><video data-rate=".833" src="video/card-who-naming.mp4" poster="video/card-who-naming.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Knows who's who</h3><p><span class="say-long">It tells the voices apart and labels each line. Click a label to put a name on it; the name applies to the whole meeting, and Standby recognizes that voice in later meetings. It also learns your own voice from your calls, to tell you apart. Voice prints stay on your Mac; turn this off or forget them in Settings &gt; Recording.</span><span class="say-short">It labels each speaker; name a voice once and it's known next time. Voice prints, yours too, stay on your Mac, and you can turn them off.</span></p></div>
-    <div class="card"><figure class="loop"><video src="video/card-learn.mp4" poster="video/card-learn.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Learns your words</h3><p><span class="say-long">Fix a dictation once and Standby remembers the word; on calls, Claude also lists the names it got wrong. Your fixes apply to dictation and to the transcripts Standby shows and sends to Claude Code.</span><span class="say-short">Fix a dictation once and Standby remembers the word; on calls, Claude also lists the names it got wrong. Your fixes apply to dictation and to the transcripts Standby shows and sends to Claude Code.</span></p></div>
+      <h3>Knows who's who</h3><p><span class="say-long">It tells the voices apart and labels each line. Click a label to put a name on it; the name applies to the whole meeting, and Standby recognizes that voice in later meetings. It also learns your own voice from your calls, to tell you apart. Voice prints stay on your Mac; turn this off or forget them in Settings &gt; Recording. Fix a misheard word once and Standby remembers it, in dictation and in the transcripts it shows and sends to Claude Code.</span><span class="say-short">It labels each speaker; name a voice once and it's known next time. Voice prints, yours too, stay on your Mac, and you can turn them off. Fix a misheard word once and it's remembered.</span></p></div>
     <div class="card"><figure class="loop"><video src="video/card-plan.mp4" poster="video/card-plan.jpg" muted loop playsinline preload="none" aria-hidden="true"></video></figure>
-      <h3>Light on your plan</h3><p><span class="say-long">Standby is free, with nothing to pay per use: it runs through your own Claude subscription. Speech, speakers and the voice run on your Mac, and the call's quick replies use Haiku, the lightest model. A full day of calls took 1 to 2% of a Pro plan's week. Settings shows exactly what it used.</span><span class="say-short">Free, with nothing to pay per use: it runs on your own Claude subscription. A full day of calls took 1 to 2% of a Pro plan's week.</span></p></div>
+      <h3>Light on your plan</h3><p><span class="say-long">Standby is free, with nothing to pay per use: it runs through your own Claude subscription. Speech, speakers and the voice run on your Mac, and the call's quick replies use Haiku, the lightest model. A full day of calls took 1 to 2% of a Pro plan's week. Settings &gt; Usage shows the tokens it used, in and out.</span><span class="say-short">Free, with nothing to pay per use: it runs on your own Claude subscription. A full day of calls took 1 to 2% of a Pro plan's week.</span></p></div>
   </div>
 </section>
 
@@ -428,10 +460,10 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
 <section id="faq">
   <div class="head"><h2>Questions</h2></div>
   <div class="faq">
-    <details><summary>Will it drain my Claude plan?</summary><p>Hardly, and there's nothing to pay per use: Standby is free, needs no API key, and goes through your own Claude Code and its subscription. Speech-to-text, speaker labels and the voice all run on your Mac. Claude gets your words as text, and conversation is a small amount of text. People speak two or three words a second. Even if you stayed on a call for a whole eight-hour workday and never stopped talking, everything said would come to around 100,000 tokens. That's about what Claude reads when it looks over a medium-sized codebase once. Most of it goes to Haiku, the smallest and lightest model. The heavier work you hand your session counts there, as usual. In the developer's own use, a full day of about ten calls took 1 to 2% of a $20 Pro plan's weekly limit, and Settings shows exactly what Standby used.</p></details>
+    <details><summary>Will it drain my Claude plan?</summary><p>Hardly, and there's nothing to pay per use: Standby is free, needs no API key, and goes through your own Claude Code and its subscription. Speech-to-text, speaker labels and the voice all run on your Mac. Claude gets your words as text, and conversation is a small amount of text. People speak two or three words a second. Even if you stayed on a call for a whole eight-hour workday and never stopped talking, everything said would come to around 100,000 tokens. That's about what Claude reads when it looks over a medium-sized codebase once. Most of it goes to Haiku, the smallest and lightest model. The heavier work you hand your session counts there, as usual. In the developer's own use, a full day of about ten calls took 1 to 2% of a $20 Pro plan's weekly limit, and Settings &gt; Usage shows the tokens Standby used, in and out.</p></details>
     <details><summary>When does Claude see the meeting?</summary><p>When you ask: the transcript goes with your question. Or, if you'd rather, as it goes.</p></details>
     <details><summary>What leaves my Mac?</summary><p>Audio and voice prints never leave it. A meeting's transcript and what you say on a call go to your own Claude Code as text, along with anything you paste or attach; Claude Code and its tools handle data their own way. Deleting a meeting or call in Standby removes Standby's copies on your Mac, not what was already sent to Claude or exported.</p></details>
-    <details><summary>What will macOS ask for?</summary><p>Each permission the first time it's needed. The microphone on your first call or meeting. Screen &amp; System Audio Recording for the first meeting that records your Mac's sound: that's how Standby hears the other side of a video call, and it takes the sound only, never the screen. Input Monitoring and Accessibility when you turn on dictation, to notice your dictation shortcut and type the text for you.</p></details>
+    <details><summary>What will macOS ask for?</summary><p>Before your first call or meeting, a short setup window asks for the two Standby needs: the microphone, and System Audio Recording, which is how it hears the other side of a video call. Dictation asks for Input Monitoring and Accessibility when you turn it on, to notice your shortcut and type the text for you.</p></details>
     <details><summary>Can I record any meeting?</summary><p>Tell people when you're transcribing, and follow the rules that apply to you. In many places everyone has to agree to being recorded.</p></details>
   </div>
 </section>
@@ -503,7 +535,7 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
     on = best; on.classList.add("focus");
     marks[cards.indexOf(on)].classList.add("on");
     var v = on.querySelector("video");
-    if (v && !still) { v.preload = "auto"; v.playbackRate = +(v.dataset.rate || 1); v.play().catch(function () {}); }   // cards 1-4 play 20% slower
+    if (v && !still) { v.preload = "auto"; v.playbackRate = +(v.dataset.rate || 1); v.play().catch(function () {}); }   // the cards with a data-rate play 20% slower
   }
   function ask() { if (!ticking) { ticking = true; requestAnimationFrame(pick); } }
   addEventListener("scroll", ask, { passive: true }); addEventListener("resize", function () { place(); ask(); });
@@ -534,6 +566,38 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
     leave(li, function () { li.classList.remove("open"); });
   });
   addEventListener("hashchange", function () { if (location.hash === "#install") set(true); });
+})();
+</script>
+<script>
+// the film's bar: the picture plays with its sound once you press play; the bar under it follows it. It plays only
+// while you can see it: scrolled away, in another tab or with you in another app it pauses, and goes on when you're back, unless
+// you paused it. It plays once, then the play button is back.
+(function () {
+  var F = document.getElementById("film"), v = F.querySelector("video"), r = F.querySelector("input"), tm = F.querySelector(".tm"), snd = F.querySelector(".snd");
+  var mmss = function (s) { s = Math.floor(s || 0); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+  var want = false, seen = false;                                      // you pressed play; it's on the screen
+  function toggle() {
+    if (v.paused) { if (!F.classList.contains("started")) { v.muted = false; snd.classList.remove("muted"); snd.setAttribute("aria-label", "Sound off"); } F.classList.add("started"); want = true; v.play().catch(function () {}); }
+    else { want = false; v.pause(); }
+  }
+  var away = false;                                                    // you're in another app
+  function follow() { if (want && seen && !away && !document.hidden) { if (v.paused) v.play().catch(function () {}); } else if (!v.paused) v.pause(); }
+  addEventListener("blur", function () { away = true; follow(); }); addEventListener("focus", function () { away = false; follow(); });
+  if ("IntersectionObserver" in window) new IntersectionObserver(function (e) { seen = e[0].isIntersecting; follow(); }, { threshold: .35 }).observe(v);
+  else seen = true;
+  document.addEventListener("visibilitychange", follow);
+  v.addEventListener("ended", function () { want = false; F.classList.remove("started"); });
+  F.querySelector(".big").addEventListener("click", toggle); F.querySelector(".pp").addEventListener("click", toggle); v.addEventListener("click", toggle);
+  v.addEventListener("play", function () { F.classList.add("playing"); F.querySelector(".pp").setAttribute("aria-label", "Pause"); });
+  v.addEventListener("pause", function () { F.classList.remove("playing"); F.querySelector(".pp").setAttribute("aria-label", "Play"); });
+  function show() { var p = v.duration ? v.currentTime / v.duration : 0; r.value = Math.round(p * 1000); r.style.setProperty("--p", (p * 100).toFixed(2) + "%");
+    tm.textContent = mmss(v.currentTime) + " / " + mmss(v.duration); }
+  v.addEventListener("timeupdate", show); v.addEventListener("loadedmetadata", show);
+  r.addEventListener("input", function () { if (v.duration) v.currentTime = r.value / 1000 * v.duration; F.classList.add("started"); show(); });
+  snd.addEventListener("click", function () { v.muted = !v.muted; snd.classList.toggle("muted", v.muted); snd.setAttribute("aria-label", v.muted ? "Sound on" : "Sound off"); });
+  F.querySelector(".fs").addEventListener("click", function () {
+    if (v.requestFullscreen) v.requestFullscreen().catch(function () {}); else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen();
+  });
 })();
 </script>
 </body>

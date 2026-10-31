@@ -176,6 +176,57 @@ DEFS_EXTRA += `<radialGradient id="orbapp" cx=".35" cy=".3" r=".8"><stop offset=
   `<radialGradient id="orbgrey" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#e2e2e8"/><stop offset="1" stop-color="#a9a9b4"/></radialGradient>` +
   `<linearGradient id="rainbow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a59"/><stop offset=".35" stop-color="#ffd166"/><stop offset=".65" stop-color="#5ad1ff"/><stop offset="1" stop-color="#b58cff"/></linearGradient>`;
 
+// A call's visual card, as the app draws it above the mini window (and in the call view): drawn at the app's own size,
+// 300 wide, and scaled to w. Its bottom right sits at (x, y), so it grows upwards from the orb. o: { title, brief
+// (Drawing…, while it's made), steps: [..] with active (the one lit), swatches: [[name, hex]], bars: [[label, part 0..1, value]], nav: [n, m, isNew] }.
+const VK = DARK ? { bg: "#24242f", ink: "#ececf4", mut: "#a3a3b6", soft: "#33325a", num: "#8b87ff", line: "#3a3a48", btn: "#33333f" }
+                : { bg: "#fcfcfd", ink: "#1d1d26", mut: "#6e6e78", soft: "#efeefc", num: "#3f37c9", line: "#ececf0", btn: "#ededf0" };
+function visualCard(x, y, w, o, op = 1) {
+  if (op <= 0) return "";
+  const s = w / 300;
+  let g = "", h;
+  const shut = (cy) => `<circle cx="279" cy="${cy}" r="11" fill="${VK.btn}"/><path d="M275 ${cy - 4} l8 8 M283 ${cy - 4} l-8 8" stroke="${VK.mut}" stroke-width="1.6" stroke-linecap="round"/>`;
+  if (o.brief) {                                                        // being drawn: its brief and two soft lines
+    h = 103;
+    g += ui(16, 27, "Drawing…", 13.5, { fill: VK.mut, weight: 650 }) + ui(16, 48, esc(o.brief), 12.5, { fill: VK.mut }) +
+      box(16, 61, 197, 9, 4.5, VK.soft) + box(16, 79, 144, 9, 4.5, VK.soft);
+  } else {
+    g += ui(14, 26, esc(o.title), 14.5, { fill: VK.ink, weight: 700 });
+    let yy = 42;
+    (o.steps || []).forEach((st, i) => {
+      const on = i === (o.active ?? 0);
+      if (on) g += box(14, yy, 272, 30, 8, VK.soft);
+      g += `<circle cx="31" cy="${yy + 15}" r="9" fill="${on ? VK.num : VK.soft}"/>` + ui(31, yy + 19.5, String(i + 1), 11, { anchor: "middle", fill: on ? "#fff" : VK.num, weight: 700 }) +
+        ui(48, yy + 20, esc(st), 13.5, { fill: on ? VK.ink : VK.mut });
+      yy += 36.5;
+    });
+    if (o.swatches) {                                                   // colours: a chip each, its name and hex under it
+      const n = o.swatches.length, cw = (272 - (n - 1) * 10) / n;
+      o.swatches.forEach(([nm, hex], i) => { const x0 = 14 + i * (cw + 10);
+        g += box(x0, yy + 2, cw, 54, 10, hex, { stroke: VK.line, sw: 1 }) + ui(x0 + 2, yy + 76, esc(nm), 12.5, { fill: VK.ink, weight: 600 }) +
+          ui(x0 + 2, yy + 93, hex, 11, { fill: VK.mut, font: MONO }) });
+      yy += 100;
+    }
+    (o.bars || []).forEach(([n, p, v], i) => {
+      g += ui(16, yy + 14, esc(n), 12, { fill: VK.mut }) + box(80, yy + 5, 170 * p, 10, 5, i ? "#a5a0f0" : VK.num) + ui(286, yy + 14, esc(v), 12, { anchor: "end", fill: VK.mut });
+      yy += 24;
+    });
+    if (o.nav) {                                                        // ‹ n / m ›, and New on the newest while it's unseen
+      const [n, m, isNew] = o.nav;
+      yy += 8;
+      g += box(14, yy, 22, 22, 6, VK.btn) + `<path d="M27 ${yy + 7} l-4 4 4 4" fill="none" stroke="${VK.mut}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>` +
+        ui(42, yy + 16, `${n} / ${m}`, 12, { fill: VK.mut }) + box(73, yy, 22, 22, 6, VK.btn, { op: .5 }) +
+        `<path d="M82 ${yy + 7} l4 4 -4 4" fill="none" stroke="${VK.mut}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/>` +
+        (isNew ? box(253, yy + 4, 35, 14, 7, VK.soft) + ui(270.5, yy + 15, "New", 10.5, { anchor: "middle", fill: VK.num, weight: 700 }) : "");
+      yy += 22;
+    }
+    h = yy + 14;
+  }
+  const top = y - h * s;
+  return `<g opacity="${fo(op)}"><rect x="${f(x - w)}" y="${f(top + 10)}" width="${f(w)}" height="${f(h * s)}" rx="${f(16 * s)}" fill="#1e1a50" opacity="${DARK ? .5 : .14}" filter="url(#soft)"/>` +
+    `<g transform="translate(${f(x - w)} ${f(top)}) scale(${fs(s)})">` + box(0, 0, 300, h, 16, VK.bg, { stroke: VK.line, sw: .6 }) + shut(21) + g + "</g></g>";
+}
+
 // The call view, as the app has it now: its header (the name, the time; Mini window and ⋯ unless lean); what was said:
 // yours in a bubble on the right, the voice's after its small mark, "Working on it…" while the session works; and the bar
 // at the bottom: the orb, what it's doing (Listening, Speaking, Thinking, Paused) over what's being said now, Pause, End.

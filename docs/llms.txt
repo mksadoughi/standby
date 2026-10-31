@@ -1,6 +1,6 @@
 # Standby
 
-> Standby is a free, open-source Claude Code plugin for macOS (Apple Silicon, macOS 14 or later). It gives the user's own Claude Code session ears and a voice: voice calls with the session, listening to meetings (any meeting app or the room, no bot), and dictation in any app. Speech runs on the Mac; Claude Code gets the user's words as text.
+> Standby is a free, open-source Claude Code plugin for macOS (Apple Silicon, macOS 14.4 or later). It gives the user's own Claude Code session ears and a voice: voice calls with the session, listening to meetings (any meeting app or the room, no bot), and dictation in any app. Speech runs on the Mac; Claude Code gets the user's words as text.
 
 ## Docs
 
