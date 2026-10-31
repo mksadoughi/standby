@@ -536,6 +536,10 @@ try:
           got == "Here's how it goes.  Build first, then test." and v.get("state") == "ready" and v.get("what") == "the release steps, build then test"
           and side and "--resume" in side[-1]["argv"] and "--tools" in side[-1]["argv"]
           and side[-1]["argv"][side[-1]["argv"].index("--tools") + 1] == "", (got, v, side[-1:]))
+    told = side[-1]["argv"][side[-1]["argv"].index("-p") + 1] if side else ""
+    check("  the side copy is told the card's real sizes and its 13 px text, so a diagram fits (one was scaled tiny)",
+          all(w in told for w in ("You choose the card's size", "a width in px", "a diagram usually wants", "260", "about 750",
+                                  "13 px", "flowchart TD", "(.steps)", 'data-size=\"large\"')), told[-900:])
     check("  its fragment: fences off, no <script src>, its own inline script kept, data-size on its root",
           v.get("html", "").startswith('<div data-size="small">') and "x.test" not in v.get("html", "")
           and 'sb.steps("#r")' in v.get("html", ""), v.get("html"))
