@@ -159,7 +159,7 @@ panels = []
 make = lambda **kw: (panels.append(FakePanel(**kw)), panels[-1])[1]
 win, hooks = FakeWin(), Hooks()
 p = companion.Presence(win, "http://127.0.0.1:8765", hooks, make=make, native=False)
-pill, cap = panels
+pill, cap, card = panels
 quits = []
 p.terminate = lambda: quits.append(p.quit_ok)
 check("two windows: the orb's from /companion, the words' from /companion#words, each with the app's token",
@@ -467,6 +467,54 @@ check("  back out, after the orb was dragged: the orb home again, the words plac
       and cap.placed[-1] == rules.words_frame(tuple(pill._frame), 72.0, (160.0, 37.0), "bottom-right", SCREEN),
       cap.placed[-1:])
 p._message({"type": "words", "w": 0})
+
+# The call's visual card: the orb's child too, from /companion#card, on the soft ground with a shadow; sized and
+# placed above the orb as its page says (above the words when they're up); its visual a sandbox of its own.
+check("the visual card: the orb's child, from /companion#card with the app's token, clickable, 16 pt corners",
+      card.kw.get("parent") is pill and card.kw["url"].endswith("/companion?token=tok-launch-1#card")
+      and card.kw.get("clicks", True) is True and card.kw.get("radius") == 16 and card.kw.get("draggable") is False, card.kw)
+asked = []
+hooks.visual_doc = lambda sid, n: (asked.append((sid, n)), ("<p>doc</p>", "default-src 'none'"))[1]
+p._message({"type": "card", "w": 300, "h": 130, "area": {"x": 0, "y": 0, "w": 300, "h": 130}, "session": "talk-1", "id": 0,
+            "hit": [{"x": 268, "y": 10, "w": 22, "h": 22, "radius": 11}], "ms": 180})
+want = rules.words_frame(tuple(pill._frame), 72.0, (300.0, 130.0), "bottom-right", SCREEN)
+check("  Drawing… (no visual yet): placed by the glyph above the orb, up, its close a hit area, no sandbox asked for",
+      card.placed[-1] == want and card.visible and card.hit == [("rect", 268.0, 10.0, 22.0, 22.0, 11.0)] and asked == [],
+      (card.placed[-1:], want, card.hit))
+p._message({"type": "card", "w": 320, "h": 180, "area": {"x": 0, "y": 0, "w": 320, "h": 146}, "session": "talk-1", "id": 2,
+            "hit": [{"x": 288, "y": 10, "w": 22, "h": 22, "radius": 11}, {"x": 0, "y": 146, "w": 320, "h": 34, "radius": 0}]})
+check("  ready: the app asked for that visual's document, the card at its new size on the words' curve",
+      asked == [("talk-1", 2)] and card.placed[-1] == rules.words_frame(tuple(pill._frame), 72.0, (320.0, 180.0), "bottom-right", SCREEN)
+      and card.moved[1] == companion.WORDS_EASE, (asked, card.placed[-1:]))
+p._message({"type": "words", "w": 120, "h": 37, "radius": 12})
+check("  the words up too: the card above them", card.placed[-1] == rules.words_frame(
+      tuple(pill._frame), 72.0, (320.0, 180.0), "bottom-right", SCREEN, gap=rules.WORDS_GAP * 2 + 37), card.placed[-1:])
+check("  the orb moving: the words and the card go with it", [c for c, _f in p._follow(grown)] == [cap, card])
+p._message({"type": "words", "w": 0})
+win.show()
+p.update()
+check("  in Standby's window: the card goes with the orb", card.visible is False and pill.visible is False)
+win.native.up = False
+p.update()
+check("  back out: up again, placed afresh", card.visible and card.placed[-1] == rules.words_frame(
+      tuple(pill._frame), 72.0, (320.0, 180.0), "bottom-right", SCREEN))
+p._message({"type": "card", "w": 0, "h": 0})
+check("  w 0 (closed, or visuals turned off): gone, its sandbox with it, and nothing of it follows the orb",
+      card.visible is False and p.card_size is None and p.visual is None and p._follow(grown) == [])
+opened = []
+hooks.open_url = opened.append
+companion._mouse = lambda: (card._frame[0] + 5, card._frame[1] + 5)
+card._frame = [1000.0, 200.0, 320.0, 180.0]
+companion._mouse = lambda: (1010.0, 210.0)
+p._visual_said({"sb": "open", "href": "https://example.com/a"})
+p._visual_said({"sb": "open", "href": "https://example.com/b"})
+clock.t += 2
+companion._mouse = lambda: (10.0, 10.0)
+p._visual_said({"sb": "open", "href": "https://example.com/c"})
+check("a link in the visual: opened only with the pointer on the card, one a second and a half",
+      opened == ["https://example.com/a"], opened)
+p._visual_said({"sb": "size", "want": "small", "w": 260, "h": 90})
+check("  its size: passed to the card's page", card.calls[-1] == ("visualSize", {"sb": "size", "want": "small", "w": 260, "h": 90}))
 pill.glyph, pill.corner, pill._frame = 26.0, "bottom-right", [1300.0, 16.0, 196.0, 44.0]
 win.show()
 p.update()

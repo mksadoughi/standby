@@ -5269,6 +5269,8 @@ def companion_state():
     live = _live_now()
     out = {"live": None, "starting": None, "voice": {"state": "off"},
            "claude_error": claude_error(page_machine(live))}           # live known: no second lookup
+    if live:
+        out["visuals_on"] = visuals_on()                               # the panel's Visuals button, and the card
     if live and (SESSIONS / live).is_dir() and is_talk(live):
         sdir = SESSIONS / live
         out["live"] = {"id": live, "kind": "talk"}
@@ -5328,6 +5330,19 @@ class CompanionHooks(object):
     def open_settings(self, pane=None):
         """The mini window's Settings: the Settings window, on that pane; the call stays in the mini window."""
         return open_settings_window(pane)
+
+    def visual_doc(self, sid, n):
+        """The visual card's sandbox: (visual n's whole document, its policy), or None (not ready, or no such)."""
+        import visuals
+        got = visuals.one(SESSIONS / sid, n) if valid_id(sid) else None
+        if not got or got.get("state") != "ready" or not got.get("html"):
+            return None
+        return visuals.doc(got["html"], ROOT / "kit", inline=True), visuals.CSP       # clear: on the card's own ground
+
+    def open_url(self, url):
+        """A link clicked in the card's visual: https only, in the browser."""
+        if isinstance(url, str) and re.match(r"^https://\S+$", url):
+            subprocess.run(["open", url], stdin=subprocess.DEVNULL, timeout=10)
 
     def stop_all(self):
         """Quit (asked first while a meeting records): nothing records once Standby is gone."""

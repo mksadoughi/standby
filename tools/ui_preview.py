@@ -425,7 +425,20 @@ SCENES = r"""
 # The orb's window, then the words' window (the "words-" scenes, at /companion#words).
 CMP_SCENES = ["idle", "recording", "recording-roll", "recording-hover", "left-hover",
               "listening", "hearing", "thinking", "thinking-steps", "thinking-steps-hover", "holding", "speaking", "muted", "muted-waiting", "muted-waiting-hover", "voice-hover", "left-voice-hover",
-              "preparing", "down", "down-hover", "micdenied", "words-micdenied", "words-speaking"]
+              "preparing", "down", "down-hover", "micdenied", "words-micdenied", "words-speaking",
+              "visuals-hover", "visuals-off-hover", "card-drawing", "card-ready", "card-stack", "card-back-new", "card-line", "card-large"]
+# The visual card's scenes: the visuals in the call so far, the one the voice is on (n), and the documents
+# their sandboxes would hold (mac/visuals.py), here each in a frame where the panel lays the sandbox.
+CARD_VISUALS = {
+    1: """<div data-size="medium"><h1>Where the meeting's sound goes</h1><ol class="steps" id="p"><li>Your mic and Zoom go into Standby</li>
+<li>It stays on your Mac</li><li>Claude gets text only</li></ol><script>sb.steps("#p")</script></div>""",
+    2: None,                      # the main window's sample (VISUAL_SAMPLE)
+    3: """<div data-size="line"><b class="ok">&#10003;</b> All 112 tests pass</div>""",
+    4: """<div data-size="large"><h1>Cache times, by route</h1><table><tr><th>Route</th><th>Members</th><th>Guests</th><th>Warm on start</th></tr>
+<tr><td>/fares</td><td>15 min</td><td>2 min</td><td>yes</td></tr><tr><td>/routes</td><td>15 min</td><td>2 min</td><td>yes</td></tr>
+<tr><td>/regional</td><td>30 min</td><td>5 min</td><td>no</td></tr><tr><td>/search</td><td>5 min</td><td>1 min</td><td>no</td></tr>
+<tr><td>/trips/:id</td><td>10 min</td><td>2 min</td><td>yes</td></tr><tr><td>/guests</td><td>none</td><td>2 min</td><td>no</td></tr></table></div>""",
+}
 CMP_FAKE = r"""
 const SCENE = new URLSearchParams(location.search).get("s") || "idle";
 // A live call: the orb is for calls only (a meeting never has one).
@@ -446,13 +459,37 @@ const DATA = { idle: { live: null, voice: V("off") }, recording: { live: LIVE(),
   "words-micdenied": { live: Object.assign(LIVE(), { mic_denied: true }), voice: V("off") },
   "recording-roll": { live: LIVE(), voice: V("off") },
   // on a call, just the orb: no time or captions above it
-  "words-speaking": { live: LIVE(), voice: V("speaking", { claude: "Running them now." }) } };
+  "words-speaking": { live: LIVE(), voice: V("speaking", { claude: "Running them now." }) },
+  "visuals": { live: LIVE(), voice: V("listening") }, "visuals-off": { live: LIVE(), voice: V("listening"), visuals_on: false } };
+// the visual card: the call's visuals, the newest the voice's
+const VIS = (n, state) => ({ id: n, state: state || "ready", qid: "q" + n, at: 0, what: ["", "Where the meeting's sound goes", "How long a route is kept", "The tests", "Cache times, by route"][n] });
+const CARDS = { "card-drawing": [VIS(1, "drawing")], "card-ready": [VIS(1)], "card-stack": [VIS(2), VIS(3), VIS(1)].map((v, i) => Object.assign({}, v, { id: i + 1, at: i })),
+  "card-back-new": [VIS(1), VIS(2), VIS(3), VIS(4)], "card-line": [VIS(3)], "card-large": [VIS(4)] };
+const CDOC = { "card-ready": { 1: 1 }, "card-stack": { 1: 2, 2: 3, 3: 1 }, "card-back-new": { 1: 1, 2: 2, 3: 3, 4: 4 }, "card-line": { 3: 3 }, "card-large": { 4: 4 } };   // visual -> its document
+for (const k in CARDS) { const l = CARDS[k], top = l[l.length - 1]; DATA[k] = { live: LIVE(), voice: V("listening", { visual: Object.assign({ n: l.length }, top) }), visuals_on: true } }
 // ?live=1: your voice moves while it hears you, so a page can show the real orb moving
 const LIVEV = new URLSearchParams(location.search).get("live");
 const SAID = t => (Math.sin(t * 2.1) > -.35 ? 1 : 0) * Math.max(0, Math.abs(Math.sin(t * 19.5)) * .7 + Math.abs(Math.sin(t * 33 + 1)) * .3) * .35;
-window.fetch = async p => ({ json: async () => p === "/api/companion" ? Object.assign({ starting: null }, (d => LIVEV && d.voice && d.voice.state === "listening" && SCENE === "hearing" ? Object.assign({}, d, { voice: Object.assign({}, d.voice, { level: SAID(Date.now() / 1000) }) }) : d)(DATA[SCENE.replace("-hover", "")] || DATA.idle)) : { ok: true } });
+window.fetch = async p => ({ json: async () => p.startsWith("/api/visuals?") ? { visuals: CARDS[SCENE] || [], on: true } : p === "/api/companion" ? Object.assign({ starting: null }, (d => LIVEV && d.voice && d.voice.state === "listening" && SCENE === "hearing" ? Object.assign({}, d, { voice: Object.assign({}, d.voice, { level: SAID(Date.now() / 1000) }) }) : d)(DATA[SCENE.replace("-hover", "")] || DATA.idle)) : { ok: true } });
 """
 CMP_AFTER = r"""
+// the card: sized as it asks the panel; its ground under everything, its visual in a frame over the ground where
+// the panel would lay the sandbox, the card's page (close, ‹ ›) over both, as in the panel
+if (CARD) { const box = $("vcard"), bg = document.createElement("div");
+  bg.style.cssText = "position:fixed;left:0;top:0;z-index:0;border-radius:16px;background:var(--c-surface);box-shadow:var(--c-shadow),0 0 0 .5px var(--c-edge);display:none";
+  document.body.prepend(bg); box.style.zIndex = 2; box.style.background = "transparent"; box.style.boxShadow = "none";
+  addEventListener("message", e => { if (e.data && e.data.sb === "size") visualSize(e.data) });
+  let f = null;
+  const lay = () => { const m = JSON.parse(box.dataset.card || "{}"); if (!m.w) return;
+    box.style.right = box.style.bottom = "auto"; box.style.width = bg.style.width = m.w + "px"; box.style.height = bg.style.height = m.h + "px"; bg.style.display = "";
+    const doc = m.id ? CARD_DOCS[(CDOC[SCENE] || {})[m.id]] : null;
+    if (!doc) { if (f) { f.remove(); f = null } return }
+    if (!f || f.dataset.id != m.id) { if (f) f.remove(); f = document.createElement("iframe"); f.dataset.id = m.id; f.setAttribute("sandbox", "allow-scripts");
+      f.style.cssText = "position:fixed;left:0;top:0;z-index:1;border:0;background:transparent;border-radius:16px"; f.srcdoc = doc; document.body.appendChild(f) }
+    f.style.width = m.area.w + "px"; f.style.height = m.area.h + "px" };
+  lay(); new MutationObserver(lay).observe(box, { attributes: true, attributeFilter: ["data-card"] });
+  if (SCENE === "card-back-new") setTimeout(() => { cardGo(-1); cardGo(-1) }, 400);
+ }
 setTimeout(() => { if (SCENE.startsWith("left")) edge("left", "bottom");
   if (SCENE.endsWith("-hover")) { open = true; render() }
   // the pill caught half way out from under the orb
@@ -463,7 +500,9 @@ setTimeout(() => { if (SCENE.startsWith("left")) edge("left", "bottom");
 def companion_page():
     html = (ROOT / "mac" / "companion.html").read_text()
     i = html.rindex("<script>")
-    return html[:i] + "<script>" + CMP_FAKE + "</script>" + html[i:].replace(
+    docs = {n: visual_doc(f, inline=True) for n, f in CARD_VISUALS.items() if f}
+    docs[2] = visual_doc(inline=True)
+    return html[:i] + "<script>const CARD_DOCS = " + json.dumps(docs).replace("</", "<\\/") + ";" + CMP_FAKE + "</script>" + html[i:].replace(
         "</body>", "<script>" + CMP_AFTER + "</script></body>")
 
 
@@ -664,8 +703,8 @@ def main():
                 shots = []
                 for scene in CMP_SCENES:
                     png = out / ("companion-%s%s.png" % (scene, sfx))
-                    url = "%s?s=%s%s" % (cmp_path.as_uri(), scene, "#words" if "words" in scene else "")
-                    ok = chrome.shoot(url, png, dark, size=(480, 160), settle=0.8)
+                    url = "%s?s=%s%s" % (cmp_path.as_uri(), scene, "#words" if "words" in scene else "#card" if scene.startswith("card") else "")
+                    ok = chrome.shoot(url, png, dark, size=(780, 520) if scene.startswith("card") else (480, 160), settle=1.6 if scene.startswith("card") else 0.8)
                     print(("ok   " if ok else "FAIL ") + str(png))
                     shots.append(png)
                 # One sheet of every state, and the same in two halves, each small enough

@@ -7,6 +7,8 @@
   small windows from mac/native/macos/companion.py, each hugging what it holds:
     /companion        the orb's window, the anchor: the orb, and its controls on hover
     /companion#words  the words' window, its child: only a mic macOS refuses, said
+    /companion#card   the call's visual card, its child too: the frame around a visual (close, ‹ n / m ›, New,
+                      Drawing…); the visual itself is a sandbox of its own the panel lays over the area left for it
   the orb's window is one fixed size while live and never animates; the page grows the
   orb by transform from its corner (26 at rest, 40 pointed at, 72 talking) and slides its
   buttons in beside it. Clicks outside the hit areas pass to the app beneath.
@@ -16,6 +18,8 @@
     {type:"orb", w, h, glyph, inset, glass:{x, y, w, h, radius}|null}  x from the inner side
     {type:"hit", areas:[{x, y, r} | {x, y, w, h, radius}]}           page px from the top left
     {type:"words", w, h, radius, ms}                                 w: 0 hides; radius null: no glass
+    {type:"card", w, h, area:{x, y, w, h}, session, id, hit:[...], ms} w: 0 hides; id 0: no visual in it yet
+  Native → the card: visualSize({want, w, h}) as the visual's content changes.
     {type:"menu", x, y}, {type:"expand"}, {type:"end"}, {type:"settings", pane}
 -->
 <style>
@@ -175,16 +179,38 @@ body:not(.r) .says{right:auto;left:0;text-align:left}
 .preview .ctls{background:var(--c-surface);box-shadow:0 1px 4px rgba(0,0,0,.14),inset 0 0 0 .5px var(--c-edge)}
 .preview .says{background:var(--c-cap);-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6)}
 .preview .says{border-radius:14px}
-@media (prefers-reduced-motion:reduce){.orb,.orb i,.orbs,.rail,.ctls,.says p{animation:none!important;transition:none!important}}
+/* the call's visual card (the visual card drafts): the visual fills it, its sandbox under this page; this page draws
+   only what's over it: the round close at the top right, Drawing… while it's made, and ‹ n / m › with New below */
+.vcard{position:fixed;left:0;top:0;right:0;bottom:0;box-sizing:border-box;color:var(--c-text);font-weight:400}
+.vcard .vx{position:absolute;right:10px;top:10px;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+color:var(--c-muted);background:var(--c-hover);border:0;padding:0;cursor:default;z-index:2}
+.vcard .vx:hover{background:var(--c-press);color:var(--c-text)}
+.vdraw{padding:14px 44px 14px 16px}
+.vdraw b{display:block;font:600 13.5px/1.3 -apple-system,system-ui,sans-serif;color:var(--c-muted)}
+.vdraw span{display:block;font-size:12.5px;line-height:1.4;color:var(--c-muted);margin-top:3px}
+.vdraw i{display:block;height:9px;border-radius:5px;margin-top:9px;width:82%;background:linear-gradient(90deg,var(--c-hover),rgba(80,70,229,.14),var(--c-hover));
+background-size:200% 100%;animation:vshim 1.4s ease-in-out infinite}.vdraw i+i{width:60%}
+@keyframes vshim{from{background-position:100% 0}to{background-position:-100% 0}}
+.vft{position:absolute;left:0;right:0;bottom:0;height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 12px 4px 14px;
+font-size:11.5px;color:var(--c-muted)}
+.vft .pager{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
+.vft button{height:22px;min-width:22px;border-radius:6px;border:0;padding:0;display:flex;align-items:center;justify-content:center;gap:4px;
+color:var(--c-muted);background:var(--c-hover);font:inherit;cursor:default}
+.vft button:disabled{opacity:.4}.vft button:not(:disabled):hover{background:var(--c-press);color:var(--c-text)}
+.vft button.nx{padding:0 8px 0 6px;background:rgba(80,70,229,.12);color:var(--c-claude)}.vft button.nx i{font-style:normal;font-weight:650;font-size:11px}
+.vnew{font-size:10.5px;font-weight:650;color:var(--c-claude);background:rgba(80,70,229,.12);padding:2px 6px;border-radius:5px}
+.preview .vcard{background:var(--c-surface);border-radius:16px;box-shadow:var(--c-shadow),0 0 0 .5px var(--c-edge)}
+@media (prefers-reduced-motion:reduce){.orb,.orb i,.orbs,.rail,.ctls,.says p,.vdraw i{animation:none!important;transition:none!important}}
 .cmp .orb{cursor:default}
 </style></head><body>
 <div class="cmp idle" id="cmp" style="display:none"></div>
 <div class="says" id="says" style="display:none" aria-live="polite"><p id="sp"></p></div>
+<div class="vcard" id="vcard" style="display:none"></div>
 <script>
 const SB = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.sb;
 const post = m => { if (SB) SB.postMessage(m) };
 if (!SB) document.documentElement.classList.add("preview");
-const WORDS = location.hash === "#words", $ = id => document.getElementById(id);
+const WORDS = location.hash === "#words", CARD = location.hash === "#card", $ = id => document.getElementById(id);
 // The orb's size in voice mode and at rest; its window is 24 more.
 const ORB = 88, REST = 52, INSET = 12, W = 360, H = 112, PH = 40, GAP = 10;
 const PHC = 72, PRC = 16;      // the panel on a call, pointed at: two rows, softer corners (it fits the orb's 88)
@@ -195,7 +221,9 @@ document.documentElement.style.setProperty("--h", H + "px");
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const ICON = {
   window: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/><path d="M10 16l4-4m-3.2 0H14v3.2"/></svg>',
-  gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>' };
+  gear: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  vis: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M7 15.5l3.5-4 3 3 2-2 2.5 3"/><circle cx="9" cy="9" r="1.4"/></svg>',
+  visoff: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" opacity=".55"/><path d="M7 15.5l3.5-4 3 3 2-2 2.5 3" opacity=".55"/><path d="M4 3.5l16 17"/></svg>' };
 const clock = s => { s = Math.max(0, Math.floor(s)); const m = Math.floor(s / 60); return (m >= 60 ? Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") : String(m).padStart(2, "0")) + ":" + String(s % 60).padStart(2, "0") };
 const SBT = "__SB_TOKEN__";        // this launch's token (the app puts it here): every request carries it
 async function api(p, body) { const r = await fetch(p, body !== undefined ? { method: "POST",
@@ -213,6 +241,7 @@ function now() {
 }
 function render() {
   if (WORDS) return words();
+  if (CARD) return visualCard();
   const { l, v, vs } = now(), el = $("cmp");
   const state = vs || (l ? "recording" : "idle");
   const pp = v.preparing_pct != null ? v.preparing_pct : v.preparing && /(\d+)%/.test(v.preparing) ? +/(\d+)%/.exec(v.preparing)[1] : null;
@@ -223,7 +252,9 @@ function render() {
   // The mini window's three, as icons, each named in its tip (the user, 2026-10-27): Standby's
   // window, Settings, then End as the red hang-up phone. A click on the mini window itself pauses and resumes.
   const B = (label, fn, svg) => `<button title="${label}" aria-label="${label}" onclick="${fn}">${svg}</button>`;
-  const btns = !open ? "" : B("Full window", "full()", ICON.window) + B("Settings", "callSettings()", ICON.gear) +
+  const von = !C || C.visuals_on !== false;
+  const btns = !open ? "" : B("Full window", "full()", ICON.window) + B(von ? "Visuals on" : "Visuals off", "visualsOnOff()", von ? ICON.vis : ICON.visoff) +
+    B("Settings", "callSettings()", ICON.gear) +
     `<button class="hang" title="End" aria-label="End" onclick="end()"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-3.2 0-6.2.9-8.6 2.6a1.6 1.6 0 0 0-.6 1.8l.7 2a1.3 1.3 0 0 0 1.6.8l3.2-1a1.3 1.3 0 0 0 .9-1.1l.2-1.6a12 12 0 0 1 5.2 0l.2 1.6a1.3 1.3 0 0 0 .9 1.1l3.2 1a1.3 1.3 0 0 0 1.6-.8l.7-2a1.6 1.6 0 0 0-.6-1.8C18.2 9.9 15.2 9 12 9z"/></svg></button>`;
   const fl = flash ? `<span class="txt">${esc(flash)}</span>` : "";
   // on a call, the session's name and how long it has run, over the icons; the time ticks in place
@@ -310,6 +341,65 @@ function words() {
   if (w + "x" + h !== lastW) { lastW = w + "x" + h; post({ type: "words", w, h, radius: 14, material: "soft", ms: 180 }) }
 }
 
+// The call's visual card: the call's newest visual, unless the user went back through them (then › says
+// "New" when another comes, never pulling them away). Closed, it stays closed until the next one comes, which
+// opens it again at n / n. Its size is the visual's choice (data-size: line, small, medium, large or a width),
+// at least one line (240 x 44), at most half the screen each way; taller scrolls in the visual.
+const VC = { sid: null, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, sent: "", seenT: null };
+const VX = '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
+const CHEV = d => `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+const VFOOT = 34, VMIN_W = 240, VMIN_H = 44;
+function cardReset(sid) { clearTimeout(VC.seenT); Object.assign(VC, { sid, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, seenT: null }) }
+async function cardList() {
+  try { const r = await api("/api/visuals?session=" + encodeURIComponent(VC.sid)); VC.list = (r.visuals || []).filter(v => v.state !== "failed") } catch (e) {}
+  const top = VC.list.length ? VC.list[VC.list.length - 1].id : 0;
+  if (top > VC.newest) { VC.newest = top; if (VC.closed) { VC.closed = false; VC.at = null } }
+  render();
+}
+function cardWidth(want, w, max) {
+  const px = { small: 260, medium: 300, large: max }[want];
+  return Math.round(Math.max(VMIN_W, Math.min(max, want === "line" ? w : px || (+want > 0 ? +want : 300))));
+}
+function visualCard() {
+  const l = C && C.live, lv = C && C.voice && C.voice.visual, on = !C || C.visuals_on !== false, box = $("vcard");
+  if (!l || !l.id) { if (VC.sid) cardReset(null); return cardPost(null) }
+  if (VC.sid !== l.id) cardReset(l.id);
+  const key = lv ? lv.id + ":" + lv.state + ":" + lv.n : "";
+  if (key !== VC.key) { VC.key = key; if (lv) cardList() }
+  if (!on || VC.closed || !VC.list.length) return cardPost(null);
+  const m = VC.list.length, i = VC.at === null ? m - 1 : Math.min(VC.at, m - 1), v = VC.list[i];
+  const later = VC.list.slice(i + 1).some(x => !VC.seen.has(x.id)), fresh = !VC.seen.has(v.id);
+  if (fresh && !VC.seenT) VC.seenT = setTimeout(() => { VC.seen.add(v.id); VC.seenT = null; render() }, 5000);   // New until it's been up a while
+  const maxW = Math.floor((screen.availWidth || 1440) / 2), maxH = Math.floor((screen.availHeight || 900) / 2), foot = m > 1 ? VFOOT : 0;
+  const sz = VC.sz[v.id] || { want: "medium", w: 0, h: 0 }, drawing = v.state !== "ready";
+  const W = drawing ? 300 : cardWidth(sz.want, sz.w, maxW);
+  let html = `<button class="vx" title="Close" aria-label="Close" onclick="cardClose()">${VX}</button>`;
+  if (drawing) html += `<div class="vdraw" id="vdraw"><b>Drawing\u2026</b>${v.what ? `<span>${esc(v.what)}</span>` : ""}<i></i><i></i></div>`;
+  if (foot) html += `<div class="vft"><span class="pager"><button title="Back" aria-label="Back" onclick="cardGo(-1)"${i ? "" : " disabled"}>${CHEV("M10 3.5 5.5 8l4.5 4.5")}</button>` +
+    `<span>${i + 1} / ${m}</span><button${later ? ' class="nx"' : ""} title="${later ? "Newer, new" : "Newer"}" aria-label="${later ? "Newer, new" : "Newer"}" onclick="cardGo(1)"${i < m - 1 ? "" : " disabled"}>` +
+    `${CHEV("M6 3.5 10.5 8 6 12.5")}${later ? "<i>New</i>" : ""}</button></span>${fresh ? '<span class="vnew">New</span>' : ""}</div>`;
+  if (box.innerHTML !== html) box.innerHTML = html;
+  box.style.display = "";
+  const ch = drawing ? Math.ceil(($("vdraw") || box).getBoundingClientRect().height) : (sz.h || 120);
+  const H = Math.round(Math.max(VMIN_H, Math.min(maxH, ch + foot)));
+  const hit = [{ x: W - 32, y: 10, w: 22, h: 22, radius: 11 }].concat(foot ? [{ x: 0, y: H - VFOOT, w: W, h: VFOOT, radius: 0 }] : []);
+  cardPost({ type: "card", w: W, h: H, area: { x: 0, y: 0, w: W, h: H - foot }, session: VC.sid, id: drawing ? 0 : v.id, hit, ms: 180 });
+}
+function cardPost(m) {
+  const box = $("vcard");
+  if (!m) { box.style.display = "none"; box.innerHTML = ""; m = { type: "card", w: 0, h: 0 } }
+  const k = JSON.stringify(m);
+  if (k !== VC.sent) { VC.sent = k; box.dataset.card = k; post(m) }
+}
+function cardGo(d) {
+  const m = VC.list.length, i = (VC.at === null ? m - 1 : VC.at) + d;
+  VC.at = i >= m - 1 ? null : Math.max(0, i); clearTimeout(VC.seenT); VC.seenT = null; render();
+}
+function cardClose() { VC.closed = true; VC.at = null; VC.list.forEach(v => VC.seen.add(v.id)); render() }
+// the visual says its size as its content changes (the panel passes it on): the card follows
+window.visualSize = m => { const v = VC.list[VC.at === null ? VC.list.length - 1 : VC.at];
+  if (v && m) { const o = VC.sz[v.id]; if (!o || o.want !== m.want || o.w !== m.w || o.h !== m.h) { VC.sz[v.id] = m; render() } } };
+
 // What the panel and its menu call.
 // The corner it sits nearest: the controls grow away from h, the words open away from v.
 window.edge = (h, v) => { document.body.classList.toggle("r", h === "right"); document.body.dataset.v = v || ""; lastSize = ""; lastHit = ""; lastW = ""; render() };
@@ -335,6 +425,10 @@ async function menu(x, y) { post({ type: "menu", x, y }) }
 // End: as the menu's End Call (the panel says so and goes); Full window: Standby's window, at the call
 function end() { if (now().l) post({ type: "end" }) }
 function full() { post({ type: "expand" }) }
+// Visuals: Settings > Call's "Show visuals during calls", from here (off: none are made)
+async function visualsOnOff() { const on = !C || C.visuals_on !== false;
+  try { await api("/api/settings", { call_visuals: !on }) } catch (e) {}
+  if (C) C.visuals_on = !on; render() }
 // Settings: Standby's Settings, straight on its Call pane (the voice and its model)
 function callSettings() { post({ type: "settings", pane: "call" }) }
 function say(t) { flash = t.length > 40 ? t.slice(0, 39) + "…" : t; render(); setTimeout(() => { flash = ""; render() }, 2500) }
@@ -354,7 +448,7 @@ let drag = false;
 function dragged() { drag = true }
 window.dragged = dragged;
 function notClick(e) { if (drag) { e.stopPropagation(); e.preventDefault() } }
-if (!WORDS) {
+if (!WORDS && !CARD) {
   document.addEventListener("mousedown", () => { drag = false }, true);
   document.addEventListener("click", notClick, true);
   document.addEventListener("dblclick", notClick, true);
@@ -379,7 +473,7 @@ function blinkNow(again) {
   }
   blinkLater();
 }
-if (!WORDS) blinkLater();
+if (!WORDS && !CARD) blinkLater();
 let polling = null;
 async function poll(once) {
   try { C = await api("/api/companion") } catch (e) {}

@@ -119,6 +119,7 @@ test_agent_models          py    par
 test_lite_call             py    par
 test_firstuse              py    par
 test_visuals               py    par
+test_visual_sandbox        py    par
 test_past                  py    par
 test_delete                py    par
 test_settings_help         py    par

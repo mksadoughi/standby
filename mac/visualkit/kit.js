@@ -27,8 +27,9 @@
       const root = document.querySelector("#sb-root > *") || document.body;
       const want = root.getAttribute && root.getAttribute("data-size") || "medium";
       if (want === "line") document.documentElement.classList.add("sb-line");
-      const b = document.body;
-      send({ sb: "size", want, w: Math.ceil(b.scrollWidth), h: Math.ceil(document.documentElement.scrollHeight) });
+      // the content's own size, never the view's (the view is the card's, and the card follows this)
+      const r = document.body.getBoundingClientRect();
+      send({ sb: "size", want, w: Math.ceil(r.width), h: Math.ceil(r.height) });
     },
   };
   // links: only https, only on a click, and only by the card: the visual itself never navigates
@@ -64,6 +65,6 @@
         .catch(() => { el.textContent = src; el.classList.add("raw"); sb.size(); });
     }
   });
-  new ResizeObserver(() => sb.size()).observe(document.documentElement);
+  whenRead(() => new ResizeObserver(() => sb.size()).observe(document.body));
   addEventListener("load", () => sb.size());
 })();

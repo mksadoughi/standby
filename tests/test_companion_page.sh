@@ -76,14 +76,15 @@ sys.exit(0 if m and 'will-change:transform' in m.group(1) else 1)"; then
 else
   echo "  the orb's bars each on their own layer (no stale bar under the dots)   FAIL"; exit 1
 fi
-# Something waiting on a paused call: a bell on the orb, not the red dot (the user), tilted as it rings,
-# outward on either side; Claude out of reach keeps its red dot.
+# Something waiting on a paused call: a plain filled red circle at the orb's edge, where the bell was (the user,
+# 10/30), mirrored to the left on the left; Claude out of reach keeps its red dot.
 if python3 -c "
 import re,sys; s=open('mac/companion.html').read()
 w=re.search(r'\n\.cmp\.waiting \.orbs:after\{([^}]*)\}', s); d=re.search(r'\n\.cmp\.down \.orbs:after\{([^}]*)\}', s)
-sys.exit(0 if w and 'mask:' in w.group(1) and 'border-radius' not in w.group(1) and d and 'border-radius:50%' in d.group(1)
-         and '.cmp.waiting .orbs:after{transform:rotate(15deg)}' in s and 'left:-1%;transform:rotate(-15deg)}' in s else 1)"; then
-  echo "  something waiting: a tilted bell on the orb; Claude out of reach: its red dot OK"
+sys.exit(0 if w and 'border-radius:50%' in w.group(1) and 'background:var(--c-rec)' in w.group(1) and 'mask' not in w.group(1)
+         and 'rotate' not in s[w.start():w.end() + 200] and d and 'border-radius:50%' in d.group(1)
+         and 'body:not(.r) .cmp.waiting .orbs:after{right:auto;left:4%}' in s else 1)"; then
+  echo "  something waiting: a plain red circle on the orb; Claude out of reach: its red dot OK"
 else
-  echo "  something waiting: a tilted bell on the orb; Claude out of reach: its red dot FAIL"; exit 1
+  echo "  something waiting: a plain red circle on the orb; Claude out of reach: its red dot FAIL"; exit 1
 fi

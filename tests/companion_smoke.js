@@ -9,7 +9,7 @@ const html = fs.readFileSync(process.env.COMPANION_HTML || __dirname + "/../mac/
 const script = html.slice(html.lastIndexOf("<script>") + 8, html.lastIndexOf("</script>"));
 
 const els = {};
-const mk = id => (els[id] = { id, textContent: "", innerHTML: "", hidden: false,
+const mk = id => (els[id] = { id, textContent: "", innerHTML: "", hidden: false, dataset: {},
   style: { setProperty() {}, removeProperty() {} }, className: "", title: "",
   classList: { t: new Set(), add(c) { this.t.add(c) }, remove(c) { this.t.delete(c) },
     toggle(c, on) { on === undefined ? (this.t.has(c) ? this.t.delete(c) : this.t.add(c)) : (on ? this.t.add(c) : this.t.delete(c)) },
@@ -34,8 +34,10 @@ global.LIVE = (extra, call) => Object.assign({ live: { id: "talk-1", kind: "talk
   call: call === null ? undefined : { agent: "a-planner", name: "Planner", copy: false, started: Date.now() / 1000 - 134 } },
   starting: null, voice: { state: "off" } }, extra || {});
 global.STATE = LIVE();
+global.VISLIST = [];
+global.screen = { availWidth: 1440, availHeight: 900 };
 global.fetch = async (p, o) => { calls.push([p, o && o.body]);
-  return { json: async () => p === "/api/companion" ? STATE : { ok: true } } };
+  return { json: async () => p === "/api/companion" ? STATE : p.startsWith("/api/visuals?") ? { visuals: VISLIST, on: true } : { ok: true } } };
 
 // Any error no check saw (an async page call, a timer, a handler) fails the run: an undeclared
 // name in the project menu once threw while every check still said OK (found when the folder picker was ported).
@@ -101,7 +103,7 @@ const ORB_CHECKS = `
   ok("  its top row: the call's session, then the icons under it", (h => h.includes('<span class="nmrow"><span class="dot"></span><span class="nm">') && h.includes('id="ctm"') && h.indexOf("nmrow") < h.indexOf('class="btns"'))(els.ctls.innerHTML)
      && els.ctls.classList.contains("card"), els.ctls.innerHTML.slice(0, 300));
   const words = () => [...els.ctls.innerHTML.matchAll(/<button[^>]*title="([^"]*)"/g)].map(x => x[1]);
-  ok("  three icons, each named in its tip: Full window, Settings, End (no Pause, no Mini window: a click on it pauses)", JSON.stringify(words()) === '["Full window","Settings","End"]'
+  ok("  four icons, each named in its tip: Full window, Visuals, Settings, End (no Pause, no Mini window: a click on it pauses)", JSON.stringify(words()) === '["Full window","Visuals on","Settings","End"]'
      && !/<button[^>]*>[A-Za-z]/.test(els.ctls.innerHTML) && !shown().includes("More"), words());
   ok("  End is the red hang-up phone, its word in the tip", els.ctls.innerHTML.includes('<button class="hang" title="End" aria-label="End" onclick="end()"><svg'), els.ctls.innerHTML);
   ok("  the pill's glass runs on under the orb to its centre (its inner end hidden): it slides out of the mini window",
@@ -170,6 +172,11 @@ const ORB_CHECKS = `
   ok("claude down: the orb grey with its red dot, the line on hover", els.cmp.className.includes("down") && els.talk.title.includes("Claude can't sign in. Run claude, then /login"), [els.cmp.className, els.talk.title]);
   await orb();
   ok("  a click opens Standby, where the line and its Details are", posts.some(m => m.type === "expand") && !calls.some(c => c[0] === "/api/voice"), [posts, calls]);
+  // Visuals: the panel's button is Settings > Call's switch, from here
+  STATE = LIVE({ visuals_on: true }); await fresh(); calls = [];
+  await visualsOnOff();
+  ok("Visuals: the panel's button turns visuals off (Settings > Call's switch), and says so",
+     calls.some(c => c[0] === "/api/settings" && JSON.parse(c[1]).call_visuals === false) && C.visuals_on === false, calls);
   STATE = LIVE();
   words_page();
 })();
@@ -195,9 +202,51 @@ const WORDS_CHECKS = `
      && (m => m.w === 184 && m.h === 44 && m.radius === 14 && m.material === "soft" && m.ms === 180)(last()), [els.sp, last()]);
   STATE = LIVE({ voice: { state: "listening" } }); await fresh();
   ok("    and gone once the mic is allowed", els.sp.textContent === "" && last().w === 0, els.sp.textContent);
+  card_page();
+})();
+`;
+// The call's visual card (#card): the frame around the visual, its sandbox the panel's; what it tells the panel.
+const CARD_CHECKS = `
+(async () => {
+  const tick = ms => new Promise(r => setTimeout(r, ms || 40));
+  const fresh = async () => { await poll(true); await tick(); await poll(true); await tick() };
+  const last = () => posts.filter(m => m.type === "card").slice(-1)[0];
+  const V = (id, state, what) => ({ id, state: state || "ready", qid: "q" + id, at: id, what: what || "" });
+  const AT = list => { VISLIST = list; const t = list[list.length - 1]; STATE = LIVE({ visuals_on: true, voice: { state: "listening", visual: Object.assign({ n: list.length }, t) } }) };
+  posts = [];
+  AT([V(1, "drawing", "The <three> points")]); await fresh();
+  ok("card: a visual being drawn: Drawing… with the voice's brief (escaped), no sandbox yet, its close a hit area",
+     (m => m.w === 300 && m.id === 0 && m.session === "talk-1" && m.hit.length === 1)(last()) && els.vcard.innerHTML.includes("Drawing")
+     && els.vcard.innerHTML.includes("The &lt;three&gt; points"), [last(), els.vcard.innerHTML]);
+  AT([V(1)]); await fresh();
+  ok("  ready: the panel lays visual 1 over the card's area", last().id === 1 && last().area.w === last().w && last().area.h === last().h, last());
+  window.visualSize({ want: "small", w: 260, h: 90 });
+  ok("  its size: the visual's choice (small), its content's height, no pager for one", (m => m.w === 260 && m.h === 90 && m.area.h === 90)(last()) && !els.vcard.innerHTML.includes(" / "), last());
+  AT([V(1), V(2)]); await fresh();
+  ok("a second: the card goes to it (2 / 2), the pager below, its New mark", last().id === 2 && els.vcard.innerHTML.includes("2 / 2")
+     && els.vcard.innerHTML.includes("vnew") && last().h === last().area.h + 34 && last().hit.length === 2, [last(), els.vcard.innerHTML]);
+  cardGo(-1);
+  ok("  ‹: back to 1 / 2", last().id === 1 && els.vcard.innerHTML.includes("1 / 2"), last());
+  AT([V(1), V(2), V(3)]); await fresh();
+  ok("  a third while looking back: stays on 1, and › says New", last().id === 1 && els.vcard.innerHTML.includes("1 / 3") && els.vcard.innerHTML.includes('class="nx"'), els.vcard.innerHTML);
+  cardClose();
+  ok("closed: the card goes (w 0)", last().w === 0, last());
+  await fresh();
+  ok("  and stays closed while nothing new comes", last().w === 0, last());
+  AT([V(1), V(2), V(3), V(4)]); await fresh();
+  ok("  the next one opens it again, at 4 / 4", last().id === 4 && els.vcard.innerHTML.includes("4 / 4"), last());
+  window.visualSize({ want: "line", w: 150, h: 30 });
+  ok("sizes: a line at least 240 wide; its own height, the pager under it", last().w === 240 && last().h === 30 + 34, last());
+  window.visualSize({ want: "large", w: 900, h: 2000 });
+  ok("  large: half the screen wide; taller than half the screen: held there (the visual scrolls)", last().w === 720 && last().h === 450, last());
+  STATE = LIVE({ visuals_on: false, voice: STATE.voice }); await fresh();
+  ok("visuals turned off: the card goes", last().w === 0, last());
+  STATE = LIVE({ voice: { state: "off" } }); STATE.live = null; await fresh();
+  ok("the call over: nothing", last().w === 0);
   done();
 })();
 `;
+const card_page = () => { location.hash = "#card"; posts = []; eval(script + CARD_CHECKS) };
 // The page's code and these checks share one scope (eval); each window is its own run.
 const words_page = () => { location.hash = "#words"; eval(script + WORDS_CHECKS) };
 eval(script + ORB_CHECKS);

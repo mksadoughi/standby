@@ -811,6 +811,10 @@ class Presence(object):
         self.saying = 0                     # until when (monotonic) the orb stays, saying it was stopped
         self.quit_ok = False                # the page's Quit: the next terminate goes through
         self.words_size = None              # {type:"words"}: up while set
+        self.card_size = None               # {type:"card"}: the call's visual card, up while set
+        self.card_shows = None              # (session, visual number) its sandbox has loaded
+        self.visual = None                  # that sandbox (visualview.VisualView), or None
+        self.opened_at = 0.0                # the card's last link opened (monotonic): one a second and a half
         make = make or Companion
         # Only what the panels say in words reaches ui.log (not each mouse-down).
         say = lambda e: e.get("text") and hooks.log("companion: %s" % e["text"])
@@ -820,7 +824,14 @@ class Presence(object):
         # Nothing in the words is clickable: a click on them is the app's underneath.
         self.words = make(url=base + "/companion" + q + "#words", size=(184, 44), draggable=False, clicks=False, log=say,
                           radius=14, material="soft", parent=self.pill, on_message=self._message)
+        # The call's visual card: its frame (close, ‹ n / m ›, New, Drawing…) is this page; the visual in it
+        # is a sandbox of its own (visualview), laid over the area the page leaves for it.
+        self.card = make(url=base + "/companion" + q + "#card", size=(300, 120), draggable=False, log=say,
+                         radius=16, material="soft", parent=self.pill, on_message=self._message)
         self.pill.follow = self._follow
+        self.native = native
+        if native and getattr(self.card, "panel", None) is not None:
+            self.card.panel.setHasShadow_(True)     # the soft ground has none of its own: the card floats
         if native:
             self._hook_into_app()
         self.update()
@@ -865,12 +876,15 @@ class Presence(object):
             self.pill.show()
             if self.words_size:
                 self._show_words()
+            if self.card_size:
+                self._show_card()
         else:
             self.words.hide()
+            self.card.hide()
             self.pill.hide()
 
     def space_changed(self):
-        for c in (self.pill, self.words):        # the orb first: the words are its child
+        for c in (self.pill, self.words, self.card):     # the orb first: the words and the card are its children
             c.space_changed()
         self.pill.refit()                        # a full-screen Space hides the Dock, another gives it back
         self.pill.later(0.6, self.pill.refit)    # and once its windows have settled
@@ -879,6 +893,7 @@ class Presence(object):
         """A display came or went: home again, on the main window's display as it is now."""
         self._go_home()
         self._place_words()
+        self._place_card()
 
     def _go_home(self):
         """Where the orb comes up, every time (the user, 2026-10-08): the bottom
@@ -1009,6 +1024,10 @@ class Presence(object):
             self.pill.popup(rules.menu(), float(m.get("x", 0)), float(m.get("y", 0)), self._chose)
         elif kind == "words":
             self._words(m)
+            if self.card.visible:
+                self._place_card()                 # the card sits above the words when they're up
+        elif kind == "card":
+            self._card(m)
 
     def _chose(self, action):
         self.hooks.log("companion menu: %s" % action)
@@ -1060,8 +1079,92 @@ class Presence(object):
         self.words.show()
 
     def _follow(self, frame):
-        """What goes with the orb's window when it moves to `frame`: the words, if up."""
-        return [(self.words, self._words_at(frame))] if self.words.visible else []
+        """What goes with the orb's window when it moves to `frame`: the words and the card, if up."""
+        return ([(self.words, self._words_at(frame))] if self.words.visible else []) + \
+            ([(self.card, self._card_at(frame))] if self.card.visible else [])
+
+    # -- the call's visual card, above the orb -------------------------------------------
+    def _card(self, m):
+        """{type:"card", w, h, area: {x, y, w, h}, session, id}: the card sized as its page says, lined up with the
+        orb's glyph above it (above the words when they're up); the visual `id` of `session` in its sandbox over
+        `area` (page px, y from the top), none while it's still being drawn (id 0). w 0: the card goes, and its sandbox."""
+        try:
+            w, h = float(m.get("w") or 0), float(m.get("h") or 0)
+        except (TypeError, ValueError):
+            return
+        if w <= 0 or h <= 0:
+            self.card_size = None
+            self._drop_visual()
+            self.card.hide()
+            return
+        self.card_size = self.card.size = (w, h)
+        # its buttons (close, ‹ ›) take clicks; anywhere else the visual's own view, under the card's page, does
+        self.card.hit = rules.hit_shapes({"areas": m["hit"]}) if isinstance(m.get("hit"), list) and m["hit"] else None
+        if self.card.visible:
+            self._place_card(_seconds(m, WORDS), WORDS_EASE)
+        elif self.pill.visible:
+            self._show_card()
+        self._show_visual(str(m.get("session") or ""), m.get("id"), m.get("area"))
+
+    def _card_at(self, orb):
+        pill, gap = self.pill, rules.WORDS_GAP
+        if self.words.visible and self.words_size:
+            gap += self.words_size[1] + rules.WORDS_GAP
+        return rules.words_frame(tuple(orb), pill.glyph, self.card.size, pill.corner, pill._screen(), gap=gap)
+
+    def _place_card(self, seconds=0, ease=None):
+        if self.card_size:
+            self.card.place(self._card_at(self.pill.frame()), seconds, ease)
+
+    def _show_card(self):
+        if not self.card.visible:
+            self._place_card()
+        self.card.show()
+
+    def _show_visual(self, session, n, area):
+        """The visual's sandbox: made for (session, n), placed over area; another visual, a new one."""
+        try:
+            n = int(n or 0)
+            x, y, w, h = (float(area[k]) for k in ("x", "y", "w", "h")) if isinstance(area, dict) else (0, 0, 0, 0)
+        except (TypeError, ValueError, KeyError):
+            n, x, y, w, h = 0, 0, 0, 0, 0
+        if n <= 0 or w <= 0 or h <= 0:
+            self._drop_visual()
+            return
+        rect = (x, self.card.size[1] - y - h, w, h)            # AppKit's y is from the bottom
+        if self.visual is not None and self.card_shows == (session, n):
+            self.visual.place(rect)
+            return
+        self._drop_visual()
+        got = getattr(self.hooks, "visual_doc", lambda s, k: None)(session, n)
+        if not got or not self.native:
+            return
+        from native.macos import visualview
+        self.visual = visualview.VisualView(got[0], got[1], rect, self._visual_said)
+        self.card_shows = (session, n)
+        # under the card's page (its buttons over the visual), above the card's ground
+        self.card.panel.contentView().addSubview_positioned_relativeTo_(self.visual.web, AppKit.NSWindowBelow, self.card.web)
+
+    def _drop_visual(self):
+        if self.visual is not None:
+            self.visual.close()
+        self.visual, self.card_shows = None, None
+
+    def _visual_said(self, m):
+        """The visual's one way out: its size, to the card's page; an https link clicked, opened in the browser
+        while the pointer is on the card, one a second and a half at most (never one it opens by itself)."""
+        if m["sb"] == "size":
+            self.card.call("visualSize", m)
+        elif m["sb"] == "open" and time.monotonic() - self.opened_at > 1.5 and self._pointer_on_card():
+            self.opened_at = time.monotonic()
+            opener = getattr(self.hooks, "open_url", None)
+            if opener is not None:
+                opener(m["href"])
+
+    def _pointer_on_card(self):
+        x, y = _mouse()
+        fx, fy, fw, fh = self.card.frame()
+        return fx <= x <= fx + fw and fy <= y <= fy + fh
 
 
 def watch_spaces(watcher):

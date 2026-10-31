@@ -11,7 +11,7 @@ html,body{margin:0;background:var(--bg);color:var(--text);font:13px/1.45 -apple-
   -webkit-text-size-adjust:none;overflow-wrap:anywhere}
 body{padding:14px 16px}
 html.sb-inline,html.sb-inline body{background:transparent}html.sb-inline body{padding:12px 14px}
-html.sb-line body{padding:11px 16px;white-space:nowrap}
+html.sb-line body{display:inline-block;padding:11px 44px 11px 16px;white-space:nowrap}
 h1{font-size:13.5px;font-weight:650;margin:0 26px 10px 0;letter-spacing:-.005em}
 h2{font-size:12px;font-weight:600;color:var(--muted);margin:12px 0 6px}
 p{margin:0 0 8px}p:last-child{margin-bottom:0}
