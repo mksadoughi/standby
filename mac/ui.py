@@ -3541,6 +3541,10 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     # on the record: the agent places it, when it builds calls from their record; else they're here (they never
     # reached the voice at all with that off, its default)
     tasks = "" if getattr(vs, "ledger", False) and _agent_ledger() else _lite_tasks_note(sid, c)
+    if tasks and tasks == c.get("tasks_sent"):
+        tasks = ""                                 # as the voice last had them: its conversation keeps them
+    elif tasks:
+        c["tasks_sent"] = tasks
     if tasks:                                      # the call's work as facts (what ended, the voice has now)
         notes.append(tasks)
     if c.pop("rang", False):                       # they're back from a pause where something waited

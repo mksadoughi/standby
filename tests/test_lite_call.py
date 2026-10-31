@@ -708,8 +708,9 @@ check("  never told again on its own (06:22:24's aside, and 06:23:44's stale \"i
       len(told_model) == n_model and len(vs.told) == n, (told_model[n_model:], vs.told[n:]))
 answers.append("Not finished: the stars aren't in.")
 ui.ask_spoken(sid, "Can you check where we are right now?", None, None)
-check("  asked again later: the record still says done, with what came back; nothing says it's on it",
-      "aren't in yet." in asked[-1] and "is on it" not in asked[-1] and "[SESSION]" not in asked[-1], asked[-1])
+check("  asked again later: the tasks unchanged, so not sent again (its conversation has them, done, with what came\n"
+      "    back: an hour of them filled it); nothing says it's on it",
+      "aren't in yet." in asked[-2] and "[TASKS]" not in asked[-1] and "is on it" not in asked[-1] and "[SESSION]" not in asked[-1], asked[-1])
 
 # On the call's record (the ledger): the agent places tasks.txt itself, as a [TASKS] entry when it changed, so
 # lite_ask adds none; an ended task that entry carried is the voice's, never told again on its own.

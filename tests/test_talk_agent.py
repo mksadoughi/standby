@@ -487,6 +487,18 @@ try:
     mark(ids2, ".k")
     ask("[VOICE] what time is it there")
     check("    and after it, nothing is held", "Held, not sent" not in texts("voice", TALK)[-1])
+    # They went on from an early question: only what they said since goes to the voice's conversation, which has
+    # the rest (the whole turn each time filled it within an hour, compacted mid-call).
+    ids = []
+    ask("[VOICE] can you look at the", ident=ids)
+    mark(ids, ".x")
+    ask("[VOICE] can you look at the build log for me?")
+    last = texts("voice", TALK)[-1]
+    check("they went on from an early question: the voice gets only what they said since",
+          last.endswith("goes on from their words in your last message: build log for me?") and "look at the build" not in last, last[-300:])
+    ask("[VOICE] can you look at the build log for me? And the tests.")
+    check("  a question they didn't go on from (answered, heard): their words in full",
+          texts("voice", TALK)[-1].endswith("They said: can you look at the build log for me? And the tests."), texts("voice", TALK)[-1][-200:])
     os.remove(os.path.join(live, TALK + ".voice.json"))
 
     # The talk ended and a meeting is live. Typing into the talk continues it.

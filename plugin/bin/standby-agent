@@ -3251,6 +3251,7 @@ HELD = ("Held, not sent, because they were still talking when you took it deeper
 # has the context); its answer is what the session works on.
 TASK_TURN = ("[TASK] You went deeper without saying on what. Write it now: only what to do, in your "
              "words, with what it needs to know.")
+WENT_ON = re.compile(r'^\s*\(They went on before hearing your answer\.\)\s*')
 _NOTES = re.compile(r'^\s*\(They (?:went on before hearing your answer\.|cut in while you were saying: ".*?")\)\s*', re.S)
 _BLOCKS = re.compile(r"\[SUMMARY\].*?\[END SUMMARY\]\s*|\[RESULT[^\]]*\].*?\[END RESULT\]\s*|^\[(?:SESSION|RESUMED)\][^\n]*\n?",
                      re.S | re.M)
@@ -3454,6 +3455,7 @@ class Voice(object):
         self.feeders, self.notes_at, self.context = {}, {}, {}
         # a call's hand-offs held for the turn (HELD): {session: [task]}, and what each ask was shown of them
         self.held, self.shown = {}, {}
+        self.spoken, self.stopped = {}, set()   # each session's last voice question, (id, words), and those stopped (_went_on)
         self.busy, self.last_used = False, 0.0
         self.briefed = None          # (start, end) of the last briefing, for its wait
         self.did = []                # the last tasks: (what, start, end), for what a question waited on
@@ -3583,6 +3585,24 @@ class Voice(object):
                 return text.strip(), fh.tell()
         except IOError:
             return "", self.notes_at.get(session, 0)
+
+    def _went_on(self, session, words, ident=None):
+        """Their words, for the voice's own conversation: when they went on from words it was just asked
+        (an early question), only what they said since, for it has the rest. Sending the whole turn each
+        time filled its conversation in an hour, compacted mid-call (a 44.7 s turn)."""
+        lines = words.split("\n")
+        m = WENT_ON.match(lines[-1])
+        body = lines[-1][m.end():] if m else lines[-1]
+        (was, prev), self.spoken[session] = self.spoken.get(session, (None, "")), (ident, body)
+        # its last question was dropped (they went on: agentctl.cancel's .x) or stopped before its answer
+        went = m or (was and (os.path.exists(os.path.join(SPOOL, was + ".x")) or was in self.stopped))
+        key = lambda text: [w.strip(".,!?;:\"'").lower() for w in text.split()]
+        had, now = key(prev), key(body)
+        if not (went and had and len(now) > len(had) and now[:len(had)] == had):
+            return words
+        rest = " ".join(body.split()[len(had):])
+        return "\n".join(lines[:-1] + ["They went on before hearing your answer; this goes on from their words "
+                                        "in your last message: %s" % rest])
 
     def _committed(self, session):
         """An answer the turn's asks were shown the held hand-offs in was committed (agentctl.kept's .k):
@@ -3753,9 +3773,10 @@ class Voice(object):
             words = (words[:folded.start()] + words[folded.end():]).strip()
             said = "They said: %s\n\n%s" % (words, RESULT_LATER % (RESULT_HOW.get(folded.group(1), RESULT_HOW["done"]),
                                                                     folded.group(2).strip()[:6000] or "(nothing)"))
+        elif result:
+            said = RESULT_TURN % (RESULT_HOW.get(result.group(1), RESULT_HOW["done"]), result.group(2).strip()[:6000] or "(nothing)")
         else:
-            said = (RESULT_TURN % (RESULT_HOW.get(result.group(1), RESULT_HOW["done"]),
-                                   result.group(2).strip()[:6000] or "(nothing)") if result else "They said: " + words)
+            said = "They said: " + (words if ledger else self._went_on(session, words, ident))
         turn = None                          # a call's turn: its own Claude Code (VoiceTurn), stopped after it
         if ledger:
             promote(session)                     # the turns the record says were committed: in the head first
@@ -3835,6 +3856,7 @@ class Voice(object):
             os.remove(cpath)
             if rc == ClaudeSession.INTERRUPTED:
                 text = STOPPED
+                self.stopped.add(ident)
         first = timing.get("first")
         engine = _LIVE_SESSION.get((session, "voice"))
         if sbtrace.enabled(session):
