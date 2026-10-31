@@ -931,7 +931,10 @@ def is_talk(session):
 
 # Show while talking, said to the voice only while it's on (visuals_on): off, the voice hears nothing of it
 CALL_VISUALS = ("When a picture would help them follow, or they ask to see something, put [VISUAL: what to show] in "
-                "your reply. It's drawn beside the call while you keep talking, so speak as if it weren't there.")
+                "your reply. It's drawn beside the call while you keep talking, so speak as if it weren't there. "
+                "VISUALS says whether they'd see it now: when they wouldn't, offer to put it up in the mini window, and "
+                "never say you've shown what they can't see. On their yes, or when they ask to see it again, "
+                "[SHOW VISUAL] brings it into view.")
 
 
 def voice_prelude(session, ledger=False):

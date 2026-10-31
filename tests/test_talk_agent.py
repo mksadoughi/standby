@@ -457,6 +457,8 @@ try:
     check("  what they're saying comes first", "What they're saying comes first." in call, call[-700:])
     check("  visuals on (the default): one plain paragraph, the tag's exact form, before the opening",
           sa.CALL_VISUALS in call and call.index(sa.CALL_VISUALS) < call.index("[CALL START] means") and "[VISUAL: what to show]" in call
+          and "offer to put it up in the mini window" in call and "never say you've shown what they can't see" in call
+          and "On their yes, or when they ask to see it again, [SHOW VISUAL] brings it into view." in call
           and sa.CALL_VISUALS in ledger)
     cfg = os.path.join(root, "config.json")
     had = open(cfg).read() if os.path.exists(cfg) else None
