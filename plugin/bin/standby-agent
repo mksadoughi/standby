@@ -3092,14 +3092,19 @@ VISUAL_UNSAFE = re.compile(r"<script\b[^>]*\bsrc\b[^>]*>.*?</script\s*>|<script\
                            re.I | re.S)
 VISUAL_PROMPT = (
     "[VISUAL] A side task, not part of the call: draw, for a small card beside it, what you just decided to "
-    "show: %s\n\nWrite one HTML fragment, body only: no <html>, <head>, links to files or the network, or "
-    "<script src>; inline <style> and <script> are fine. A house kit is loaded first and follows light and dark: "
-    "the colours var(--text), var(--muted), var(--accent), var(--soft), var(--line), var(--bg); h1, p, .muted, "
-    "an <ol class=\"steps\"> its reader steps through (call sb.steps(\"#its-id\")), .big for one large figure, "
-    ".row for a line of small labels; <sb-math>LaTeX</sb-math> for an equation, and <sb-diagram>mermaid"
-    "</sb-diagram> for a diagram. Put data-size on its root element: \"line\", \"small\", \"medium\" or "
-    "\"large\", the least that fits. Keep it as small as it can be and still help; make it interactive only "
-    "when that helps understanding. Reply with the fragment only.")
+    "show: %s\n\nWrite one HTML fragment, body only; inline <style> and <script> are fine. Nothing that reaches "
+    "out: no network, storage, forms, navigation, external scripts or fonts; images only as data: URIs or inline "
+    "SVG. Put data-size on its root element: \"line\" (one line), \"small\", \"medium\" or \"large\", the "
+    "least that fits; the height follows the content. A house kit is loaded first and follows light and dark, so "
+    "never hard-code colours: use var(--text), var(--muted), var(--faint), var(--accent), var(--soft), "
+    "var(--line), var(--bg), var(--ok), var(--warn), var(--bad). Styled for you: h1 (the title), h2 (a muted "
+    "subhead), p, ul, ol, li, a (https only), table, input[type=range], button, code. Classes: .muted, .ok, .warn, "
+    ".bad; <ol class=\"steps\" id=\"...\"> for steps its reader presses through (then sb.steps(\"#...\"); "
+    "sb.light(sel, n) lights item n); .big for one large figure or phrase; .row for a line of small labels; .grid "
+    "for tiles; .tag for a small label. sb.num(v, digits) writes a number with separators. <sb-math>TeX</sb-math> "
+    "inline or <sb-math display>TeX</sb-math> as a block; <sb-diagram>mermaid</sb-diagram> for a diagram. Keep it "
+    "as small as it can be and still help; make it interactive only when that helps understanding. Reply with the "
+    "fragment only.")
 
 
 def visuals_on():
