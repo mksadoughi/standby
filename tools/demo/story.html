@@ -172,10 +172,10 @@ function work(t) {
   }
   const ok = pop(span(mq, .55, 1));                                      // the mini window: Standby's mark, over everything
   if (ok > 0) g += orbApp(ORB[0], ORB[1], 40 * ok, callState(t), t, clamp(ok));
-  // as it suggests the changes, a card above the mini window lists them; it's put away when the page moves over
+  // as it suggests the colours, a card above the mini window shows them; it's put away when the page moves over
   const vk = pop(span(t, SAY.c3.at + .3, SAY.c3.at + .65)) * (1 - span(t, MOVE - .5, MOVE));
   if (vk > 0) g += visualCard(1572, ORB[1] - 58, 440, t < SAY.c3.at + 1.4 ? { brief: "The changes to the page" } :
-    { title: "Two changes", steps: ["Lighter header", "Sign-up button in the accent colour"], active: t < SAY.c3.at + 2.2 ? 0 : 1 }, clamp(vk));
+    { title: "A lighter look", swatches: [["Header", "#ffffff"], ["Button", "#5046e5"], ["Text", "#1d1c2b"]] }, clamp(vk));
   // the meeting, on a video call beside it
   const vw = 0;                                                        // the meeting is the room (the options are in meeting-options.html)
   if (vw > 0) g += `<g opacity="${fo(vw)}" transform="translate(${f((1 - vw) * 40)} 0)">` + videoCall(VCALL, t) + "</g>";

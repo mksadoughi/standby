@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""A light music bed under the film's voices: soft chords and a slow pluck, written here (no samples), dipping while
-anyone speaks.
+"""A light music track under the film's voices, written here (no samples): bright and easy, about 104 beats a
+minute, as product films use; a soft kick, finger snaps, a quiet shaker, a bouncy bass and marimba chords over
+D, A, Bm, G. It dips while anyone speaks.
 
     python3 tools/demo/music.py VOICES.wav OUT.wav
 
@@ -12,34 +13,54 @@ import wave
 
 import numpy as np
 
-CHORDS = [[50, 57, 61, 66], [47, 54, 57, 62], [43, 50, 54, 59], [45, 52, 57, 61]]   # Dmaj7, Bm7, Gmaj7, A: four seconds each
-BAR, BED_DB, DIP = 4.0, -33.0, .6                                                    # the bed's loudness; how far it dips under words
+CHORDS = [[62, 66, 69], [61, 64, 69], [59, 62, 66], [59, 62, 67]]        # D, A, Bm, G: one bar each
+ROOTS = [38, 45, 47, 43]
+BEAT = 60 / 104
+BED_DB, DIP = -30.0, .55                                                  # the music's loudness; how far it dips under words
 
 
 def hz(m):
     return 440.0 * 2 ** ((m - 69) / 12)
 
 
+def add(buf, at, sound, sr):
+    s = int(at * sr)
+    if 0 <= s < len(buf):
+        m = min(len(buf) - s, len(sound))
+        buf[s:s + m] += sound[:m]
+
+
+def tone(f, dur, decay, sr, harm=()):
+    u = np.arange(int(dur * sr)) / sr
+    w = np.sin(2 * np.pi * f * u) + sum(a * np.sin(2 * np.pi * f * k * u) * np.exp(-u / (decay * .25)) for k, a in harm)
+    return w * np.exp(-u / decay) * np.minimum(u / .004, 1)
+
+
 def bed(n, sr):
-    t = np.arange(n) / sr
-    pad, pluck = np.zeros(n), np.zeros(n)
-    for i in range(int(n / sr / BAR) + 2):
-        a, notes = i * BAR, CHORDS[i % len(CHORDS)]
-        # each chord swells in and overlaps the next by a second and a half
-        env = np.clip((t - a + 1.5) / 1.5, 0, 1) * np.clip((a + BAR + 1.5 - t) / 1.5, 0, 1)
-        env = np.sin(env * np.pi / 2) ** 2
-        for m in notes:
-            f = hz(m)
-            pad += env * (np.sin(2 * np.pi * f * t) + .5 * np.sin(2 * np.pi * f * 1.003 * t) + .25 * np.sin(4 * np.pi * f * t))
-        # a soft pluck on the half beat, an octave up, walking the chord
-        for k, j in enumerate([0, 2, 1, 3, 2, 3, 1, 2]):
-            s = int((a + k * BAR / 8) * sr)
-            if s >= n:
-                break
-            m = min(n - s, int(1.6 * sr))
-            u = np.arange(m) / sr
-            pluck[s:s + m] += np.sin(2 * np.pi * hz(notes[j] + 12) * u) * np.exp(-u / .45) * np.minimum(u / .01, 1)
-    out = pad / np.abs(pad).max() + .35 * pluck / max(np.abs(pluck).max(), 1e-9)
+    rng = np.random.default_rng(7)
+    noise = lambda d: rng.standard_normal(int(d * sr))
+    hi = lambda x: np.diff(x, prepend=0)                                  # a little brighter: the noise's highs
+    u = np.arange(int(.3 * sr)) / sr
+    kick = np.sin(2 * np.pi * np.cumsum(55 + 70 * np.exp(-u / .04)) / sr) * np.exp(-u / .12)
+    snap = hi(noise(.15)) * np.exp(-np.arange(int(.15 * sr)) / sr / .035) * .5
+    shake = hi(hi(noise(.06))) * np.exp(-np.arange(int(.06 * sr)) / sr / .015) * .12
+    drums, bass, keys = np.zeros(n), np.zeros(n), np.zeros(n)
+    for b in range(int(n / sr / (4 * BEAT)) + 1):
+        a, ch, root = b * 4 * BEAT, CHORDS[b % 4], ROOTS[b % 4]
+        for k in range(4):
+            add(drums, a + k * BEAT, kick if k in (0, 2) else snap, sr)
+        for k in range(8):
+            add(drums, a + k * BEAT / 2, shake * (1 if k % 2 else .55), sr)
+        for at, m in ((0, root), (1.5, root), (2, root + 12), (3, root + 7)):    # the bass: one, the and of two, three, four
+            add(bass, a + at * BEAT, tone(hz(m), .5, .22, sr, ((2, .4),)), sr)
+        for at, idx in ((0, (0, 1, 2)), (.75, (1, 2)), (1.5, (0, 2)), (2.5, (0, 1, 2)), (3.25, (1, 2))):   # marimba stabs, a little off the beat
+            for i in idx:
+                add(keys, a + at * BEAT, tone(hz(ch[i]), .7, .28, sr, ((4, .35), (10, .08))), sr)
+        if b % 2 == 1:                                                    # a bell answering every other bar
+            for k, i in enumerate((2, 1, 0)):
+                add(keys, a + (3.5 + k * .25) * BEAT, .5 * tone(hz(ch[i] + 12), .8, .35, sr), sr)
+    norm = lambda x: x / max(np.abs(x).max(), 1e-9)
+    out = .8 * norm(drums) + .9 * norm(bass) + norm(keys)
     return out * 10 ** (BED_DB / 20) / np.sqrt((out ** 2).mean())
 
 

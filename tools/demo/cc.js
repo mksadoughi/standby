@@ -178,7 +178,7 @@ DEFS_EXTRA += `<radialGradient id="orbapp" cx=".35" cy=".3" r=".8"><stop offset=
 
 // A call's visual card, as the app draws it above the mini window (and in the call view): drawn at the app's own size,
 // 300 wide, and scaled to w. Its bottom right sits at (x, y), so it grows upwards from the orb. o: { title, brief
-// (Drawing…, while it's made), steps: [..] with active (the one lit), bars: [[label, part 0..1, value]], nav: [n, m, isNew] }.
+// (Drawing…, while it's made), steps: [..] with active (the one lit), swatches: [[name, hex]], bars: [[label, part 0..1, value]], nav: [n, m, isNew] }.
 const VK = DARK ? { bg: "#24242f", ink: "#ececf4", mut: "#a3a3b6", soft: "#33325a", num: "#8b87ff", line: "#3a3a48", btn: "#33333f" }
                 : { bg: "#fcfcfd", ink: "#1d1d26", mut: "#6e6e78", soft: "#efeefc", num: "#3f37c9", line: "#ececf0", btn: "#ededf0" };
 function visualCard(x, y, w, o, op = 1) {
@@ -200,6 +200,13 @@ function visualCard(x, y, w, o, op = 1) {
         ui(48, yy + 20, esc(st), 13.5, { fill: on ? VK.ink : VK.mut });
       yy += 36.5;
     });
+    if (o.swatches) {                                                   // colours: a chip each, its name and hex under it
+      const n = o.swatches.length, cw = (272 - (n - 1) * 10) / n;
+      o.swatches.forEach(([nm, hex], i) => { const x0 = 14 + i * (cw + 10);
+        g += box(x0, yy + 2, cw, 54, 10, hex, { stroke: VK.line, sw: 1 }) + ui(x0 + 2, yy + 76, esc(nm), 12.5, { fill: VK.ink, weight: 600 }) +
+          ui(x0 + 2, yy + 93, hex, 11, { fill: VK.mut, font: MONO }) });
+      yy += 100;
+    }
     (o.bars || []).forEach(([n, p, v], i) => {
       g += ui(16, yy + 14, esc(n), 12, { fill: VK.mut }) + box(80, yy + 5, 170 * p, 10, 5, i ? "#a5a0f0" : VK.num) + ui(286, yy + 14, esc(v), 12, { anchor: "end", fill: VK.mut });
       yy += 24;

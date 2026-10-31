@@ -7,8 +7,8 @@ var STORY_HOLD = [6.9, 2.0];
 var STORY_LINES = [
   {"id": "c1", "who": "Claude", "voice": "alba", "at": 15.2, "text": "Hey! Sure, let's go over it.", "dur": 2.2},
   {"id": "y2", "who": "You", "voice": "jean", "at": 17.8, "text": "The header feels heavy, and the sign-up button gets lost.", "dur": 2.7},
-  {"id": "c3", "who": "Claude", "voice": "alba", "at": 21.0, "text": "Agreed. A lighter header, and the button in the accent colour?", "dur": 3.8},
-  {"id": "y4", "who": "You", "voice": "jean", "at": 25.3, "text": "Yes. And let's see it in dark mode too.", "dur": 2.6},
+  {"id": "c3", "who": "Claude", "voice": "alba", "at": 21.0, "text": "Agreed. A lighter header, in colours like these?", "dur": 3.0},
+  {"id": "y4", "who": "You", "voice": "jean", "at": 25.0, "text": "Yes, like that. And a dark mode too.", "dur": 2.4},
   {"id": "c5", "who": "Claude", "voice": "alba", "at": 28.3, "text": "On it.", "dur": 0.8},
   {"id": "c6", "who": "Claude", "voice": "alba", "at": 31.8, "text": "Done. Have a look.", "dur": 1.4},
   {"id": "n1", "who": "Nadia", "voice": "fantine", "at": 41.0, "text": "The new page looks great.", "dur": 1.8},
