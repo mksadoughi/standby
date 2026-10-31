@@ -80,6 +80,12 @@ check("  one that failed: not shown", !vr.some(r => r.k.startsWith("v:2")));
 check("  one still drawing whose line isn't there yet: after the rest, Drawing… with its brief, escaped",
   vr[vr.length - 1].k === "v:3:drawing" && /Drawing\u2026|Drawing…/.test(vr[vr.length - 1].h) && vr[vr.length - 1].h.includes("The three &lt;kinds&gt;"), vr[vr.length - 1]);
 check("  each has a close button, its frame filled in later (never in the row's markup)", (vh.match(/class="mx-visx"/g) || []).length === 2 && !/<iframe/.test(vh));
+// one whose question was dropped (they went on): no line has its id, so by its own time, never after newer lines
+const dropped = mxRows(Object.assign({}, vd, {visuals: [{id: 7, state: "ready", qid: "q-gone", at: 2.5, what: "x"}],
+  chat: vd.chat.concat([C("me", "Later question", 10), Object.assign(C("ai", "Later answer.", 11), {qid: "q3"})])}), null, false, false, true);
+const dk = dropped.map(r => r.k);
+check("a visual whose question was dropped: placed by its own time, before the later lines", dk.indexOf("v:7:ready") > dk.findIndex(k => /c:1/.test(k))
+  && dk.indexOf("v:7:ready") < dk.findIndex(r => dropped[dk.indexOf(r)].h.includes("Later question")), dk);
 MXVHIDE.add("talk-4:1");
 check("  closed in this window: gone from the conversation", !mxRows(vd, null, false, false, true).some(r => r.k.startsWith("v:1")));
 check("  a meeting has none", !mxRows(Object.assign({}, vd, {info: {id: "meet-1", kind: "meeting", runs: []}}), null, false, false).some(r => r.k.startsWith("v:")));

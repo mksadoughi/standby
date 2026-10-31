@@ -235,8 +235,8 @@ function mxCopyRow(e, b) {
 }
 function mxRows(d, lv, live, paused, calling, tasks) {
   const i = d && d.info, isCall = !!(i && (i.kind === "talk" || /^talk-/.test(i.id || "")));
-  // a call's visuals, each under the voice line it was drawn for (its question's id); one whose line isn't
-  // written yet (the voice still talking) or that went with no line, after the rest
+  // a call's visuals, each under the voice line it was drawn for (its question's id); one with no such line (the
+  // voice still talking, or its early question dropped for the one they went on to) by its own time, never last
   const vsid = i && i.id, vis = isCall ? ((d && d.visuals) || []).filter(v => v.state !== "failed" && !MXVHIDE.has(vsid + ":" + v.id)) : [];
   const placed = new Set(), visRows = qid => { for (const v of vis) if ((qid === null || v.qid === qid) && !placed.has(v.id)) { placed.add(v.id); add("v:" + v.id + ":" + v.state, mxVisHTML(vsid, v)) } };
   const runs = (i && i.runs) || [], at = r => { let k = 0; while (k + 1 < runs.length && r.t >= runs[k + 1].t - 0.01) k++; return runs.length ? runs[k].start + (r.t - runs[k].t) : (i && i.started || 0) + r.t };
@@ -252,8 +252,9 @@ function mxRows(d, lv, live, paused, calling, tasks) {
     else if (e.kind === "source_off" && e.name) seps.push(sep(tOf(e.from), len === null ? e.name + " is off" : e.name + " was off · " + mxMin(len)));
     else if (e.kind === "mic_muted") seps.push(sep(tOf(e.from), len === null ? "Your mic is muted" : "Your mic was muted · " + mxMin(len)));
     else if (e.kind === "meeting") seps.push(sep(tOf(e.from), "Meeting audio paused" + (len === null ? "" : " · " + mxMin(len)) + (e.reason ? ": " + e.reason : ""))) }
+  const lined = new Set(((d && d.chat) || []).map(c => c.qid).filter(Boolean));
   const rows = mxJoin((d && d.transcript) || []).map((r, n) => ({at: at(r), r, n})).concat(((d && d.chat) || []).map((c, n) => ({at: c.at || 0, c, n})))
-    .concat(d ? seps : []).sort((a, b) => a.at - b.at);
+    .concat(d ? seps : []).concat(vis.filter(v => !lined.has(v.qid)).map(v => ({at: v.at || Infinity, vis: v}))).sort((a, b) => a.at - b.at);
   // keyed chunks: a line said, or an answer come, adds itself without redrawing the rest
   const tx = [], add = (k, h) => tx.push({k, h});
   // a call's rows read as a conversation (the user, 2026-10-25): a run of the voice's lines shares one mark, a
@@ -261,6 +262,7 @@ function mxRows(d, lv, live, paused, calling, tasks) {
   let lastWho, asked = 0, came = 0, prev = null, lastAt = null, lastClock = null;
   const QUIET = 120;
   for (const x of rows) {
+    if (x.vis) { if (!placed.has(x.vis.id)) { placed.add(x.vis.id); add("v:" + x.vis.id + ":" + x.vis.state, mxVisHTML(vsid, x.vis)) } prev = null; continue }
     if (x.sep) { add("s:" + x.sep, `<div class="mx-sep2">${esc(x.sep)}</div>`); lastWho = undefined; prev = null; if (/^Started /.test(x.sep)) lastClock = x.sep.slice(8); continue }
     if (x.c && isCall && !(x.c.role === "ai" && (x.c.unsaid || x.c.result != null && !String(x.c.text || "").trim()))) {
       if (lastAt != null && (x.c.at || 0) - lastAt >= QUIET) { add("t:" + x.n, `<div class="mx-time">${esc(clock(x.c.at))}</div>`); prev = null }
