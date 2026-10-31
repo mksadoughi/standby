@@ -53,6 +53,8 @@ while True:
         if kind == "voice" and "Held, not sent" in text and "name it notes" in text.split("They said:")[-1]:
             emit({"type": "result", "is_error": False,     # the held hand-off, updated with what they said since
                   "result": "Got it. [DEEP] Create a sample text file named notes.txt in the project folder."}); continue
+        if kind == "voice" and "check the free disk space" in text.split("They said:")[-1]:   # a hand-off and nothing said
+            emit({"type": "result", "is_error": False, "result": "[DEEP] Check how much disk space is left."}); continue
         if kind == "voice" and "yes, put it up" in text.split("They said:")[-1]:     # their yes, and work handed on
             emit({"type": "result", "is_error": False,
                   "result": "Here it is. [SHOW VISUAL] [DEEP] Draw the release flow."}); continue
@@ -523,6 +525,18 @@ try:
           and not any(t.startswith(os.path.join(fake_home, "Documents")) for t in touched), (everything, unguarded, touched))
     # Show while talking: "[VISUAL: …]" is never said; a fork of the voice's conversation draws it in the
     # background, its file in the spool for the Mac (drawing, then ready), counted in Usage as its own kind.
+    ids = []
+    got = ask("[VOICE] just check the free disk space for me", ident=ids)
+    tpath = os.path.join(root, "sessions", TALK, "trace.jsonl")
+    deadline = time.time() + 5
+    row = []
+    while time.time() < deadline and not row:
+        row = [json.loads(x) for x in open(tpath) if '"ev": "model"' in x and (ids[-1] if ids else "none") in x] if os.path.exists(tpath) else []
+        time.sleep(0.05)
+    check("a turn answered by a hand-off alone: flagged silent in the trace (they heard nothing: \"you didn't hear me\")",
+          got.startswith("[HANDOFF]") and row and row[-1].get("outcome") == "handed" and row[-1].get("spoken") == ""
+          and row[-1].get("silent") is True, (got, row[-1:]))
+    ask("[VOICE] what time is it there")           # its note ("You took this deeper") goes with this turn
     got = ask("[VOICE] yes, put it up")
     check("[SHOW VISUAL] with a hand-off: the work goes, the tag after it for the Mac, never in the work",
           got == "[HANDOFF] Draw the release flow. [SHOW VISUAL]", got)

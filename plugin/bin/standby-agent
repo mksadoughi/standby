@@ -4011,12 +4011,18 @@ class Voice(object):
                 self.stopped.add(ident)
         first = timing.get("first")
         engine = _LIVE_SESSION.get((session, "voice"))
+        # what of its reply they heard: the words before a hand-off. None at all is a silent turn (after a long
+        # turn of theirs it read as "you didn't hear me", talk-20261031-013229): flagged, for the trace's reviews
+        spoken = VISUAL_RE.sub("", CANCEL_RE.sub("", (replied or "").split(DEEP_TAG, 1)[0])).replace(SHOW_TAG, "").strip()
+        silent = bool(handed and not spoken)
+        if silent:
+            sys.stderr.write("voice: SILENT: a hand-off with nothing said to them (%s)\n" % ident)
         if sbtrace.enabled(session):
             sbtrace.event(session, "model", q=ident, model=runs(session, "voice", self.model), sent_chars=len("\n\n".join(msg) if isinstance(msg, list) else msg),
                           sent="\n\n".join(msg) if isinstance(msg, list) else msg,
                           prep_ms=int((sent_at - t0) * 1000), first_token_ms=int(first * 1000 - (sent_at - t0) * 1000)
                           if first is not None else None, model_ms=int((replied_at - sent_at) * 1000),
-                          total_ms=int((time.time() - t0) * 1000), reply=replied, said=text, went=went,
+                          total_ms=int((time.time() - t0) * 1000), reply=replied, said=text, spoken=spoken, silent=silent, went=went,
                           tokens=getattr(engine, "last_share", None),
                           outcome="stopped" if text == STOPPED else "handed" if handed else "quiet" if (text or "").strip()
                           == QUIET_TAG else {0: "answered", ClaudeSession.INTERRUPTED: "interrupted"}.get(rc, "error"))
