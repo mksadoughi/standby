@@ -53,6 +53,9 @@ while True:
         if kind == "voice" and "Held, not sent" in text and "name it notes" in text.split("They said:")[-1]:
             emit({"type": "result", "is_error": False,     # the held hand-off, updated with what they said since
                   "result": "Got it. [DEEP] Create a sample text file named notes.txt in the project folder."}); continue
+        if kind == "voice" and "yes, put it up" in text.split("They said:")[-1]:     # their yes, and work handed on
+            emit({"type": "result", "is_error": False,
+                  "result": "Here it is. [SHOW VISUAL] [DEEP] Draw the release flow."}); continue
         if kind == "voice" and "how the release goes" in text.split("They said:")[-1]:     # words, a visual, words
             emit({"type": "result", "is_error": False,
                   "result": "Here's how it goes. [VISUAL: the release steps, build then test] Build first, then test."}); continue
@@ -518,6 +521,12 @@ try:
           and not any(t.startswith(os.path.join(fake_home, "Documents")) for t in touched), (everything, unguarded, touched))
     # Show while talking: "[VISUAL: …]" is never said; a fork of the voice's conversation draws it in the
     # background, its file in the spool for the Mac (drawing, then ready), counted in Usage as its own kind.
+    got = ask("[VOICE] yes, put it up")
+    check("[SHOW VISUAL] with a hand-off: the work goes, the tag after it for the Mac, never in the work",
+          got == "[HANDOFF] Draw the release flow. [SHOW VISUAL]", got)
+    m = sa.DeepMarker()
+    check("the stream never says \"[SHOW VISUAL]\" either", "".join([m.feed("Here it is. [SHOW VI"), m.feed("SUAL] Look."), m.flush()])
+          == "Here it is.  Look.")
     m = sa.DeepMarker()
     check("the stream never says a visual signal, even split across pieces",
           "".join([m.feed("Here's how [VIS"), m.feed("UAL: the steps, build then"), m.feed(" test] it goes."), m.flush()])

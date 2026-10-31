@@ -3105,6 +3105,9 @@ def cmd_stop(_args):
 # (drawing, then ready with its html, or failed with why). Only while config.json "call_visuals" is on (the
 # default); off, the voice is told nothing of it (its prelude) and nothing is drawn.
 VISUAL_OPEN = "[VISUAL"
+# The voice's "[SHOW VISUAL]": the call's visuals brought into view (the mini window if no window is up, its
+# card opened again), only on the user's yes. Never said; kept for the Mac (ui.lite_ask), whatever else it did.
+SHOW_TAG = "[SHOW VISUAL]"
 VISUAL_RE = re.compile(r"\[VISUAL:?\s*([^\]]*)\]")
 VISUAL_MAX = 64 * 1024                        # bytes of a fragment the card takes
 VISUAL_TIMEOUT = 90
@@ -3206,8 +3209,8 @@ class DeepMarker(object):
     signals, never something to show or say. A tail that may still become one of them
     is held back until it is clear."""
 
-    TAGS = (DEEP_TAG, QUIET_TAG, END_TAG, "[CANCEL", VISUAL_OPEN)
-    BRACKETED = ("[CANCEL", VISUAL_OPEN)     # signals that end at their "]": dropped whole
+    TAGS = (DEEP_TAG, QUIET_TAG, END_TAG, "[CANCEL", VISUAL_OPEN, SHOW_TAG)
+    BRACKETED = ("[CANCEL", VISUAL_OPEN, "[SHOW VISUAL")     # signals that end at their "]": dropped whole
 
     def __init__(self):
         self.held, self.deep = "", False
@@ -3930,6 +3933,9 @@ class Voice(object):
             text, rc = engine_claude(msg, session, self.model, self.args.timeout, kind="voice",
                                      should_interrupt=interrupt, on_event=progress, label="voice")
         replied, replied_at = text, time.time()
+        show = SHOW_TAG in (text or "")          # kept aside: never said, nor in a task; back on the answer's end
+        if show:
+            text = " ".join(text.replace(SHOW_TAG, " ").split(" ")).strip()
         if VISUAL_RE.search(text or ""):     # never said, nor in a task; drawn beside the call when it's on
             asks = [w.strip() for w in VISUAL_RE.findall(text) if w.strip()]
             text = VISUAL_RE.sub("", text).strip()
@@ -4020,6 +4026,8 @@ class Voice(object):
             with cv.lock:
                 cv.forks[ident] = {"sid": turn.sid, "pos": self.pos_after, "words": sbledger.words(raw), "engine": turn}
             turn.finish()
+        if show and text != STOPPED:
+            text = "%s %s" % (text or "", SHOW_TAG)
         _answer(apath, text)
 
 

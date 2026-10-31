@@ -82,6 +82,7 @@ def fake_talk(sid=None, wait=90, workspace=None, attach=None, copy=False, where=
 
 
 ui.start_talk = fake_talk
+ui.visual_where = lambda sid: "off"           # no visuals here, but where they're asked about
 real_begin_ask, real_run_ask = ui._begin_ask, ui._run_ask
 begun = []
 ui._begin_ask = lambda sid, q, voice=False, own=False: begun.append((q, own))
@@ -286,6 +287,32 @@ answers.append("Sure, what should it be called?")
 ui.ask_spoken(sid, "Write a file. But before you write it, confirm the name with me.", None, None)
 check("  their whole turn is asked, with what the dropped one carried", ui.LITE_RESUMED in asked[-1]
       and asked[-1].endswith("confirm the name with me.") and "handoff" not in kinds(), asked[-1])
+# Where a visual would be seen (visual_where): told when it changes, as the tasks are; nothing while visuals are
+# off. And "[SHOW VISUAL]", on their yes: the call's visuals brought into view, never said.
+where_was, show_was, where_now, shown = ui.visual_where, ui.visual_show, ["the main window"], []
+ui.visual_where = lambda s: where_now[0]
+ui.visual_show = lambda b: (shown.append(b.get("session")), {"ok": True, "where": "the mini window"})[1]
+answers.append("Sure.")
+ui.ask_spoken(sid, "draw it for me", None, None)
+check("the voice is told where a visual would be seen", ui.LITE_VISUAL_SEEN % "the main window" in asked[-1], asked[-1][:300])
+answers.append("Sure.")
+ui.ask_spoken(sid, "and again", None, None)
+check("  once, until it changes", "[VISUALS]" not in asked[-1], asked[-1][:300])
+where_now[0] = None
+answers.append("Want it in the mini window?")
+ui.ask_spoken(sid, "draw the flow", None, None)
+check("  no window up: told it wouldn't be seen (so it asks, never says it shows one nobody can see)",
+      ui.LITE_VISUAL_UNSEEN in asked[-1], asked[-1][:300])
+answers.append("Here it is. [SHOW VISUAL]")
+said = ui.ask_spoken(sid, "yes please", None, None)
+check("  their yes: [SHOW VISUAL] brings it into view, and is never said", shown == [sid] and said == "Here it is.", (shown, said))
+where_now[0] = "off"
+answers.append("Sure.")
+ui.ask_spoken(sid, "anything", None, None)
+check("  visuals off: nothing about them", "[VISUALS]" not in asked[-1])
+ui.visual_where, ui.visual_show = where_was, show_was
+for t in ui.LITE_CALLS[sid]["tasks"].values():
+    t["seen"] = True
 # A summary made after the hello goes with one turn. Its voice keeps its own conversation (the default), so an
 # early question they went on from has given it already: never again in front of their words (it went twice).
 ui.LITE_CALLS[sid]["gist"] = "The user is shipping the release."

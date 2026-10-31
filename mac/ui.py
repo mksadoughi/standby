@@ -3611,6 +3611,14 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     carried = [m for m in c.get("inbox", []) if not m["seen"]]
     for m in carried:
         m["seen"] = True
+    # where a visual it asks for would be seen now (visual_where): told when that changes, as the
+    # tasks are, so it never says it shows one nobody can see; nothing at all while visuals are off
+    where = visual_where(sid)
+    if where != "off":
+        seen = LITE_VISUAL_SEEN % where if where else LITE_VISUAL_UNSEEN
+        if seen != c.get("visual_told"):
+            notes.append(seen)
+            c["visual_told"] = seen
     # news the voice worded that they never heard (they spoke first): in its conversation as said, so it's told
     # here, never told again on its own (it called that a repeat; "which notification?" after a Resume)
     unheard = c.pop("unheard", []) + (vs.take_told() if hasattr(vs, "take_told") else [])
@@ -3642,6 +3650,10 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     if c.pop("ending", False):                     # its goodbye is said in full, then the call ends
         c["hanging_up"] = True                     # nothing more is said unless they go on
         threading.Thread(target=_lite_hang_up, args=(sid,), name="lite-hang-up", daemon=True).start()
+    if SHOW_TAG in str(answer or ""):              # on their yes: the call's visuals brought into view
+        answer = " ".join(str(answer).replace(SHOW_TAG, " ").split())
+        shown = visual_show({"session": sid})
+        log("lite: %s: the voice brings its visuals into view: %s" % (sid, shown.get("where") or shown.get("error")))
     if str(answer or "").strip() == QUIET_TAG:
         return ""                                  # the voice chose to say nothing
     if not str(answer or "").startswith(HANDOFF_TAG):
@@ -3814,6 +3826,10 @@ def lite_progress(b):
     return {"ok": True}
 
 
+# Where a visual the voice asks for would be seen now (visual_where), as a fact for it.
+LITE_VISUAL_SEEN = "[VISUALS] A visual you ask for now would be seen in %s."
+LITE_VISUAL_UNSEEN = "[VISUALS] A visual you ask for now wouldn't be seen: no Standby window is up."
+SHOW_TAG = "[SHOW VISUAL]"                     # standby-agent's: the voice brings its visuals into view
 # News it worded on its own that they never heard (they spoke first), with their next turn.
 LITE_UNHEARD = ("[UNHEARD] What you were about to tell them on your own never reached them, they spoke first:\n%s\n"
                 "[END UNHEARD]")
@@ -3903,6 +3919,7 @@ def _lite_tell(sid):
         failed = answer is None or answer.strip() == "(stopped)" or voice_mod.spoken_error(answer) != answer
         if not failed:
             answer = answer.replace(END_TAG, "")   # news isn't the user asking to hang up
+            answer = answer.replace(SHOW_TAG, "")  # brought into view only on their yes, in a turn of theirs
             if HANDOFF_TAG in answer:              # it takes something deeper from the news: its words, then the work
                 answer, work = answer.split(HANDOFF_TAG, 1)
                 if work.strip() and sid in LITE_CALLS:

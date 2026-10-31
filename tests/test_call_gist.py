@@ -203,6 +203,7 @@ def fake_talk(sid=None, wait=90, workspace=None, attach=None, copy=False, where=
 
 
 ui.start_talk, ui.live_session = fake_talk, (lambda *a, **k: live_now[0])
+ui.visual_where = lambda sid: "off"           # no visuals here
 ui.lite_publish = lambda cc, ev: None
 ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None, commit=None: (ui.PENDING.pop(sid, None), asked.append(q), answers.pop(0))[2]
 os.environ["FAKE_REPLY"] = "Gist two: the changelog is next."
