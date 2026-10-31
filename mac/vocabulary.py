@@ -181,6 +181,12 @@ def readable(folder, repo=REPO):
     return True
 
 
+def readable_all(repo=REPO):
+    """Standby's code runs from a guarded folder (so every one of its kind may be read)."""
+    repo = Path(repo)
+    return any(repo == g or g in repo.parents for g in GUARDED)
+
+
 def git_authors(folder, run=subprocess.run):
     """The names in a folder's recent git history, if it is a git checkout."""
     if not (Path(folder) / ".git").exists() or not Path("/usr/bin/git").exists():
@@ -215,7 +221,10 @@ def local_projects(timeout=30):
     """The folders Claude Code has worked in on this Mac, newest first: the
     agent's own list, which reads each from its newest transcript's cwd."""
     try:
-        r = subprocess.run([sys.executable, str(REPO / "plugin" / "bin" / "standby-agent"), "projects"], stdin=subprocess.DEVNULL,
+        # Not even looked at in a guarded folder (a stat is an access there), unless this code runs from one
+        unguarded = [] if readable_all(REPO) else ["--unguarded"]
+        r = subprocess.run([sys.executable, str(REPO / "plugin" / "bin" / "standby-agent"), "projects"] + unguarded,
+                           stdin=subprocess.DEVNULL,
                            capture_output=True, text=True, timeout=timeout)
         got = json.loads(r.stdout.strip().splitlines()[-1])
     except Exception:
@@ -274,7 +283,7 @@ def build(folders, words, authors=git_authors, repo=REPO):
     seen = 0
     for folder in folders:
         folder = Path(folder)
-        if not folder.is_dir() or not readable(folder, repo):
+        if not readable(folder, repo) or not folder.is_dir():      # never even a stat in a guarded folder
             continue
         seen += 1
         for t in name_terms(folder.name):

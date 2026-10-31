@@ -1033,7 +1033,17 @@ def folder_facts(path):
     return {"path": full, "exists": exists, "claude_md": bool(claude_md)}
 
 
-def recent_projects(limit=MAX_PROJECTS):
+# Folders macOS guards: Standby Dictation lists projects without touching anything in them (a stat there
+# makes macOS ask it for that folder).
+GUARDED = tuple(os.path.expanduser(p) + os.sep for p in ("~/Desktop", "~/Documents", "~/Downloads",
+                                                         "~/Library/Mobile Documents")) + ("/Volumes/",)
+
+
+def guarded(path):
+    return (os.path.expanduser(path).rstrip(os.sep) + os.sep).startswith(GUARDED)
+
+
+def recent_projects(limit=MAX_PROJECTS, unguarded=False):
     """The folders Claude Code has worked in on this machine, newest first, each
     from the cwd its newest transcript names (the names under ~/.claude/projects
     can't be read back: every non-alphanumeric became "-"). Not Standby's own
@@ -1050,7 +1060,8 @@ def recent_projects(limit=MAX_PROJECTS):
                 pass
         path = at = None
         for mtime, f in sorted(files, reverse=True)[:3]:
-            path = next((os.path.realpath(c) for c in transcript_cwds(f) if os.path.isdir(c) and _slot_of(slot, c)), None)
+            path = next((os.path.realpath(c) for c in transcript_cwds(f)
+                         if not (unguarded and guarded(c)) and os.path.isdir(c) and _slot_of(slot, c)), None)
             if path:
                 at = mtime
                 break
@@ -1074,7 +1085,8 @@ def cmd_where(args):
 
 def cmd_projects(args):
     """Recent project folders and the default one, as JSON, for the app's picker."""
-    print(json.dumps({"projects": recent_projects(max(1, min(int(getattr(args, "limit", 0) or MAX_PROJECTS), 200))),
+    print(json.dumps({"projects": recent_projects(max(1, min(int(getattr(args, "limit", 0) or MAX_PROJECTS), 200)),
+                                                  unguarded=bool(getattr(args, "unguarded", False))),
                       "default": folder_facts(args.default)["path"]}))
     return 0
 
@@ -4716,6 +4728,7 @@ def main():
     p = sub.add_parser("projects", help="recent project folders and the default, as JSON")
     p.add_argument("--default", default="", help="the app's default folder, to give back as an absolute path")
     p.add_argument("--limit", type=int, default=0, help="how many")
+    p.add_argument("--unguarded", action="store_true", help="never one in a folder macOS guards (Documents, Desktop, ...)")
     p.set_defaults(func=cmd_projects)
 
     p = sub.add_parser("check-folder", help="is a folder there, with a CLAUDE.md? as JSON")

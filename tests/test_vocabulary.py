@@ -85,10 +85,31 @@ words.parent.mkdir(parents=True, exist_ok=True)
 words.write_text("# mine\nCloud Code => Claude Code\nmy sequel => MySQL\n")
 saved_guarded = v.GUARDED
 v.GUARDED = saved_guarded + [tmp / "guarded"]
+looked, real_is_dir = [], Path.is_dir
+Path.is_dir = lambda self: (looked.append(self), real_is_dir(self))[1]
 try:
     terms, seen = v.build([proj, hidden, tmp / "gone"], words)
+    ran = []
+    real_run = v.subprocess.run
+    v.subprocess.run = lambda argv, **kw: (ran.append(argv), real_run(["true"], **kw))[1]
+    was = v.REPO
+    try:
+        v.REPO = tmp / "code"                     # Standby Dictation's own copy, outside every guarded folder
+        v.local_projects()
+        outside = list(ran[-1]) if ran else []
+        v.REPO = tmp / "guarded" / "Standby"
+        v.local_projects()
+        inside = list(ran[-1]) if ran else []
+    finally:
+        v.REPO = was
+        v.subprocess.run = real_run
 finally:
+    Path.is_dir = real_is_dir
     v.GUARDED = saved_guarded
+check("a guarded folder is never even looked at (a stat there is what made macOS ask Standby Dictation)",
+      hidden not in looked and proj in looked, looked)
+check("  nor are the projects listed: in a guarded folder, never touched, unless Standby runs from one",
+      outside[-1:] == ["--unguarded"] and "--unguarded" not in inside, (outside, inside))
 names = [t for t, _w in terms]
 check("vocabulary: the user's fixes first, then names, then prose seen twice",
       names[0] in ("Claude Code", "MySQL") and "orion-client" in names and "Kubernetes" in names and "Orion" in names, terms)

@@ -492,6 +492,30 @@ try:
           (ask("[VOICE] what time is it there") or True) and
           "You took this deeper, and are working on it now: Create a sample text file"
           in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
+    # Standby Dictation lists the projects for its vocabulary: one in a folder macOS guards is never touched
+    # (a stat there made macOS ask Standby Dictation for Documents).
+    fake_home = tempfile.mkdtemp(prefix="sbhome-")
+    open_proj, guarded_proj = os.path.join(fake_home, "code", "orion"), os.path.join(fake_home, "Documents", "secret")
+    for proj in (open_proj, guarded_proj):
+        os.makedirs(proj)
+        slot = os.path.join(fake_home, ".claude", "projects", sa.project_slot(proj))
+        os.makedirs(slot)
+        open(os.path.join(slot, "s.jsonl"), "w").write(json.dumps({"type": "user", "cwd": proj}) + "\n")
+    home_was, guarded_was, isdir_was, temp_was, touched = os.environ["HOME"], sa.GUARDED, os.path.isdir, sa.TEMP_DIRS, []
+    os.environ["HOME"] = fake_home
+    sa.GUARDED = (os.path.join(fake_home, "Documents") + os.sep,)
+    sa.TEMP_DIRS = ("/nowhere/",)                 # this stand-in home is in a temporary folder, left out otherwise
+    os.path.isdir = lambda x: (touched.append(x), isdir_was(x))[1]
+    try:
+        everything = [p["path"] for p in sa.recent_projects()]
+        del touched[:]
+        unguarded = [p["path"] for p in sa.recent_projects(unguarded=True)]
+    finally:
+        os.environ["HOME"], sa.GUARDED, os.path.isdir, sa.TEMP_DIRS = home_was, guarded_was, isdir_was, temp_was
+    real = lambda x: os.path.realpath(x)
+    check("projects listed for Standby Dictation: none in a guarded folder, and nothing there even looked at",
+          real(guarded_proj) in everything and unguarded == [real(open_proj)]
+          and not any(t.startswith(os.path.join(fake_home, "Documents")) for t in touched), (everything, unguarded, touched))
     # Show while talking: "[VISUAL: …]" is never said; a fork of the voice's conversation draws it in the
     # background, its file in the spool for the Mac (drawing, then ready), counted in Usage as its own kind.
     m = sa.DeepMarker()

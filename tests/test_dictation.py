@@ -56,6 +56,31 @@ def tap(t, key, hold=0.08):
     return [(t, "mod", key, True), (t + hold, "mod", key, False)]
 
 
+# Standby Dictation runs its own copy of the code, never the checkout (one in ~/Documents had macOS ask it for
+# that folder after every rebuild): mac/ and plugin/bin/, only what changed, what's gone removed.
+src, dest = root / "checkout", root / "copy"
+for rel, text in (("mac/dictation.py", "print(1)\n"), ("mac/native/macos/dictation_app.py", "x = 1\n"),
+                  ("mac/__pycache__/dictation.cpython-312.pyc", "junk"), ("plugin/bin/standby-agent", "#!/bin/sh\n"),
+                  ("tests/test_x.py", "nope")):
+    (src / rel).parent.mkdir(parents=True, exist_ok=True)
+    (src / rel).write_text(text)
+os.chmod(src / "plugin/bin/standby-agent", 0o755)
+first = d.sync_code(src, dest)
+check("code copy: mac/ and plugin/bin/, no __pycache__, nothing else of the checkout",
+      first == ["mac/dictation.py", "mac/native/macos/dictation_app.py", "plugin/bin/standby-agent"]
+      and not (dest / "mac/__pycache__").exists() and not (dest / "tests").exists()
+      and os.access(dest / "plugin/bin/standby-agent", os.X_OK), first)
+check("  again with nothing changed: nothing written (so its CodeWatch sees only real changes)", d.sync_code(src, dest) == [])
+time.sleep(0.01)
+(src / "mac/dictation.py").write_text("print(2)\n")
+(src / "mac/native/macos/dictation_app.py").unlink()
+check("  a change and a removal: exactly those", d.sync_code(src, dest) == ["mac/dictation.py", "mac/native/macos/dictation_app.py"]
+      and (dest / "mac/dictation.py").read_text() == "print(2)\n" and not (dest / "mac/native/macos/dictation_app.py").exists())
+app_was, d.APP = d.APP, root / "no such.app"
+check("  the login item without the app runs that copy, never the checkout",
+      d.agent_program()[1:] == [str(d.CODE / "mac" / "dictation.py"), "run"], d.agent_program())
+d.APP = app_was
+
 ctl = (59, 62)                                 # a double tap of Control: the gesture itself
 # `standby dictation on` says the setup window's line only while something is missing.
 d.STATUS.write_text(json.dumps({"pid": 4242, "permissions": {"listen": True, "post": True, "mic": "allowed"}}))
@@ -726,7 +751,8 @@ import plistlib  # noqa: E402
 pl = plistlib.load(open(PLIST, "rb"))
 check("login item: starts at login, restarts after a crash, not after Quit",
       pl["RunAtLoad"] is True and pl["KeepAlive"] == {"SuccessfulExit": False} and pl["Label"] == d.LABEL, pl)
-check("  runs the script when the app is not built", pl["ProgramArguments"][-2:] == [str(d.HERE / "dictation.py"), "run"])
+check("  runs its own copy of the code when the app is not built (never the checkout)",
+      pl["ProgramArguments"][-2:] == [str(d.CODE / "mac" / "dictation.py"), "run"])
 exe = d.APP / "Contents" / "MacOS" / "Standby Dictation"
 exe.parent.mkdir(parents=True); exe.write_text("")
 d.write_agent()

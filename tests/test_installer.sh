@@ -151,8 +151,10 @@ check "dictation app: menu-bar only, asks for the microphone, own id" \
 DE="$H/.standby/app-build/dictation/StandbyDictation.py"
 check "dictation app built in alias mode from its entry point, with icon" \
   "[[ \"\$(cat \"$DP/build.txt\")\" == '$DE|True|$ICON_DICT' ]]"
-check "dictation entry point: venv packages, repo code, runs it, own log" \
-  "$REALPY -m py_compile $DE && grep -q 'site.addsitedir(\"/' $DE && grep -q 'sys.path.insert(0, \"$REPO/mac\")' $DE && grep -qF 'dictation.main([\"run\"])' $DE && grep -q 'dictation.log' $DE"
+check "dictation entry point: venv packages, its own copy of the code (never the checkout: macOS asked it for Documents), runs it, own log" \
+  "$REALPY -m py_compile $DE && grep -q 'site.addsitedir(\"/' $DE && grep -q 'sys.path.insert(0, \"$H/.standby/code/mac\")' $DE && ! grep -q '$REPO' $DE && grep -qF 'dictation.main([\"run\"])' $DE && grep -q 'dictation.log' $DE"
+check "  that copy is there: its code and the agent's" \
+  "cmp -s $REPO/mac/dictation.py $H/.standby/code/mac/dictation.py && cmp -s $REPO/plugin/bin/standby-agent $H/.standby/code/plugin/bin/standby-agent && [[ ! -e $H/.standby/code/mac/__pycache__ ]]"
 check "installer says how to turn dictation on" "grep -q 'standby dictation on' $T/out.1"
 check "  and what macOS will ask, when, and that Standby takes only the sound" \
   "grep -q 'macOS will ask, the first time each is needed; choose Allow' $T/out.1 && grep -q 'Screen & System Audio Recording' $T/out.1 && grep -q 'takes only the sound, never the screen' $T/out.1 && grep -q 'Input Monitoring' $T/out.1 && grep -q 'Changed your mind: System Settings > Privacy & Security' $T/out.1"
