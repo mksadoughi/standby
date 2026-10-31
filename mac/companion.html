@@ -362,15 +362,23 @@ function words() {
 // "New" when another comes, never pulling them away). Closed, it stays closed until the next one comes, which
 // opens it again at n / n. Its size is the visual's choice (data-size: line, small, medium, large or a width),
 // at least one line (240 x 44), at most half the screen each way; taller scrolls in the visual.
-const VC = { sid: null, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, sent: "", seenT: null, html: "" };
+const VC = { sid: null, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, sent: "", tag: null, html: "" };
 const VX = '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
 const CHEV = d => `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
 const VFOOT = 34, VMIN_W = 240, VMIN_H = 44;
-function cardReset(sid) { clearTimeout(VC.seenT); Object.assign(VC, { sid, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, seenT: null, html: "" }) }
+function cardReset(sid) { Object.assign(VC, { sid, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, tag: null, html: "" }) }
 async function cardList() {
   try { const r = await api("/api/visuals?session=" + encodeURIComponent(VC.sid)); VC.list = (r.visuals || []).filter(v => v.state !== "failed") } catch (e) {}
   const top = VC.list.length ? VC.list[VC.list.length - 1].id : 0;
-  if (top > VC.newest) { VC.newest = top; if (VC.closed) { VC.closed = false; VC.at = null } }
+  // new ones come in the order they were made (the user, 2026-10-31): at the end (or closed), the card goes to the
+  // first one not seen yet, and › says New while more wait; looking back through them, it stays where it is
+  if (top > VC.newest) {
+    VC.newest = top;
+    if (VC.closed || VC.at === null) {
+      const first = VC.list.findIndex(x => !VC.seen.has(x.id));
+      VC.closed = false; VC.at = first < 0 || first >= VC.list.length - 1 ? null : first;
+    }
+  }
   render();
 }
 function cardWidth(want, w, max) {
@@ -391,9 +399,9 @@ function visualCard() {
   cardSaid(VC.closed);
   if (VC.closed) return cardPost(null);
   const m = VC.list.length, i = VC.at === null ? m - 1 : Math.min(VC.at, m - 1), v = VC.list[i];
-  // New: the newest while it's unseen; one gone back to was the newest once, so it's been seen
-  const later = VC.list.slice(i + 1).some(x => !VC.seen.has(x.id)), fresh = i === m - 1 && !VC.seen.has(v.id);
-  if (fresh && !VC.seenT) VC.seenT = setTimeout(() => { VC.seen.add(v.id); VC.seenT = null; render() }, 5000);   // New until it's been up a while
+  // seen once it's shown, drawn: marked New for its first moments; › says New while later ones wait unseen
+  if (v.state === "ready" && !VC.seen.has(v.id)) { VC.seen.add(v.id); VC.tag = { id: v.id, until: Date.now() + 5000 }; setTimeout(render, 5100) }
+  const later = VC.list.slice(i + 1).some(x => !VC.seen.has(x.id)), fresh = !!(VC.tag && VC.tag.id === v.id && Date.now() < VC.tag.until);
   const maxW = Math.floor((screen.availWidth || 1440) / 2), maxH = Math.floor((screen.availHeight || 900) / 2), foot = m > 1 ? VFOOT : 0;
   const sz = VC.sz[v.id] || { want: "medium", w: 0, h: 0 }, drawing = v.state !== "ready";
   // a diagram's own width wins over the size asked for (its text never shrinks), up to the most a card may be
@@ -425,7 +433,7 @@ function cardPost(m) {
 }
 function cardGo(d) {
   const m = VC.list.length, i = (VC.at === null ? m - 1 : VC.at) + d;
-  VC.at = i >= m - 1 ? null : Math.max(0, i); clearTimeout(VC.seenT); VC.seenT = null; render();
+  VC.at = i >= m - 1 ? null : Math.max(0, i); render();
 }
 function cardClose() { VC.closed = true; VC.at = null; VC.list.forEach(v => VC.seen.add(v.id)); render() }
 // the visual says its size as its content changes (the panel passes it on): the card follows

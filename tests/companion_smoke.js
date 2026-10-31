@@ -257,6 +257,14 @@ const CARD_CHECKS = `
   cardClose(); await fresh();
   AT([V(1), V(2), V(3), V(4)]); await fresh();
   ok("  the next one opens it again by itself, at 4 / 4", last().id === 4 && els.vcard.innerHTML.includes("4 / 4"), last());
+  // two new ones at once (the user, 2026-10-31): in the order they were made, the first unseen first
+  AT([V(1), V(2), V(3), V(4), V(5), V(6)]); await fresh();
+  ok("two new at once: the card shows the first of them (5 / 6), New on it, and › says New for the next",
+     last().id === 5 && els.vcard.innerHTML.includes("5 / 6") && els.vcard.innerHTML.includes('class="nx"') && els.vcard.innerHTML.includes("vnew"), els.vcard.innerHTML);
+  cardGo(1);
+  ok("  › : the next (6 / 6), and nothing more waits", last().id === 6 && els.vcard.innerHTML.includes("6 / 6") && !els.vcard.innerHTML.includes('class="nx"'), els.vcard.innerHTML);
+  AT([V(1), V(2), V(3), V(4), V(5), V(6), V(7)]); await fresh();
+  ok("  one more while at the end: it comes up (7 / 7)", last().id === 7 && els.vcard.innerHTML.includes("7 / 7"), last());
   window.visualSize({ want: "line", w: 150, h: 30 });
   ok("sizes: a line at least 240 wide; its own height, the pager under it", last().w === 240 && last().h === 30 + 34, last());
   window.visualSize({ want: "large", w: 900, h: 2000 });
