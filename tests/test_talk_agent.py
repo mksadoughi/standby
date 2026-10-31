@@ -329,13 +329,15 @@ try:
           call.startswith("You are the user's Claude Code session in /Users/you/code/orion, on a voice call with them: its mouth and ears.")
           and "It's all you: same agent, same work, same memory, so never speak of a separate agent or helper." in call
           and "Anything else, like changing a file, running a command, searching the web or reading where your tools can't, is your deeper side's" in call
-          and "reply [DEEP] and what to do, in your words; what was said goes with it." in call
+          and "reply [DEEP] and what they want, in your words, with anything you know that matters, not how to do it; "
+              "what was said goes with it." in call
+          and "[DEEP] and what they want, with anything you know that matters, not how to do it" in ledger
           and "Whenever you take something deeper, they hear a few words first; after they've talked a while, say back "
               "briefly what you understood, so a misreading shows at once." in call
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 360, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 370, (len(call.split()), call[:300]))
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
@@ -347,10 +349,10 @@ try:
           "Your own tools are only for looking: you can read and search where your session works, and ~/.standby." in call
           and "So whatever they ask for is yours to do" in call
           and "Don't try it yourself first; a tool refusing you only means it's your deeper side's to do, never that it can't be done." in call
-          and "this whole Claude Code session, with every tool and connection it has." in call
+          and "this whole Claude Code session, with every tool it has." in call
           and "Never say you will look into something" not in call and "SUGGEST" not in call)
     check("  honest hand-offs: TASKS and its deeper side say what has happened; never a guess",
-          "TASKS says what you've sent and whether it's running or ended; only that and your deeper side say what has "
+          "TASKS says what you've sent and where it stands; only that and your deeper side say what has "
           "happened, so never guess." in call and "[SESSION]" not in call and "[RESULT]" not in call)
     check("  its deeper side never talks to them: it tells the voice, and the voice judges what they hear",
           "Your deeper side never talks to them. It tells you what it thinks they should know, as \"Deeper side: ...\", "
