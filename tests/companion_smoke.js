@@ -225,6 +225,11 @@ const CARD_CHECKS = `
   AT([V(1), V(2)]); await fresh();
   ok("a second: the card goes to it (2 / 2), the pager below, its New mark", last().id === 2 && els.vcard.innerHTML.includes("2 / 2")
      && els.vcard.innerHTML.includes("vnew") && last().h === last().area.h + 34 && last().hit.length === 2, [last(), els.vcard.innerHTML]);
+  // the browser reads markup back changed (disabled="", entities): the buttons must not be redrawn each poll
+  { let sets = 0, v = els.vcard.innerHTML; Object.defineProperty(els.vcard, "innerHTML", { configurable: true,
+      get: () => v.replace(/ disabled(?=[ >])/g, ' disabled=""'), set: x => { sets++; v = x } });
+    await fresh(); await fresh();
+    ok("  the same card polled again: its buttons are not drawn again (a click across a redraw was lost)", sets === 0, sets) }
   cardGo(-1);
   ok("  ‹: back to 1 / 2, no New on it (it was seen as the newest)", last().id === 1 && els.vcard.innerHTML.includes("1 / 2") && !els.vcard.innerHTML.includes("vnew"), last());
   AT([V(1), V(2), V(3)]); await fresh();

@@ -345,11 +345,11 @@ function words() {
 // "New" when another comes, never pulling them away). Closed, it stays closed until the next one comes, which
 // opens it again at n / n. Its size is the visual's choice (data-size: line, small, medium, large or a width),
 // at least one line (240 x 44), at most half the screen each way; taller scrolls in the visual.
-const VC = { sid: null, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, sent: "", seenT: null };
+const VC = { sid: null, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, sent: "", seenT: null, html: "" };
 const VX = '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg>';
 const CHEV = d => `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
 const VFOOT = 34, VMIN_W = 240, VMIN_H = 44;
-function cardReset(sid) { clearTimeout(VC.seenT); Object.assign(VC, { sid, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, seenT: null }) }
+function cardReset(sid) { clearTimeout(VC.seenT); Object.assign(VC, { sid, list: [], at: null, seen: new Set(), closed: false, newest: 0, key: "", sz: {}, seenT: null, html: "" }) }
 async function cardList() {
   try { const r = await api("/api/visuals?session=" + encodeURIComponent(VC.sid)); VC.list = (r.visuals || []).filter(v => v.state !== "failed") } catch (e) {}
   const top = VC.list.length ? VC.list[VC.list.length - 1].id : 0;
@@ -379,7 +379,10 @@ function visualCard() {
   if (foot) html += `<div class="vft"><span class="pager"><button title="Back" aria-label="Back" onclick="cardGo(-1)"${i ? "" : " disabled"}>${CHEV("M10 3.5 5.5 8l4.5 4.5")}</button>` +
     `<span>${i + 1} / ${m}</span><button${later ? ' class="nx"' : ""} title="${later ? "Newer, new" : "Newer"}" aria-label="${later ? "Newer, new" : "Newer"}" onclick="cardGo(1)"${i < m - 1 ? "" : " disabled"}>` +
     `${CHEV("M6 3.5 10.5 8 6 12.5")}${later ? "<i>New</i>" : ""}</button></span>${fresh ? '<span class="vnew">New</span>' : ""}</div>`;
-  if (box.innerHTML !== html) box.innerHTML = html;
+  // drawn again only when what it says changed: the page's markup never reads back the same as written
+  // (disabled="", entities), so comparing with it redrew the buttons each poll, and a click whose press and
+  // release fell either side of a redraw was lost (close, ‹ and › on a live call, the user, 2026-10-31)
+  if (VC.html !== html) { VC.html = html; box.innerHTML = html }
   box.style.display = "";
   const ch = drawing ? Math.ceil(($("vdraw") || box).getBoundingClientRect().height) : (sz.h || 120);
   const H = Math.round(Math.max(VMIN_H, Math.min(maxH, ch + foot)));
@@ -388,7 +391,7 @@ function visualCard() {
 }
 function cardPost(m) {
   const box = $("vcard");
-  if (!m) { box.style.display = "none"; box.innerHTML = ""; m = { type: "card", w: 0, h: 0 } }
+  if (!m) { box.style.display = "none"; box.innerHTML = ""; VC.html = ""; m = { type: "card", w: 0, h: 0 } }
   const k = JSON.stringify(m);
   if (k !== VC.sent) { VC.sent = k; box.dataset.card = k; post(m) }
 }
