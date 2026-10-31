@@ -1,6 +1,6 @@
 """The recorder exits without a crash report: its threads waited for and its exit hooks
 run (Core Audio's listeners removed, the captures stopped), then the process ends without
-tearing Python down, so a callback from Core Audio's or ScreenCaptureKit's own thread
+tearing Python down, so a callback from Core Audio's own thread
 never lands in an interpreter that is going ("Python quit unexpectedly" on the user's
 screen as a call ended, 2026-10-26). No audio is opened: listeners on the device list only."""
 import agentpath  # noqa: E402,F401  (first: never the real ~/.standby)

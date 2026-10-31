@@ -121,8 +121,8 @@ check "standby command linked to the repo" "[[ \"\$(readlink $H/.local/bin/stand
 check "standby-ctx linked" "[[ -x $H/.local/bin/standby-ctx ]]"
 check "no standalone meeting skill linked any more" "[[ ! -e $H/.claude/skills/meeting-standby ]]"
 P="$H/Applications/Standby.app/Contents"
-check "app bundle: Info.plist valid, asks for the microphone, says why for the Desktop and Documents" \
-  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$P/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby' and d['CFBundleIdentifier']=='dev.standby.app' and d.get('NSMicrophoneUsageDescription') and 'read the project you' in d.get('NSDesktopFolderUsageDescription', '') and d.get('NSDocumentsFolderUsageDescription') == d['NSDesktopFolderUsageDescription']))\""
+check "app bundle: Info.plist valid, asks for the microphone and the Mac's sound (the user's words), says why for the Desktop and Documents, macOS 14.4 on" \
+  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$P/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby' and d['CFBundleIdentifier']=='dev.standby.app' and d.get('NSMicrophoneUsageDescription') and d.get('NSAudioCaptureUsageDescription') == 'Standby hears the other side of your call so your Claude Code can follow it.' and d.get('LSMinimumSystemVersion') == '14.4' and 'read the project you' in d.get('NSDesktopFolderUsageDescription', '') and d.get('NSDocumentsFolderUsageDescription') == d['NSDesktopFolderUsageDescription']))\""
 E="$H/.standby/app-build/Standby.py"
 check "app built in alias mode from the generated entry point, with icon" \
   "[[ \"\$(cat $P/build.txt)\" == '$E|True|$ICON_STANDBY' ]]"
@@ -140,15 +140,15 @@ check "  constraints.txt pins every package install.sh names, mlx-audio among th
   "$REALPY - $REPO/constraints.txt <<'PYC'
 import re, sys
 pins = {re.sub(r'[-_.]+', '-', l.split('==')[0]).lower() for l in open(sys.argv[1]) if '==' in l and not l.startswith('#')}
-named = 'numpy sounddevice parakeet-mlx mlx-whisper sherpa-onnx pywebview onnxruntime pyobjc-framework-AVFoundation pyobjc-framework-ScreenCaptureKit mlx-audio sentencepiece py2app'
+named = 'numpy sounddevice parakeet-mlx mlx-whisper sherpa-onnx pywebview onnxruntime pyobjc-framework-AVFoundation pyobjc-framework-CoreAudio mlx-audio sentencepiece py2app'
 sys.exit(0 if all(n.lower() in pins for n in named.split()) else 1)
 PYC"
 check "voice mode's own voice: Pocket TTS's packages" "grep -q -- '-c $REPO/constraints.txt mlx-audio sentencepiece' $T/pip.args"
 check "  said either way: installed, or a macOS voice speaks" \
   "grep -q \"voice mode's voice (Pocket TTS\" $T/out.1 || grep -q 'Pocket TTS did not install: voice mode speaks with a macOS voice' $T/out.1"
 DP="$H/Applications/Standby Dictation.app/Contents"
-check "dictation app: menu-bar only, asks for the microphone, own id" \
-  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$DP/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby Dictation' and d['CFBundleIdentifier']=='dev.standby.dictation' and d.get('LSUIElement') is True and d.get('NSMicrophoneUsageDescription')))\""
+check "dictation app: menu-bar only, asks for the microphone and the Mac's sound, own id" \
+  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$DP/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby Dictation' and d['CFBundleIdentifier']=='dev.standby.dictation' and d.get('LSUIElement') is True and d.get('NSMicrophoneUsageDescription') and d.get('NSAudioCaptureUsageDescription')))\""
 DE="$H/.standby/app-build/dictation/StandbyDictation.py"
 check "dictation app built in alias mode from its entry point, with icon" \
   "[[ \"\$(cat \"$DP/build.txt\")\" == '$DE|True|$ICON_DICT' ]]"
@@ -158,7 +158,7 @@ check "  that copy is there, for both apps and all they start (calls failed: Ope
   "cmp -s $REPO/mac/dictation.py $H/.standby/code/mac/dictation.py && cmp -s $REPO/mac/standby $H/.standby/code/mac/standby && cmp -s $REPO/plugin/bin/standby-agent $H/.standby/code/plugin/bin/standby-agent && [[ ! -e $H/.standby/code/mac/__pycache__ ]] && [[ \"\$(cat $H/.standby/code/.source)\" == \"\$(cd $REPO && pwd -P)\" ]]"
 check "installer says how to turn dictation on" "grep -q 'standby dictation on' $T/out.1"
 check "  and what macOS will ask, when, and that Standby takes only the sound" \
-  "grep -q 'macOS will ask, the first time each is needed; choose Allow' $T/out.1 && grep -q 'Screen & System Audio Recording' $T/out.1 && grep -q 'takes only the sound, never the screen' $T/out.1 && grep -q 'Input Monitoring' $T/out.1 && grep -q 'Changed your mind: System Settings > Privacy & Security' $T/out.1"
+  "grep -q 'macOS will ask, the first time each is needed; choose Allow' $T/out.1 && grep -q 'System Audio Recording ' $T/out.1 && grep -q 'only the sound, never the screen' $T/out.1 && ! grep -q 'Screen & System' $T/out.1 && grep -q 'Input Monitoring' $T/out.1 && grep -q 'Changed your mind: System Settings > Privacy & Security' $T/out.1"
 mkdir -p "$T/fakewebview"
 cat > "$T/fakewebview/webview.py" <<'EOF'
 import json, os, urllib.request
@@ -244,7 +244,7 @@ run 5; rc=$?
 check "an app signed ad hoc before: macOS will ask for its permissions once more, and the install says so" \
   "[[ $rc -eq 0 ]] && grep -q \"macOS will ask for Standby's permissions once more\" $T/out.5"
 check "  and what to do if it keeps asking with the switch already on: the button, or the reset" \
-  "grep -q \"click \\\"It's on already\\\" on the call's sound in Standby\" $T/out.5 && grep -q 'tccutil reset ScreenCapture dev.standby.app' $T/out.5"
+  "grep -q \"click \\\"It's on already\\\" on the call's sound in Standby\" $T/out.5 && grep -q 'tccutil reset AudioCapture dev.standby.app' $T/out.5"
 check "  neither said when nothing changed" "! grep -q 'tccutil reset' $T/out.2"
 touch "$T/py2app-fails"; run 4; rc=$?
 check "app build failure is not fatal" "[[ $rc -eq 0 ]]"
@@ -303,10 +303,15 @@ HOME="$H" STANDBY_HOMEBREW="$T/no-homebrew" PATH="$B:$H/.local/bin:/usr/bin:/bin
 check "  not when the command is already on this Terminal's PATH" \
   "grep -q 'Terminal:       standby help' $T/out.py3 && ! grep -q 'open a new Terminal window first' $T/out.py3"
 
-# Which Macs: macOS 14 or later, room on the disk, and a word about memory; Python 3.12 or 3.13.
+# Which Macs: macOS 14.4 or later, room on the disk, and a word about memory; Python 3.12 or 3.13.
 SW_VERS=13.6.9 run m1; rc=$?
-check "macOS 13: refused, naming macOS 14 (Sonoma) and the version found" \
-  "[[ $rc -ne 0 ]] && grep -q 'Standby needs macOS 14 (Sonoma) or later. This Mac has macOS 13.6.9' $T/out.m1 && grep -q 'Software Update' $T/out.m1"
+check "macOS 13: refused, naming macOS 14.4 and the version found" \
+  "[[ $rc -ne 0 ]] && grep -q 'Standby needs macOS 14.4 or later. This Mac has macOS 13.6.9' $T/out.m1 && grep -q 'Software Update' $T/out.m1"
+SW_VERS=14.3.1 run m4; rc=$?
+check "  macOS 14.3: refused too (a tap can't be allowed before 14.4)" \
+  "[[ $rc -ne 0 ]] && grep -q 'Standby needs macOS 14.4 or later. This Mac has macOS 14.3.1' $T/out.m4"
+SW_VERS=14.4 run m5; rc=$?
+check "  macOS 14.4: on it goes" "[[ $rc -eq 0 ]] && grep -q 'macOS 14.4 on Apple Silicon' $T/out.m5"
 SW_VERS= run m2; rc=$?
 check "  a version it can't read: refused, not guessed" "[[ $rc -ne 0 ]] && grep -q 'macOS of an unknown version' $T/out.m2"
 SW_VERS=15.1 run m3; rc=$?

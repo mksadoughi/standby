@@ -51,7 +51,7 @@ if locale.getpreferredencoding(False).lower().replace("-", "") != "utf8":
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import transport  # noqa: E402
-from native import app, permissions, window, workspace  # noqa: E402  (this build, Screen & System Audio Recording, the window, an app's icon)
+from native import app, permissions, window, workspace  # noqa: E402  (this build, System Audio Recording, the window, an app's icon)
 import vocabulary  # noqa: E402  (the words the meetings teach dictation)
 import addmac  # noqa: E402  (Add your Mac: an agent's meeting)
 import firstuse  # noqa: E402  (the setup window before a first call or meeting)
@@ -403,7 +403,7 @@ def _session_info(sid, sdir, live):
             # What happened to the recording: the meeting's audio paused, and why.
             "events": read_jsonl(sdir / "events.jsonl"),
             # What the recorder hears, for the page to note a switch or a drop.
-            "sources": with_screen_why([dict((k, v) for k, v in src.items() if k != "level")
+            "sources": with_sound_why([dict((k, v) for k, v in src.items() if k != "level")
                                         for src in (read_json(sdir / "live.json").get("sources") or [])])
             if sid == live else []}
 
@@ -2139,91 +2139,80 @@ def _run_ask(sid, question, voice=False, on_event=None, on_queued=None, heard=No
     return answer.strip()
 
 
-# ---------------------------------------------------------------- Screen Recording
+# ---------------------------------------------------------------- System Audio Recording
 #
-# Meeting audio is captured with ScreenCaptureKit, so it needs Screen & System Audio
-# Recording. macOS asks once, ever; granting it ends in Quit & Reopen.
+# Meeting audio is taken with a Core Audio process tap, which needs System Audio Recording
+# (macOS 14.4 and later), never the screen. macOS never says whether it allows it: a build
+# that has heard the Mac's sound is allowed (native.permissions.sound_state), and a refusal
+# shows only in a capture, as silence while the app plays (its source's cause "permission").
 
-SNAP_ASKED = ROOT / "screen-permission-asked"     # macOS shows its prompt once, ever
-SNAP_WARNING = ("macOS will then ask to quit and reopen Standby. That pauses this session; "
-                "Resume continues it")
 ICONS = {}                # bundle id -> PNG bytes, or None for no such app: kept while the app runs (a meeting's app)
 BUNDLE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.\-]{0,199}$")
-_SNAP_CHECKS = {}                 # cached: available(), and permission for 2 s (the companion polls fast)
+_SOUND_CHECKS = {}                # cached: available(), and the state for 2 s (the companion polls fast)
 SETTINGS_OPENED = []              # System Settings opened by itself this launch: once, then just the line
-# Why the screen can't be recorded, in words. macOS can't be
-# read without asking, so from what this build did (native.appaudio.grants): its capture
-# heard the Mac, so it has the sound only; or an earlier build had the screen, so macOS
-# kept that old one in the list; or neither: it was never allowed.
-SCREEN_WHY = {
-    "audio_only": ("Standby can hear the Mac but not see the screen: turn it on under "
-                   "Screen & System Audio Recording, the top list"),
+# Why the Mac's sound isn't heard, in words, from what this build did (native.app.grants):
+# an earlier build heard it, so macOS's switch is for that one; or it was never allowed.
+SOUND_WHY = {
     "stale": ("Standby is switched on, but for an older copy of the app. Reset it: run "
-              "tccutil reset ScreenCapture dev.standby.app, then allow it again"),
-    "never": "Allow Screen Recording, then quit and reopen Standby",
+              "tccutil reset AudioCapture dev.standby.app, then allow it again"),
+    "never": "Allow Standby under System Audio Recording Only, in Privacy & Security",
 }
 
 
-def _snap_available():
-    if "available" not in _SNAP_CHECKS:
-        _SNAP_CHECKS["available"] = permissions.screen_available()
-    return _SNAP_CHECKS["available"]
+def _sound_available():
+    if "available" not in _SOUND_CHECKS:
+        _SOUND_CHECKS["available"] = permissions.sound_available()
+    return _SOUND_CHECKS["available"]
 
 
-def _snap_permitted(fresh=False):
-    at, ok = _SNAP_CHECKS.get("permission", (0.0, False))
+def _sound_state(fresh=False):
+    """native.permissions.sound_state(), kept 2 s: "allowed", "asked" or "not_asked"."""
+    at, state = _SOUND_CHECKS.get("state", (0.0, "not_asked"))
     if fresh or time.time() - at > 2.0:
-        ok = permissions.screen_allowed()
-        _SNAP_CHECKS["permission"] = (time.time(), ok)
-        if ok and not _SNAP_CHECKS.get("noted"):
-            _SNAP_CHECKS["noted"] = True
-            from native import appaudio
-            app.note_grant("screen")             # this build may record the screen
-    return ok
+        state = permissions.sound_state()
+        _SOUND_CHECKS["state"] = (time.time(), state)
+    return state
 
 
 # Standby.app's own bundle id (install.sh writes it): the one entry the reset touches.
 APP_ID = "dev.standby.app"
 # Tests put a stand-in here: the real one resets the user's own permission.
 TCCUTIL = shlex.split(os.environ.get("STANDBY_TCCUTIL") or "/usr/bin/tccutil")
-RESET_CMD = "tccutil reset ScreenCapture %s" % APP_ID
+RESET_CMD = "tccutil reset AudioCapture %s" % APP_ID
 
 
-def screen_reset():
-    """Standby is switched on in Screen & System Audio Recording, yet macOS says no:
-    the switch is for an older copy (macOS keeps one per build, and a rebuild makes a
-    new one). Reset Standby's own entry, and only that (tccutil, its bundle id), then
-    ask again: macOS's prompt, then Quit & Reopen. The user asks for it (a button, after
-    a confirm); never by itself."""
+def sound_reset():
+    """Standby is switched on under System Audio Recording, yet only silence comes: the
+    switch is for an older copy (macOS keeps one per build, and a rebuild makes a new one).
+    Reset Standby's own entry, and only that (tccutil, its bundle id), then ask again. The
+    user asks for it (a button, after a confirm); never by itself."""
     if os.environ.get("STANDBY_NO_DEVICES") and TCCUTIL == ["/usr/bin/tccutil"]:
         return {"state": "failed", "error": "not in a test: it would reset the user's own permission"}
     try:
-        r = subprocess.run(TCCUTIL + ["reset", "ScreenCapture", APP_ID], stdin=subprocess.DEVNULL,
+        r = subprocess.run(TCCUTIL + ["reset", "AudioCapture", APP_ID], stdin=subprocess.DEVNULL,
                            capture_output=True, text=True, timeout=15)
         ok, said = r.returncode == 0, (r.stdout + r.stderr).strip()
     except (OSError, subprocess.SubprocessError) as exc:
         ok, said = False, repr(exc)
-    log("screen: reset Standby's Screen Recording entry: %s (%s)" % ("done" if ok else "failed", said[:200]))
+    log("sound: reset Standby's System Audio Recording entry: %s (%s)" % ("done" if ok else "failed", said[:200]))
     if not ok:
         return {"state": "failed", "error": "macOS didn't reset it. Run this in Terminal, then allow Standby again: "
                 + RESET_CMD}
-    SNAP_ASKED.parent.mkdir(parents=True, exist_ok=True)
-    SNAP_ASKED.write_text("%d\n" % time.time())          # asked now: the next refusal opens System Settings
-    _SNAP_CHECKS.pop("permission", None)
+    _SOUND_CHECKS.pop("state", None)
     try:
-        permissions.ask_screen()                           # a test never reaches the real prompt
+        permissions.ask_sound()                            # a test never reaches the real prompt
     except Exception as exc:
-        log("screen: could not ask macOS again (%r)" % exc)
-    return {"state": "asked", "reason": "Allow Standby when macOS asks, then quit and reopen it"}
+        log("sound: could not ask macOS again (%r)" % exc)
+    return {"state": "asked", "reason": "Allow Standby when macOS asks"}
 
 
-def with_screen_why(sources):
+def with_sound_why(sources):
     """The meeting's sound refused (cause "permission"): marked "stale" when this build
-    is known to be newer than the one macOS allowed (screen_why), so the page says so."""
+    is known to be newer than the one that heard it (sound_why), so the page says so."""
     out = []
     for src in sources or []:
         if src.get("kind") == "meeting" and src.get("cause") == "permission":
-            src = dict(src, stale=screen_why() == "stale")
+            src = dict(src, stale=sound_why() == "stale")
         out.append(src)
     return out
 
@@ -2243,7 +2232,8 @@ def mic_permission():
     return {"ok": True}
 
 
-SCREEN_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
+# Privacy & Security > Screen & System Audio Recording: its System Audio Recording Only part
+SOUND_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
 FOLDERS_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders"
 _MIC_CHECK = {}                   # what macOS says of the mic, kept 2 s (the band asks every few seconds)
 
@@ -2286,8 +2276,10 @@ def access(sid, capture):
                       else "denied" if status in ("denied", "restricted")
                       else "ask" if status == "undetermined" else "allowed")
     if capture in ("auto", "meeting"):
-        out["meeting_audio"] = ("denied" if "meeting" in refused else "allowed" if _snap_permitted()
-                                else "denied" if SNAP_ASKED.exists() else "ask" if playing else "not_asked")
+        # asked and never heard: macOS's answer can't be read, so only a capture's silence says no
+        state = _sound_state()
+        out["meeting_audio"] = ("denied" if "meeting" in refused or state == "denied" else "allowed"
+                                if state != "not_asked" else "ask" if playing else "not_asked")
     # a folder macOS refuses its Claude (the agent notes a read refused there): its name, for the band
     folder = (read_json(SESSIONS / sid / "refused.json") or {}).get("folder")
     if isinstance(folder, str) and folder in ("Desktop", "Documents", "Downloads", "Pictures", "Movies", "Music"):
@@ -2313,7 +2305,7 @@ def lite_permission(b):
     if not valid_id(sid) or sid != live_session():
         return {"error": "Nothing is live"}
     now = access(sid, live_capture(sid))
-    pane = (MIC_PANE if now.get("mic") == "denied" else SCREEN_PANE if now.get("meeting_audio") == "denied"
+    pane = (MIC_PANE if now.get("mic") == "denied" else SOUND_PANE if now.get("meeting_audio") == "denied"
             else FOLDERS_PANE if now.get("folder_denied") else None)
     if pane is None:
         return {"ok": True, "allowed": True}
@@ -2321,48 +2313,43 @@ def lite_permission(b):
         subprocess.run(OPEN + [pane], stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
     except (OSError, subprocess.SubprocessError) as exc:
         return {"error": "Couldn't open System Settings (%s)" % exc.__class__.__name__}
-    log("lite permission: System Settings opened at %s" % {MIC_PANE: "Microphone", SCREEN_PANE: "Screen Recording"}.get(pane, "Files & Folders"))
+    log("lite permission: System Settings opened at %s" % {MIC_PANE: "Microphone", SOUND_PANE: "System Audio Recording"}.get(pane, "Files & Folders"))
     return {"ok": True}
 
 
-def screen_why():
-    """Why this build can't record the screen: "audio_only", "stale" or "never" (SCREEN_WHY)."""
-    from native import appaudio
+def sound_why():
+    """Why this build hears only silence: "stale" (an earlier build heard the Mac, so macOS's
+    switch is that one's) or "never" (SOUND_WHY)."""
     g, build = app.grants(), app.build_mark()
-    heard, screen = g.get("heard") or {}, g.get("screen") or {}
-    if build and heard.get("build") == build:
-        return "audio_only"                   # its capture hears the Mac: the sound list only
-    if build and screen.get("build") and screen["build"] != build:
-        return "stale"                        # an earlier build had it: macOS keeps that one
+    heard = g.get("sound") or {}
+    if build and heard.get("build") and heard["build"] != build:
+        return "stale"
     return "never"
 
 
-def screen_permission(confirm=False):
-    """Screen Recording, asked for: (state, reason), for the meeting audio's Allow
-    (POST /api/screen/permission).
+def sound_permission():
+    """System Audio Recording, asked for: (state, reason), for the meeting audio's Allow
+    (POST /api/sound/permission).
 
-    "granted"; "confirm": a session is live and macOS has never been asked, so the
-    page shows SNAP_WARNING first (granting ends in Quit & Reopen, which pauses the
-    session) and asks again with confirm; "asked": macOS's own prompt, once ever;
-    "settings": after that, System Settings at the right pane."""
-    if _snap_permitted(fresh=True):
+    "granted": this build has heard the Mac; "asked": macOS's own prompt, which a short
+    capture brings up, once a build; "settings": after that (macOS never says its answer),
+    System Settings at the right pane."""
+    state = _sound_state(fresh=True)
+    if state == "allowed":
         return "granted", ""
-    if live_session() and not confirm and not SNAP_ASKED.exists():
-        return "confirm", ""
-    if not SNAP_ASKED.exists():
-        SNAP_ASKED.parent.mkdir(parents=True, exist_ok=True)
-        SNAP_ASKED.write_text("%d\n" % time.time())
-        log("screen: asking macOS for Screen Recording")
-        permissions.ask_screen()
-        return "asked", "Allow Screen Recording in System Settings"
-    why = screen_why()
+    if state == "not_asked":
+        log("sound: asking macOS for System Audio Recording")
+        permissions.ask_sound()
+        _SOUND_CHECKS.pop("state", None)
+        return "asked", "Allow Standby when macOS asks"
+    why = sound_why()
     if not SETTINGS_OPENED:                    # by itself once a launch; after that, just the line
         SETTINGS_OPENED.append(time.time())
-        log("screen: Screen Recording still not allowed (%s); opening System Settings" % why)
-        permissions.open_screen_settings()
+        log("sound: System Audio Recording not heard yet (%s); opening System Settings" % why)
+        permissions.open_sound_settings()
     else:
-        log("screen: Screen Recording still not allowed (%s)" % why)
-    return "settings", SCREEN_WHY[why]
+        log("sound: System Audio Recording not heard yet (%s)" % why)
+    return "settings", SOUND_WHY[why]
 
 
 def snap_app_icon(bundle):
@@ -4401,7 +4388,7 @@ def setup_states(steps):
     if firstuse.MIC in steps:
         out[firstuse.MIC] = firstuse.mic_state(mic_access(), mine("mic"))
     if firstuse.SOUND in steps:
-        out[firstuse.SOUND] = firstuse.sound_state(_snap_permitted(), mine("heard"), SNAP_ASKED.exists())
+        out[firstuse.SOUND] = firstuse.sound_state(_sound_state())
     return out
 
 
@@ -4563,21 +4550,19 @@ def setup_act(b):
         return {"ok": True}
     if key not in held["pressed"]:
         held["pressed"].append(key)
-    _save_held(held)                                   # before macOS's Quit & Reopen, so the next launch takes it up
+    _save_held(held)                                   # kept, so a relaunch meanwhile takes it up
     try:
         if do == "allow_mic":
             log("setup: asking macOS for the microphone")
             permissions.ask_mic(_mic_answered)
         elif do == "allow_sound":
-            SNAP_ASKED.parent.mkdir(parents=True, exist_ok=True)
-            SNAP_ASKED.write_text("%d\n" % time.time())
-            _SNAP_CHECKS.pop("permission", None)
-            log("setup: asking macOS for Screen & System Audio Recording")
-            permissions.ask_screen()
+            log("setup: asking macOS for System Audio Recording")
+            permissions.ask_sound()
+            _SOUND_CHECKS.pop("state", None)
         else:
-            pane = MIC_PANE if key == firstuse.MIC else SCREEN_PANE
+            pane = MIC_PANE if key == firstuse.MIC else SOUND_PANE
             subprocess.run(OPEN + [pane], stdin=subprocess.DEVNULL, capture_output=True, timeout=10)
-            log("setup: System Settings opened at %s" % ("Microphone" if key == firstuse.MIC else "Screen Recording"))
+            log("setup: System Settings opened at %s" % ("Microphone" if key == firstuse.MIC else "System Audio Recording"))
     except Exception as exc:
         log("setup: %s failed (%r)" % (do, exc))
         return {"error": "macOS didn't answer: try again"}
@@ -5643,7 +5628,7 @@ def live_status(sid):
     if st:
         st["age"] = round(time.time() - st.get("at", 0), 1)
         if st.get("sources"):
-            st["sources"] = with_screen_why(st["sources"])
+            st["sources"] = with_sound_why(st["sources"])
     return st
 
 
@@ -6097,16 +6082,15 @@ class Handler(BaseHTTPRequestHandler):
         routes_with_id = ("/api/rename", "/api/speaker", "/api/copy", "/api/claude", "/api/voice", "/api/mic")
         if self.path in routes_with_id and not valid_id(sid):
             return self._json({"error": "no such session"}, 404)
-        if self.path == "/api/screen/permission":
-            ok, why = _snap_available()
-            state, reason = screen_permission(bool(b.get("confirm"))) if ok else ("unavailable", why)
-            out = dict({"state": state, "reason": reason}, **({"confirm": SNAP_WARNING} if state == "confirm" else {}))
-            log("screen permission: %s" % state)
-            return self._json(out)
+        if self.path == "/api/sound/permission":
+            ok, why = _sound_available()
+            state, reason = sound_permission() if ok else ("unavailable", why)
+            log("sound permission: %s" % state)
+            return self._json({"state": state, "reason": reason})
         if self.path == "/api/mic/permission":         # the mic refused: System Settings, at Microphone
             return self._json(mic_permission())
-        if self.path == "/api/screen/reset":           # its own entry only, on the user's click
-            return self._json(screen_reset())
+        if self.path == "/api/sound/reset":            # its own entry only, on the user's click
+            return self._json(sound_reset())
         if self.path == "/api/capture/answer":
             return self._json(capture_answer(b))
         if self.path == "/api/start" and TEST_ROUTES:      # tests only (test_ui): meetings start from Claude Code
@@ -7019,20 +7003,19 @@ function md(src){const L=String(src||"").replace(/\r/g,"").split("\n"),out=[],pa
 const clock=ts=>ts?new Date(ts*1000).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}):"";
 function elapsed(info){const r=(info.runs||[])[(info.runs||[]).length-1];return r?r.t+(Date.now()/1000-r.start):Date.now()/1000-info.started}
 let CERR=null;
-// Meeting audio needs Screen Recording: asked for from the meeting window's line (agents.js), and
+// Meeting audio needs System Audio Recording: asked for from the meeting window's line (agents.js), and
 // reset when macOS keeps it on for an older copy of Standby.
 const STALE_WHY="Standby is switched on, but for an older copy of the app. Reset it, then allow it again.";
-async function resetScreen(){
+async function resetSound(){
   if(!await ask("Reset Standby\u2019s permission?","macOS keeps this permission for each copy of Standby, and the switch you see belongs to an older one. "+
-    "Reset clears Standby\u2019s own entry (tccutil reset ScreenCapture dev.standby.app), then macOS asks again. Once you allow it, Standby quits and opens again.","Reset"))return;
-  let r={};try{r=await api("/api/screen/reset",{})}catch(e){r={error:"Standby is not answering"}}
+    "Reset clears Standby\u2019s own entry (tccutil reset AudioCapture dev.standby.app), then macOS asks again.","Reset"))return;
+  let r={};try{r=await api("/api/sound/reset",{})}catch(e){r={error:"Standby is not answering"}}
   toast(r.error||r.reason||"Reset: allow Standby when macOS asks")}
-async function allowScreen(confirmed){let r={};
-  try{r=await api("/api/screen/permission",confirmed?{confirm:true}:{})}catch(e){r={error:"Standby is not answering"}}
-  if(r.state==="confirm"&&!confirmed)return await ask("Allow Screen Recording?",r.confirm||"","Continue")?allowScreen(true):undefined;
-  // Still refused after the prompt: if the switch is on already, it's an older copy's.
-  if(r.state==="settings")return toast(r.reason||"Allow Standby in System Settings",{label:"It\u2019s on already",fn:resetScreen});
-  toast(r.error||r.reason||(r.state==="granted"?"Screen Recording is allowed":"Allow Standby in System Settings"))}
+async function allowSound(){let r={};
+  try{r=await api("/api/sound/permission",{})}catch(e){r={error:"Standby is not answering"}}
+  // Still silent after the prompt: if the switch is on already, it's an older copy's.
+  if(r.state==="settings")return toast(r.reason||"Allow Standby in System Settings",{label:"It\u2019s on already",fn:resetSound});
+  toast(r.error||r.reason||(r.state==="granted"?"Standby can hear the meeting\u2019s sound":"Allow Standby in System Settings"))}
 async function forgetVoices(){if(!await ask("Forget all voices?","Names already given in past sessions stay.","Forget",true))return;
   await api("/api/forget-voices",{});$("s_voices").textContent="No remembered voices yet";MYVOICE=null;paintMyVoice();toast("Forgot all voices")}
 // The user's own voice: learnt from talks, so in a room only they

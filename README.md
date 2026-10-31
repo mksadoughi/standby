@@ -30,7 +30,7 @@ The installer sets everything up and downloads the models once. After that, its 
 
 ## What it needs
 
-- **A Mac**: Apple Silicon, macOS 14 or later, and [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 2.1.299 or later,
+- **A Mac**: Apple Silicon, macOS 14.4 or later, and [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 2.1.299 or later,
   signed in (`claude update` gets the latest). 16 GB of memory is best for calls.
 - **A one-time download** of about 4.5 GB (2.5 GB on an 8 GB Mac), so leave 5 GB free. Standby's voice, 240 MB of
   it, comes with your first call.
@@ -39,7 +39,7 @@ The installer sets everything up and downloads the models once. After that, its 
   | macOS asks for | When | Why |
   |---|---|---|
   | Microphone | Your first call or meeting | To hear you |
-  | Screen & System Audio Recording | The first meeting that records your Mac's sound | To hear the other side of a video call. Standby takes the sound only, never the screen |
+  | System Audio Recording | The first meeting that records your Mac's sound | To hear the other side of a video call. Standby takes only the sound |
   | Input Monitoring and Accessibility | When you turn on dictation | To notice your dictation shortcut, and to type the text for you |
 
 - **Consent**: tell people when you're transcribing. In many places everyone in a conversation has to agree to being
@@ -130,7 +130,7 @@ This deletes your meetings and calls too; copy `~/.standby/sessions` first to ke
 |---|---|
 | `/standby` isn't there | Start a new Claude Code session, or run `/reload-plugins`. Check `claude --version` is 2.1.299 or later (`claude update`). Still missing: run `./install.sh` again |
 | The transcript stays empty | Allow Standby in System Settings > Privacy & Security > Microphone |
-| The other side of a call is missing | Allow Standby in System Settings > Privacy & Security > Screen & System Audio Recording, then reopen it |
+| The other side of a call is missing | Allow Standby in System Settings > Privacy & Security > Screen & System Audio Recording, under System Audio Recording Only |
 | "Claude can't sign in" | Run `claude`, then `/login` |
 | F5 does nothing | Settings > Dictation says what's missing, with a button to fix each |
 | Anything else | `standby check`, and the logs in `~/.standby` (`ui.log`, `daemon.log`, `dictation.log`) |

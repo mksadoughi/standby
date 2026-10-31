@@ -21,7 +21,7 @@ Security issues go privately, never in an issue: see [SECURITY.md](SECURITY.md).
 
 ## Development setup
 
-You need what a user needs (README, Requirements): an Apple Silicon Mac on macOS 14 or later, Python 3.12, and
+You need what a user needs (README, Requirements): an Apple Silicon Mac on macOS 14.4 or later, Python 3.12, and
 Claude Code signed in.
 
 ```bash
@@ -53,7 +53,7 @@ PY=~/.standby/venv/bin/python STANDBY_TESTS=full bash tests/run_all.sh     # als
 
 GitHub Actions runs the fast suites on Apple Silicon macOS 15 and 26, on pushes and pull requests, or through
 Actions > CI > Run workflow. Jobs are skipped while the repository is private. GitHub's macOS 14 runner retires on
-November 2, 2026; test Sonoma on a physical Mac. CI doesn't exercise actual microphones, speakers, permission prompts,
+November 2, 2026; test macOS 14.4 or later on a physical Mac. CI doesn't exercise actual microphones, speakers, permission prompts,
 model inference or different Mac hardware.
 
 ## Commits

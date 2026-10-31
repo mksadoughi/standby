@@ -1,10 +1,12 @@
-"""native/permissions.py on a Mac: AVFoundation for the microphone, CoreGraphics for
-Screen & System Audio Recording, which meeting audio (ScreenCaptureKit) and dictation's
-checks need, and its pane in System Settings. Nothing here captures anything.
+"""native/permissions.py on a Mac: AVFoundation for the microphone, and System Audio
+Recording, which meeting audio and room-only dictation need (Core Audio process taps),
+with its pane in System Settings. Nothing here captures anything, but ask_sound.
 
 The macOS parts load only when used, so this imports anywhere.
 """
 import os
+import threading
+import time
 
 SETTINGS_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
 
@@ -27,55 +29,71 @@ def ask_mic(answered):
         AVFoundation.AVMediaTypeAudio, lambda granted: answered(bool(granted)))
 
 
-def screen_available():
-    import platform
-    try:
-        major = int(platform.mac_ver()[0].split(".")[0])
-    except ValueError:
-        major = 0
-    if major < 14:
-        return False, "Needs macOS 14 or later"
-    try:
-        import ScreenCaptureKit  # noqa: F401
-    except ImportError:
-        return False, "Run ./install.sh again"
-    return True, ""
+def sound_available():
+    """(True, "") on a Mac with process taps a user can allow (macOS 14.4 and later)."""
+    from native.macos import appaudio
+    return appaudio.supported()
 
 
-def _cg(name):
-    """A CoreGraphics function, from Quartz, or from the framework itself: one pyobjc's
-    Quartz lacked CGPreflightScreenCaptureAccess (a KeyError from its lazy lookup)."""
-    try:
-        import Quartz
-        return getattr(Quartz, name)
-    except Exception:
-        import ctypes
-        lib = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
-        fn = getattr(lib, name)
-        fn.restype, fn.argtypes = ctypes.c_bool, []
-        return fn
+def sound_state():
+    """The Mac's sound, as far as it can be told (macOS never says): "allowed", this build
+    has heard it; "denied", a capture since heard only silence while an app played;
+    "asked", this build has brought macOS's prompt up and nothing tells its answer yet; or
+    "not_asked". Asks nothing."""
+    from native import app
+    from native.macos.appaudio import grant
+    g, build = app.grants(), app.build_mark()
+
+    def at(what):
+        row = g.get(grant(what)) or {}
+        return row.get("at", 0) if row and row.get("build") == build else None
+    heard, refused = at("sound"), at("sound_refused")
+    if refused is not None and (heard is None or refused > heard):
+        return "denied"
+    if heard is not None:
+        return "allowed"
+    return "asked" if at("sound_asked") is not None else "not_asked"
 
 
-def screen_allowed():
-    return bool(_cg("CGPreflightScreenCaptureAccess")())
+ASK_SECONDS = 30.0        # how long the capture that brings macOS's prompt runs (the user may take a while)
 
 
-def no_devices(what=None):
-    """A test (STANDBY_NO_DEVICES) never reaches the real screen, its prompt or System
-    Settings; a stand-in ScreenCaptureKit (no file of its own) is fine."""
-    if os.environ.get("STANDBY_NO_DEVICES") and (what is None or getattr(what, "__file__", None)):
-        raise RuntimeError("no real screen capture in a test (STANDBY_NO_DEVICES)")
-
-
-def ask_screen():
-    """macOS's own prompt, which offers System Settings. After the user allows it,
-    macOS asks to quit and reopen Standby: access starts with the next launch."""
+def ask_sound(done=None):
+    """macOS's own prompt for System Audio Recording, the first time this build asks: there
+    is no call that asks, so a capture of everything but Standby starts, and that brings it
+    up. It runs ASK_SECONDS, or until it hears a sound (allowed), on a thread of its own;
+    done(heard) after. Nothing heard is kept."""
     no_devices(None)
-    _cg("CGRequestScreenCaptureAccess")()
+    from native import app
+    from native.macos import appaudio
+    app.note_grant(appaudio.grant("sound_asked"))
+
+    def go():
+        cap = appaudio.MeetingAudio()
+        heard = False
+        try:
+            cap.start(appaudio.EVERYTHING, lambda block, t: None)
+            end = time.monotonic() + ASK_SECONDS
+            while time.monotonic() < end and not heard:
+                time.sleep(0.25)
+                heard = sound_state() == "allowed"
+        finally:
+            cap.stop()
+        if done is not None:
+            done(heard)
+    threading.Thread(target=go, name="ask for the sound", daemon=True).start()
 
 
-def open_screen_settings():
-    """System Settings at Privacy & Security > Screen & System Audio Recording."""
+def open_sound_settings():
+    """System Settings at Privacy & Security > Screen & System Audio Recording, whose
+    System Audio Recording Only part holds Standby's switch."""
     no_devices(None)
     import AppKit
     AppKit.NSWorkspace.sharedWorkspace().openURL_(AppKit.NSURL.URLWithString_(SETTINGS_URL))
+
+
+def no_devices(what=None):
+    """A test (STANDBY_NO_DEVICES) never reaches the Mac's sound, its prompt or System
+    Settings; a stand-in module (no file of its own) is fine."""
+    if os.environ.get("STANDBY_NO_DEVICES") and (what is None or getattr(what, "__file__", None)):
+        raise RuntimeError("no real capture in a test (STANDBY_NO_DEVICES)")

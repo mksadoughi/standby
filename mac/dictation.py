@@ -655,7 +655,7 @@ class Engine(threading.Thread):
 # real one, only once turned on ("room_only" in config.json, until the hands-on),
 # and never in a test.
 ROOM_ONLY = None
-SCREEN = {"allowed": None}        # Screen & System Audio Recording, as check_permissions last saw it
+SOUND = {"allowed": None}         # System Audio Recording, as check_permissions last saw it
 
 
 def room_for_dictation():
@@ -666,7 +666,7 @@ def room_for_dictation():
         return None
     try:
         import roomonly
-        return roomonly.for_dictation(log, permitted=SCREEN["allowed"])
+        return roomonly.for_dictation(log, permitted=SOUND["allowed"])
     except Exception as exc:
         log("room only: %r: the mic as it is" % exc)
         return None
@@ -929,23 +929,31 @@ def stale_steps():
             "then click Open Settings… and turn it on again." % app_name())
 
 
-def screen_allowed():
-    """Screen & System Audio Recording, for Standby Dictation, asking nothing."""
+def sound_allowed():
+    """System Audio Recording, for Standby Dictation, asking nothing: True once macOS has
+    been asked (its answer can't be read; refused, the Mac's sound is only silence)."""
     try:
-        from native import permissions
-        return bool(permissions.screen_allowed())
+        import roomonly
+        return bool(roomonly.allowed())
     except Exception:
         return False
 
 
-def ask_screen():
+def sound_asked():
+    try:
+        from native import permissions
+        return permissions.sound_state() != "not_asked"
+    except Exception:
+        return False
+
+
+def ask_sound():
     """macOS's own prompt for it, once; after that its pane in System Settings."""
     try:
-        ASKED_SCREEN.touch()
         from native import permissions
-        permissions.ask_screen()
+        permissions.ask_sound()
     except Exception as exc:
-        log("screen permission: %r" % exc)
+        log("sound permission: %r" % exc)
 
 
 # What the setup window (and Standby's Settings) list, in the order the app asks.
@@ -957,9 +965,8 @@ PERMISSIONS = (
 # offered beside them only while room_only is on, and optional: it never holds the
 # setup window open, nor the menu's first line, and macOS is asked only on its button.
 OPTIONAL = (
-    ("hear_mac", "Screen & System Audio Recording", "leaves out the Mac's sound, never the screen", "ScreenCapture"),
+    ("hear_mac", "System Audio Recording", "leaves out the Mac's sound", "ScreenCapture"),
 )
-ASKED_SCREEN = ROOT / "dictation.asked-screen"   # macOS asked once: later, its pane in System Settings
 WELCOMED = ROOT / "dictation.welcomed"     # the "Dictation is on" note was shown once
 
 

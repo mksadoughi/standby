@@ -3,7 +3,7 @@ speakers, music) taken back out of the microphone, so dictation and voice mode
 hear the user and the people near them, never the laptop.
 
     mic = the room + the Mac's own sound, as it comes back through the air
-    reference = the Mac's own sound, as it was played (ScreenCaptureKit, all apps but ours)
+    reference = the Mac's own sound, as it was played (a Core Audio tap, all apps but ours)
     -> an echo canceller learns the way from the speakers to the mic, per frequency,
        and takes out what the reference predicts; what is left is the room
 
@@ -212,10 +212,15 @@ REANCHOR = 0.15         # the mic's block this much later than its count says: s
 
 
 def allowed():
-    """May the Mac's sound be heard (Screen & System Audio Recording)? True, False,
-    or None when macOS cannot say. Asks nothing: it never shows a prompt."""
-    from native import appaudio
-    return appaudio.preflight()
+    """May the Mac's sound be taken (System Audio Recording) without bringing macOS's
+    prompt up? True once this build has asked (or heard it): macOS never says its answer,
+    and a refused tap is only silence, so nothing is taken out and the mic is as it is.
+    False before the setup has asked. Asks nothing."""
+    from native import permissions
+    try:
+        return permissions.sound_state() != "not_asked"
+    except Exception:
+        return False
 
 
 _LIVE = set()             # the references capturing now: stopped at exit, if no one did
@@ -223,8 +228,8 @@ _LIVE = set()             # the references capturing now: stopped at exit, if no
 
 @atexit.register
 def _stop_all():
-    """A process that exits with ScreenCaptureKit still handing it audio crashes in
-    pyobjc's callback ("Python quit unexpectedly" on the user's screen): stopped first.
+    """A process that exits with a tap still handing it audio may crash in its callback
+    ("Python quit unexpectedly" on the user's screen): stopped first.
     Runs after Python has waited for its threads, so no start is still under way."""
     for ref in list(_LIVE):
         ref.stop()
@@ -235,7 +240,7 @@ class Reference(object):
     on the monotonic clock, for each mic to be lined up with. capture:
     native.appaudio.capture(), or a fake with its interface (start(target, feed),
     stop(), ok, error). Nothing of it is kept longer, or written. start() returns at
-    once: ScreenCaptureKit takes 0.1-0.3 s to start, and until its first audio the mic
+    once: a tap takes a moment to start, and until its first audio the mic
     passes as it is (only 32 ms late), so the user's first word is never held up."""
 
     KEEP = 3.0
@@ -251,7 +256,7 @@ class Reference(object):
 
     def start(self):
         _LIVE.add(self)
-        # Not a daemon: one ending inside ScreenCaptureKit as Python exits would crash it.
+        # Not a daemon: one ending inside Core Audio as Python exits could crash it.
         self.thread = threading.Thread(target=self._start, name="room-only reference")
         self.thread.start()
         return self
@@ -285,7 +290,7 @@ class Reference(object):
             pass
 
     def _feed(self, block, t):
-        """A block from ScreenCaptureKit's thread, with its own time. Never raises there."""
+        """A block from the capture's thread, with its own time. Never raises there."""
         try:
             block = np.asarray(block, dtype="float64")
             with self.lock:
@@ -417,7 +422,7 @@ class RoomOnly(object):
 
     def stop(self):
         """The reference too, when it is this mic's own (Standby Dictation's): on a
-        thread of its own, so the text is never held up by ScreenCaptureKit's stop
+        thread of its own, so the text is never held up by the capture's stop
         (not a daemon: Python waits for it at exit, and _stop_all after)."""
         if self.owns:
             threading.Thread(target=self.ref.stop, name="room-only stop").start()
@@ -456,11 +461,11 @@ class RoomOnly(object):
 def start(output, log=lambda m: None, capture=None, clock=time.monotonic, permitted=None):
     """The Mac's sound for one dictation or voice turn, starting (it returns at once),
     or None when macOS has not allowed it: nothing is asked, the mic is as it is, and
-    the log says so. capture: a fake in tests; else ScreenCaptureKit's. permitted:
-    allowed() as last looked at, when the caller keeps it (the preflight takes ~8 ms)."""
+    the log says so. capture: a fake in tests; else a Core Audio tap's. permitted:
+    allowed() as last looked at, when the caller keeps it."""
     if capture is None:
         if (allowed() if permitted is None else permitted) is not True:
-            log("room only: Screen & System Audio Recording is not allowed: the mic as it is")
+            log("room only: System Audio Recording not asked yet: the mic as it is")
             return None
         if os.environ.get("STANDBY_NO_DEVICES"):        # a test: never the real capture (2026-10-08)
             return None
@@ -516,7 +521,7 @@ def for_dictation(log=lambda m: None, capture=None, devices=None, permitted=None
 
 class FakeCapture(object):
     """The Mac's sound for tests, with no macOS in it: play(block, t) hands a block on
-    at once, as ScreenCaptureKit would on its thread; fail_with makes start() refuse."""
+    at once, as the real capture would on its thread; fail_with makes start() refuse."""
 
     def __init__(self):
         self.feed, self.target, self.ok, self.error = None, None, False, None

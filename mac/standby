@@ -83,7 +83,7 @@ What it records (Settings > Recording, or --mode):
   auto     the default. Your mic (it follows your Mac: AirPods in, AirPods out),
            and when an app plays (a call in Zoom, Teams, Slack, Meet..., or a
            video) its sound, straight from macOS: You and Others, headphones or not.
-           Nothing to set up; macOS asks once for Screen & System Audio Recording.
+           Nothing to set up; macOS asks once for System Audio Recording.
   mic      your mic only. In a room, or a call on the laptop's speakers.
   meeting  what your Mac plays only, without your mic.
 EOF

@@ -1,4 +1,4 @@
-"""Only mac/native/macos/ imports the Mac's own frameworks (AppKit, ScreenCaptureKit, Core
+"""Only mac/native/macos/ imports the Mac's own frameworks (AppKit, Core
 Audio, MLX, ...): everything else asks mac/native/<area>.py, so another OS replaces just
 those. The modules not moved yet are listed below with what they still import; the list
 only shrinks. A new import of one, outside native/macos/, fails here, and so does a listed

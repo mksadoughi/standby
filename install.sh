@@ -58,11 +58,13 @@ fi
 say "Checking this Mac"
 [[ "$(uname -s)" == "Darwin" ]] || die "Standby runs on macOS."
 [[ "$(uname -m)" == "arm64" ]] || die "Standby needs an Apple Silicon Mac (on-device speech uses MLX)."
-# macOS 14 (Sonoma) or later: the pinned packages (constraints.txt: mlx, numpy, scipy, onnxruntime,
-# torch) are built for nothing older, and an older macOS failed deep in the package install.
+# macOS 14.4 or later: the meeting's sound comes through Core Audio process taps, which a user can
+# allow from 14.4 on; and the pinned packages (constraints.txt: mlx, numpy, scipy, onnxruntime,
+# torch) are built for nothing older than 14.
 MACOS="$(sw_vers -productVersion 2>/dev/null || true)"
-[[ "${MACOS%%.*}" =~ ^[0-9]+$ && "${MACOS%%.*}" -ge 14 ]] \
-  || die "Standby needs macOS 14 (Sonoma) or later. This Mac has macOS ${MACOS:-of an unknown version}:
+MAJOR="${MACOS%%.*}"; MINOR="$(echo "$MACOS" | cut -d. -f2)"
+[[ "$MAJOR" =~ ^[0-9]+$ && "$MINOR" =~ ^[0-9]+$ ]] && { [[ "$MAJOR" -gt 14 ]] || [[ "$MAJOR" -eq 14 && "$MINOR" -ge 4 ]]; } \
+  || die "Standby needs macOS 14.4 or later. This Mac has macOS ${MACOS:-of an unknown version}:
    update it in System Settings > General > Software Update, then run this again."
 ok "macOS $MACOS on Apple Silicon"
 
@@ -152,10 +154,10 @@ echo "   installing packages (a few minutes the first time)..."
 # The versions in constraints.txt, the set that works, and no --upgrade: a fresh install
 # gets exactly those, and running this again keeps what is there and adds what is missing.
 PINS=(-c "$REPO/constraints.txt")
-# pyobjc-framework-ScreenCaptureKit: a call's own sound, straight from macOS (macOS 14+).
+# pyobjc-framework-CoreAudio: a call's own sound, through a Core Audio process tap (macOS 14.4+).
 # pyobjc-framework-CoreML: who's speaking, on the Neural Engine (macOS 14+).
 "$VENV/bin/pip" install --progress-bar off "${PINS[@]}" numpy sounddevice parakeet-mlx mlx-whisper sherpa-onnx pywebview onnxruntime \
-  pyobjc-framework-AVFoundation pyobjc-framework-ScreenCaptureKit pyobjc-framework-CoreML | grep -E "^(Successfully|ERROR)" || true
+  pyobjc-framework-AVFoundation pyobjc-framework-CoreAudio pyobjc-framework-CoreML | grep -E "^(Successfully|ERROR)" || true
 if ! "$VENV/bin/python" -c "import numpy, sounddevice, parakeet_mlx, sherpa_onnx, webview" 2>/dev/null; then
   if "$VENV/bin/python" -c 'import sys; sys.exit(sys.version_info[:2] != (3, 13))' 2>/dev/null; then
     die "The packages Standby uses don't install on Python 3.13 on this Mac. Use a Python 3.12 of Standby's own:
@@ -445,9 +447,11 @@ plist = {
     "CFBundleName": "Standby", "CFBundleDisplayName": "Standby",
     "CFBundleIdentifier": "dev.standby.app",
     "CFBundleShortVersionString": "0.9", "CFBundleVersion": "0.9",
-    "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
+    "LSMinimumSystemVersion": "14.4", "NSHighResolutionCapable": True,
     "NSMicrophoneUsageDescription":
         "Standby transcribes your meeting on this Mac so your Claude Code can answer questions about it.",
+    # System Audio Recording (the meeting's sound, through a Core Audio tap): without it macOS refuses silently
+    "NSAudioCaptureUsageDescription": "Standby hears the other side of your call so your Claude Code can follow it.",
     # macOS asks for these when a call's Claude reads a project kept in one of them: its words say why
     **{key: WHY for key in ("NSDesktopFolderUsageDescription", "NSDocumentsFolderUsageDescription",
                             "NSDownloadsFolderUsageDescription", "NSRemovableVolumesUsageDescription",
@@ -512,10 +516,12 @@ plist = {
     "CFBundleName": "Standby Dictation", "CFBundleDisplayName": "Standby Dictation",
     "CFBundleIdentifier": "dev.standby.dictation",
     "CFBundleShortVersionString": "0.9", "CFBundleVersion": "0.9",
-    "LSMinimumSystemVersion": "14.0", "NSHighResolutionCapable": True,
+    "LSMinimumSystemVersion": "14.4", "NSHighResolutionCapable": True,
     "LSUIElement": True,
     "NSMicrophoneUsageDescription":
         "Standby Dictation turns what you say into text on this Mac, in whatever app you are typing in.",
+    "NSAudioCaptureUsageDescription":
+        "Standby Dictation leaves the Mac's own sound out of what you dictate.",
 }
 opts = {"alias": True, "argv_emulation": False, "plist": plist}
 if os.path.exists("Dictation.icns"):
@@ -567,9 +573,9 @@ if [[ ${#ASK_AGAIN[@]} -gt 0 ]]; then
   # old copy's: what to do then, for the one that records the call.
   for a in "${ASK_AGAIN[@]}"; do
     if [[ "$a" == "Standby" ]]; then
-      echo "     If it keeps asking with Standby already switched on in Screen & System Audio Recording,"
+      echo "     If it hears only silence with Standby already switched on in System Audio Recording,"
       echo "     the switch is the old copy's: click \"It's on already\" on the call's sound in Standby,"
-      echo "     or run: tccutil reset ScreenCapture dev.standby.app, then allow it again."
+      echo "     or run: tccutil reset AudioCapture dev.standby.app, then allow it again."
     fi
   done
 fi
@@ -581,8 +587,8 @@ cat <<EOF
 
    macOS will ask, the first time each is needed; choose Allow:
      Microphone                             your first meeting or call
-     Screen & System Audio Recording        the first time an app plays sound in a meeting: Standby
-                                            takes only the sound, never the screen; macOS then reopens it
+     System Audio Recording                 the first time Standby hears a meeting's sound: it takes
+                                            only the sound, never the screen
      Microphone, Input Monitoring and       when you turn dictation on (Standby Dictation: to hear you,
      Accessibility                          notice the F5 key, and paste the text)
    Changed your mind: System Settings > Privacy & Security.

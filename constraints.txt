@@ -56,7 +56,6 @@ pyobjc-framework-CoreAudio==12.2.2
 pyobjc-framework-CoreML==12.2.2
 pyobjc-framework-CoreMedia==12.2.2
 pyobjc-framework-Quartz==12.2.2
-pyobjc-framework-ScreenCaptureKit==12.2.2
 pyobjc-framework-Security==12.2.2
 pyobjc-framework-UniformTypeIdentifiers==12.2.2
 pyobjc-framework-WebKit==12.2.2

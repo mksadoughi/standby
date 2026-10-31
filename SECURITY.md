@@ -1,7 +1,7 @@
 # Security
 
 Standby runs on your Mac with access that matters: it records the **microphone**, captures the **sound your Mac
-plays** (Screen & System Audio Recording), types into other apps through **Accessibility** (Standby Dictation),
+plays** (System Audio Recording), types into other apps through **Accessibility** (Standby Dictation),
 and drives your **Claude Code** sessions, which can read files and run commands. So a security bug in Standby can
 be serious, and we'd like to hear about it first.
 

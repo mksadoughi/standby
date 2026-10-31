@@ -1176,7 +1176,7 @@ class Channel(object):
         # offset: where this channel starts on the session clock, for one that joins late.
         self.capture, self.app, self.offset = None, None, 0.0
         # zero: the wall time of the session clock's 0 for this run, base: t_offset there; once the
-        # first block comes, its own time (ScreenCaptureKit's, monotonic) places the channel exactly.
+        # first block comes, its own time (the tap's, monotonic) places the channel exactly.
         self.zero, self.base, self.placed, self._placed_saved = None, 0.0, False, False
         self.state = "live"      # live | switching | reconnecting
         self.clock0, self.queued, self.last_audio = None, 0, None
@@ -1433,7 +1433,7 @@ class Channel(object):
         """The mic went away or will not open: tried again, never given up on.
         The transcript waits; the app shows it reconnecting. The meeting's audio not
         allowed: looked at again every PERMISSION_POLL, which asks macOS nothing (the
-        capture asks ScreenCaptureKit only once allowed), and said once in the log."""
+        capture's refusal is only silence, so nothing is asked), and said once in the log."""
         self._close_input()
         self.state = "reconnecting"
         if getattr(self.capture, "cause", None) == "permission":
@@ -1616,7 +1616,9 @@ class Channel(object):
         for the tooltip, past for the session's record. cause is a code, for logic
         and tests, never shown. A capture that says only .error still gets its words
         in front of the user rather than nothing."""
-        if self.state == "live" and self.error is None and self.cause is None:
+        # the capture's own finding while it runs (a refusal shows only as silence: native.appaudio)
+        refused = getattr(self.capture, "state", None) in ("paused", "error")
+        if self.state == "live" and self.error is None and self.cause is None and not refused:
             return {"state": "recording"}
         cap, error = self.capture, getattr(self.capture, "error", None)
         words = {}
@@ -1977,7 +1979,7 @@ EMBED = None
 
 # makes what hears the Mac's own sound, to take it out of the mic while dictating
 # or in voice mode: make(output) -> roomonly.Reference, or None. Tests put a fake here;
-# else the real one (ScreenCaptureKit, all apps but Standby), never in a test.
+# else the real one (a Core Audio tap, all apps but Standby), never in a test.
 ROOM_ONLY = None
 
 
@@ -4389,7 +4391,7 @@ def main():
 def exit_now(code):
     """Exit as Python would, its threads waited for and its exit hooks run (the captures
     stopped, Core Audio's listeners removed), but without tearing the interpreter down:
-    Core Audio and ScreenCaptureKit call in on threads of their own, and one that came
+    Core Audio calls in on threads of its own, and one that came
     in while Python was being torn down killed the recorder inside libdispatch, with
     macOS's "Python quit unexpectedly" on the user's screen as a call ended (2026-10-26)."""
     import atexit

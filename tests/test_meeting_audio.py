@@ -433,27 +433,27 @@ FakeMeetingAudio.apps_now = []
 wait(lambda: any("pid 401's audio stops" in m for m in logged))
 
 # A capture that says only .error (the module as it was): paused, its words as they are.
-FakeMeetingAudio.fail_with = "Screen & System Audio Recording is off for Standby"
+FakeMeetingAudio.fail_with = "System Audio Recording is off for Standby"
 FakeMeetingAudio.apps_now = [dict(TEAMS)]
 check("a capture refused, saying only .error: paused, the error as the reason",
       wait(lambda: meet().get("state") == "paused" and meet().get("ok") is False
-           and meet().get("reason") == "Screen & System Audio Recording is off for Standby"), meet())
+           and meet().get("reason") == "System Audio Recording is off for Standby"), meet())
 FakeMeetingAudio.fail_with = None
 check("  allowed again: recorded on a retry", wait(lambda: meet().get("state") == "recording"), meet())
 FakeMeetingAudio.apps_now = []
 wait(lambda: meet().get("state") == "waiting")
 
 # With the agreed fields: an error the user must act on, with what to do.
-PERM = {"state": "error", "cause": "permission", "reason": "Screen Recording is off",
-        "detail": "Allow Standby in System Settings > Privacy & Security > Screen Recording.",
-        "past": "Screen Recording was off", "confirm": "Open Privacy & Security", "needs_restart": True}
+PERM = {"state": "error", "cause": "permission", "reason": "System Audio Recording is off",
+        "detail": "Allow Standby in System Settings > Privacy & Security > System Audio Recording.",
+        "past": "System Audio Recording was off", "confirm": "Open Privacy & Security", "needs_restart": True}
 FakeMeetingAudio.fail_with, FakeMeetingAudio.fail_as = "refused", PERM
 FakeMeetingAudio.apps_now = [dict(TEAMS)]
 check("the permission off: error (not paused), the capture's own words, confirm and needs_restart",
       wait(lambda: all(meet().get(k) == PERM[k] for k in ("state", "cause", "reason", "detail", "confirm", "needs_restart"))),
       meet())
 check("  on record, past tense", wait(lambda: events()[-1]["cause"] == "permission"
-                                           and events()[-1]["reason"] == "Screen Recording was off"), events())
+                                           and events()[-1]["reason"] == "System Audio Recording was off"), events())
 asked = len(FakeMeetingAudio.starts)
 time.sleep(2.0)        # on purpose: with the mic's backoff (0.5 s, 1 s...) it would have been started twice by now
 check("  waiting for the permission, it is not started again (each start was macOS's prompt, over and over)",
@@ -461,12 +461,12 @@ check("  waiting for the permission, it is not started again (each start was mac
       (asked, len(FakeMeetingAudio.starts), [m for m in logged if "allowed" in m][-2:]))
 check("  and the waiting is in the log once, not every try", len([m for m in logged if "without asking again" in m]) == 1,
       [m for m in logged if "without asking again" in m])
-SLEEP = {"state": "paused", "cause": "screen_asleep", "reason": "the screen is asleep",
-         "detail": "The screen is asleep or locked, so macOS offers nothing to capture. It resumes by itself when the screen wakes.",
-         "past": "the screen was asleep"}
+SLEEP = {"state": "paused", "cause": "stopped", "reason": "macOS stopped the capture",
+         "detail": "macOS stopped capturing Teams's audio, saying: the device went away. Standby is starting it again.",
+         "past": "macOS stopped the capture"}
 FakeMeetingAudio.fail_as = SLEEP
-check("the screen asleep: paused (it comes back by itself), no confirm or restart offered",
-      wait(lambda: meet().get("cause") == "screen_asleep" and meet().get("state") == "paused")
+check("macOS stopped it: paused (it comes back by itself), no confirm or restart offered",
+      wait(lambda: meet().get("cause") == "stopped" and meet().get("state") == "paused")
       and "confirm" not in meet() and "needs_restart" not in meet(), meet())
 FakeMeetingAudio.apps_now = []
 end_session(th)
@@ -494,16 +494,26 @@ FakeMeetingAudio.fail_with, FakeMeetingAudio.fail_as = None, {}
 FakeMeetingAudio.apps_now = [dict(ZOOM)]
 check("  Zoom plays: recorded", wait(lambda: [(s["kind"], s["name"]) for s in sources()] == [("meeting", "Zoom")]),
       sources())
+# A refusal shows only once the tap runs: silence while the app plays, its blocks still coming.
+live_cap = made[-1]
+for key, value in dict(PERM, ok=False, error="Zoom is playing and only silence arrives").items():
+    setattr(live_cap, key, value)
+check("  refused while running (its zeros still coming): said at once, an error with the way to allow it",
+      wait(lambda: (meet().get("state"), meet().get("cause")) == ("error", "permission")), meet())
+for key in ("cause", "reason", "detail", "past", "confirm", "needs_restart", "error"):
+    setattr(live_cap, key, None)
+live_cap.state, live_cap.ok = "recording", True
+check("  sound at last: recording again", wait(lambda: meet().get("state") == "recording"), meet())
 made[-1].stalled = True
-FakeMeetingAudio.fail_with, FakeMeetingAudio.fail_as = "asleep", SLEEP
+FakeMeetingAudio.fail_with, FakeMeetingAudio.fail_as = "stopped", SLEEP
 wait(lambda: events() and events()[-1]["to"] is None)
 end_session(th)
 check("the session ending mid-pause: the pause ends with it", events() and events()[-1]["to"] is not None
-      and events()[-1]["cause"] == "screen_asleep", events())
+      and events()[-1]["cause"] == "stopped", events())
 FakeMeetingAudio.fail_with, FakeMeetingAudio.fail_as = None, {}
 info = ui_info(sdir)
 check("  the app's session info carries it, for the page to show the gap",
-      info["events"] and info["events"][-1]["reason"] == "the screen was asleep", info.get("events"))
+      info["events"] and info["events"][-1]["reason"] == "macOS stopped the capture", info.get("events"))
 
 # The module's own fake (mac/native/macos/appaudio.py): the real module's interface, not ours.
 theirs = []

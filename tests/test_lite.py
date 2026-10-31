@@ -86,9 +86,9 @@ check("listen again: the same meeting, nothing started twice", L.listen({"cc": C
 check("  BlackHole's old \"both\" is no capture any more: refused, in words", "error" in L.listen({"cc": CC, "capture": "both"}))
 
 # macOS, as the band asks it: stand-ins (never this Mac's own answers)
-MAC = {"mic": "authorized", "screen": False}
+MAC = {"mic": "authorized", "sound": "not_asked"}
 ui.mic_access = lambda: MAC["mic"]
-ui.permissions.screen_allowed = lambda: MAC["screen"]
+ui.permissions.sound_state = lambda: MAC["sound"]
 st = L.state(CC)
 check("state: the app is up, and this session's live meeting",
       st["app"] is True and "settings" not in st and st["live"]["session"] == SID and st["live"]["kind"] == "meeting"
@@ -104,7 +104,7 @@ check("  with the meeting's name", st["live"]["title"] == "Weekly routing sync",
 def heard(mic=None, sound=None):
     srcs = [dict({"kind": k, "ok": c is None}, **({"cause": c} if c else {})) for k, c in (("mic", mic), ("meeting", sound)) if c != "none"]
     (ui.SESSIONS / SID / "live.json").write_text(json.dumps({"at": time.time(), "sources": srcs}))
-    ui._SNAP_CHECKS.pop("permission", None)
+    ui._SOUND_CHECKS.pop("state", None)
 
 
 def access_now():
@@ -121,13 +121,17 @@ check("  an app plays (the recorder opens its source, macOS asks now): \"ask\"; 
 check("  and the same in /api/live/<sid>, for the window", ui.access(SID, ui.live_capture(SID)) == {"meeting_audio": "ask"})
 heard(sound="permission")
 check("  the recorder refused it (cause permission): \"denied\"", access_now() == {"meeting_audio": "denied"}, access_now())
+MAC["sound"] = "denied"
 heard()
-ui.SNAP_ASKED.write_text("1\n")
-check("  asked before, and still not allowed: \"denied\"", access_now() == {"meeting_audio": "denied"}, access_now())
-MAC["screen"] = True
+check("  a capture of this build's heard only silence while an app played: \"denied\"",
+      access_now() == {"meeting_audio": "denied"}, access_now())
+MAC["sound"] = "asked"
+heard()
+check("  asked, its answer unknown: no heads-up (only a capture's silence says no)",
+      access_now() == {"meeting_audio": "allowed"}, access_now())
+MAC["sound"] = "allowed"
 heard()
 check("  allowed: \"allowed\"", access_now() == {"meeting_audio": "allowed"}, access_now())
-ui.SNAP_ASKED.unlink()
 bound = ui.addmac.bound(ui.SESSIONS / SID)
 (ui.SESSIONS / SID / ui.addmac.AGENT_FILE).write_text(json.dumps(dict(bound, mic=True)))
 MAC["mic"] = "undetermined"
@@ -148,7 +152,7 @@ check("  Open Settings: System Settings at Microphone (the mic before the sound)
       ui.lite_permission({"session": SID}) == {"ok": True} and opened.read_text().split() == [ui.MIC_PANE], opened.read_text() if opened.exists() else None)
 heard(mic="none", sound="permission")
 ui.lite_permission({"session": SID})
-check("  then the sound refused: at Screen & System Audio Recording", opened.read_text().split()[-1] == ui.SCREEN_PANE, opened.read_text())
+check("  then the sound refused: at System Audio Recording", opened.read_text().split()[-1] == ui.SOUND_PANE, opened.read_text())
 heard()
 check("  nothing refused: nothing opens", ui.lite_permission({"session": SID}) == {"ok": True, "allowed": True} and len(opened.read_text().split()) == 2)
 check("  a session that isn't live: refused", "error" in ui.lite_permission({"session": "meeting-20200101-000000"}))

@@ -1448,9 +1448,9 @@ test('a meeting: Pause, End | Full window; with no window, no divider left over'
 
 // ---------------------------------------------------------------- what macOS refuses, or will ask for
 const MIC_NO = 'Standby can’t hear your mic · allow it in Privacy & Security > Microphone'
-const SOUND_NO = 'Standby can’t hear the meeting’s sound · allow it in Privacy & Security > Screen & System Audio Recording'
+const SOUND_NO = 'Standby can’t hear the meeting’s sound · allow it in Privacy & Security > System Audio Recording'
 const MIC_ASK = 'macOS will ask for your microphone · choose Allow'
-const SOUND_ASK = 'macOS will ask for Screen & System Audio Recording · choose Allow; Standby takes only the sound'
+const SOUND_ASK = 'macOS will ask for System Audio Recording · choose Allow; Standby takes only the sound'
 const meetingWith = (more: any) => ({ kind: 'meeting', session: 'm1', started: 1, capture: 'auto', ...more })
 
 test('access · the mic refused: said in the warning colour in place of the words, s settings opens its pane', async ($, on) => {

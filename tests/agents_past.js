@@ -55,15 +55,15 @@ MX.scope = "all"; MX.agents[0].title = ""; MX.agents[0].name = "Claude Code sess
 check("a session with no name yet: its rows leave it off", /Ran the cache tests<\/b><small>Call · 4 min</.test(h) && !/· Claude Code session/.test(h), h);
 MX.scope = "a2"; h = mxPast();
 check("  rows don't repeat the session there", /Standup<\/b><small>Listening · 4 min</.test(h), h);
-// The meeting's own sound refused (Screen & System Audio Recording): said in the meeting window, with Allow;
+// The meeting's own sound refused (System Audio Recording): said in the meeting window, with Allow;
 // on already but for an older copy of Standby: Reset (the old view, which said so, is gone)
 var STALE_WHY = "older copy";
 eval(line(/const mxSoundNo = [^\n]*\n/));
 eval(src.match(/const mxSoundNoHtml = [\s\S]*?<\/div>`;\n/)[0].replace("const ", "var "));
 const refused = mxSoundNo({sources: [{kind: "mic", cause: "permission"}, {kind: "meeting", cause: "permission", detail: "Allow it"}]});
 check("meeting audio not allowed: its line, with Allow and It's on already", refused && /Standby can’t hear the meeting’s sound/.test(mxSoundNoHtml(refused))
-  && /allowScreen\(\)/.test(mxSoundNoHtml(refused)) && /resetScreen\(\)/.test(mxSoundNoHtml(refused)));
-check("  on for an older copy: Reset", /older copy of Standby[\s\S]*resetScreen\(\)/.test(mxSoundNoHtml({stale: true})) && !/allowScreen/.test(mxSoundNoHtml({stale: true})));
+  && /allowSound\(\)/.test(mxSoundNoHtml(refused)) && /resetSound\(\)/.test(mxSoundNoHtml(refused)));
+check("  on for an older copy: Reset", /older copy of Standby[\s\S]*resetSound\(\)/.test(mxSoundNoHtml({stale: true})) && !/allowSound/.test(mxSoundNoHtml({stale: true})));
 check("  allowed: no line", mxSoundNo({sources: [{kind: "meeting", state: "recording"}]}) === null);
 // before macOS has ever asked for the meeting's sound: a dim heads-up, only while it's "ask"
 eval(line(/const mxSoundAsk = [^\n]*\n/)); eval(line(/const mxSoundAskHtml = [^\n]*\n/));

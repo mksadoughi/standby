@@ -105,9 +105,9 @@ Capture.apps_now = []
 lines = run()
 check("no call playing: the channel, no level, and what to do", lines[1].startswith("--- Others (device ): recording")
       and lines[-1] == "  " + sb.NO_CALL, lines)
-Capture.apps_now, Capture.refuse = [dict(ZOOM)], "Screen Recording is not allowed"
+Capture.apps_now, Capture.refuse = [dict(ZOOM)], "System Audio Recording is not allowed"
 lines = run()
-check("no permission: the capture's own reason, as it says it", lines[-1] == "  Screen Recording is not allowed", lines)
+check("no permission: the capture's own reason, as it says it", lines[-1] == "  System Audio Recording is not allowed", lines)
 Capture.refuse, Capture.level = None, 0.0
 lines = run()
 check("a call with nobody speaking: says so", lines[-1].startswith("  SILENCE from Zoom"), lines)

@@ -1,5 +1,5 @@
 """What the OS lets Standby do: the microphone, and recording what the computer plays
-(on a Mac, Screen & System Audio Recording). Asking never shows anything unless the
+(on a Mac, System Audio Recording). Asking never shows anything unless the
 function says it does.
 """
 from native import impl
@@ -19,25 +19,26 @@ def ask_mic(answered):
     return _os.ask_mic(answered)
 
 
-def screen_available():
+def sound_available():
     """(True, "") if this computer can record what it plays, else (False, what to do),
     under 60 characters for a tooltip."""
-    return _os.screen_available()
+    return _os.sound_available()
 
 
-def screen_allowed():
-    """May Standby record what the computer plays? Asks nothing: no prompt."""
-    return _os.screen_allowed()
+def sound_state():
+    """May Standby record what the computer plays: "allowed", "denied", "asked" (the OS
+    asked, its answer unknown) or "not_asked". Asks nothing: no prompt."""
+    return _os.sound_state()
 
 
-def ask_screen():
-    """The OS's own prompt for it. On a Mac, access starts with the next launch."""
-    return _os.ask_screen()
+def ask_sound(done=None):
+    """The OS's own prompt for it, brought up by a short capture; done(heard) after."""
+    return _os.ask_sound(done)
 
 
-def open_screen_settings():
+def open_sound_settings():
     """The OS's settings, at the switch for it."""
-    return _os.open_screen_settings()
+    return _os.open_sound_settings()
 
 
 def no_devices(what=None):

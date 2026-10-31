@@ -290,9 +290,9 @@ try:
     check("  off again, and the default mic: no note", r["settings"]["talk_over"] is False
           and r["settings"]["talk_over_note"] == ""
           and json.loads((root / "config.json").read_text())["voice_mode"]["duplex"] is False, r["settings"])
-    _, r, _ = call("/api/screen/reset", {})
-    check("Reset (Screen Recording on for an older copy): Standby's own entry, then macOS asks again",
-          r.get("state") == "asked" and (root / "tccutil").read_text().split() == ["reset", "ScreenCapture", "dev.standby.app"],
+    _, r, _ = call("/api/sound/reset", {})
+    check("Reset (System Audio Recording on for an older copy): Standby's own entry, then macOS asks again",
+          r.get("state") == "asked" and (root / "tccutil").read_text().split() == ["reset", "AudioCapture", "dev.standby.app"],
           (r, (root / "tccutil").read_text() if (root / "tccutil").exists() else None))
     # Settings > Recording > Speech model: Small or Standard, and English only.
     sp = call("/api/settings")[1]["settings"]["speech"]

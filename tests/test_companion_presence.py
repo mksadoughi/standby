@@ -378,7 +378,7 @@ p.update()
 # main page asks there. So no modal from a panel, and no Space surprise.
 win.native.up = False
 n, m = len(pill.calls), len(pill.menus)
-p._message({"type": "confirm", "text": "Standby will quit and reopen for Screen Recording.", "ok": "Continue"})
+p._message({"type": "confirm", "text": "Standby will quit and reopen.", "ok": "Continue"})
 check("a confirm message from an older page: ignored, no modal, nothing to the page",
       win.native.up is False and len(pill.calls) == n and len(pill.menus) == m, (pill.calls[n:], pill.menus[m:]))
 check("  and the panel has no alert of its own left", not hasattr(companion, "confirm") and not hasattr(p, "ask"))

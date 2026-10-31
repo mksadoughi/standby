@@ -28,9 +28,10 @@ check("a call needs the mic; a meeting as it records", fu.steps_for("call", "aut
 check("the mic: undetermined asks, refused is denied, unknown never holds a start",
       [fu.mic_state(s) for s in ("undetermined", "denied", "restricted", "authorized", None)] == ["ask", "denied", "denied", "allowed", "allowed"])
 check("  heard by this build: allowed, whatever this process is told", fu.mic_state("undetermined", heard=True) == "allowed")
-check("the meeting's sound: never asked asks, asked and still off is denied, heard is allowed",
-      (fu.sound_state(False), fu.sound_state(False, asked=True), fu.sound_state(False, heard=True), fu.sound_state(True, asked=True))
-      == ("ask", "denied", "allowed", "allowed"))
+check("the meeting's sound: never asked asks, heard is allowed, a capture's silence is denied",
+      [fu.sound_state(s) for s in ("not_asked", "allowed", "denied", None)] == ["ask", "allowed", "denied", "ask"])
+check("  asked, with no sign either way, never holds a start (macOS never says its answer)",
+      fu.sound_state("asked") == "allowed")
 ALL = {"mic": "allowed", "sound": "allowed"}
 check("all allowed: no window, no wait", fu.needed("meeting", "auto", ALL) == [] and fu.needed("call", None, {"mic": "allowed"}) == [])
 check("a call with the mic undecided, or refused: its one step", fu.needed("call", None, {"mic": "ask"}) == ["mic"]
@@ -107,7 +108,7 @@ check("a test (no devices): all allowed, so no other suite is ever held", real_s
 STATES = {"mic": "ask", "sound": "ask"}
 ui.setup_states = lambda steps: {k: STATES[k] for k in steps}
 asked, opened, started = [], [], []
-ui.permissions = types.SimpleNamespace(ask_mic=lambda answered: asked.append("mic"), ask_screen=lambda: asked.append("screen"))
+ui.permissions = types.SimpleNamespace(ask_mic=lambda answered: asked.append("mic"), ask_sound=lambda done=None: asked.append("sound"))
 ui.OPEN = ["true"]
 real_call = ui.lite_call
 
@@ -168,9 +169,9 @@ ui.lite = lambda: types.SimpleNamespace(listen=lambda b: listens.append(dict(b))
 r = ui.setup_hold("meeting", {"cc": "cc-1", "capture": "auto"})
 check("its sound undecided: held, the mic ticked, the sound open", r == {"setup": "meeting"}
       and [x["state"] for x in ui.setup_view()["steps"]] == ["done", "open"], ui.setup_view())
-check("Allow: macOS's own prompt for the screen, once", ui.setup_act({"do": "allow_sound"}) == {"ok": True} and asked[-1] == "screen"
-      and ui.SNAP_ASKED.exists())
-check("  the held meeting kept, marked for the reopen", "sound" in ui.read_json(ui.SETUP_FILE).get("pressed"))
+check("Allow: macOS's own prompt for the sound, once", ui.setup_act({"do": "allow_sound"}) == {"ok": True}
+      and asked[-1] == "sound")
+check("  the held meeting kept, its row pressed", "sound" in ui.read_json(ui.SETUP_FILE).get("pressed"))
 check("Skip: this meeting starts on the mic only", ui.setup_act({"do": "skip_sound"}) == {"ok": True}
       and wait(lambda: listens) and listens[0]["capture"] == "mic" and listens[0]["setup_done"], listens)
 check("  not asked again for 30 days", ui.SOUND_SKIPPED.exists() and ui.setup_hold("meeting", {"cc": "cc-1", "capture": "auto"}) is None)

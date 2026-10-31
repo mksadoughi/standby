@@ -4,7 +4,7 @@ or in voice mode, so a video on the speakers never lands in what the user says.
 First the canceller on made-up mixes (a talker-like video through a made-up room,
 the user over it), then the pipeline that lines the mic up with the Mac's sound
 (mac/roomonly.py: Reference, RoomOnly) on a made-up clock, then the recorder's mic
-channels with fakes. Fakes only: no ScreenCaptureKit, no mic, nothing played."""
+channels with fakes. Fakes only: no Core Audio tap, no mic, nothing played."""
 import agentpath  # noqa: E402,F401  (first: never the real ~/.standby, see agentpath.guard)
 import json, os, sys, tempfile, threading, time, types
 from pathlib import Path
@@ -25,7 +25,7 @@ REAL = []
 class NoRealCapture(object):
     def __init__(self, *a, **k):
         REAL.append(a)
-        raise AssertionError("a test made the real ScreenCaptureKit capture")
+        raise AssertionError("a test made the real Core Audio capture")
 
 
 REAL_MEETING_AUDIO, meeting_audio.MeetingAudio = meeting_audio.MeetingAudio, NoRealCapture
@@ -192,7 +192,7 @@ def pipeline(capture=None, clock=None, ec=None, logs=None):
 
 def simulate(mic, played, echo_delay=0.0, ref_lag=(0.0, 0.06), mic_block=800, drain_every=0.1, room=None,
              clock=None, capture=None, ref_from=0.0):
-    """A dictation in time: the Mac plays `played` from t=0 (ScreenCaptureKit hands it
+    """A dictation in time: the Mac plays `played` from t=0 (the tap hands it
     on in 320-sample blocks, each late by ref_lag), the mic's blocks come as captured,
     and the loop drains every drain_every. Returns what the room handed back, in order."""
     if room is None:
@@ -222,7 +222,7 @@ def simulate(mic, played, echo_delay=0.0, ref_lag=(0.0, 0.06), mic_block=800, dr
     return np.concatenate(out), room
 
 
-# The echo reaches the mic 45 ms after ScreenCaptureKit stamps it (speakers, air, the mic's buffer).
+# The echo reaches the mic 45 ms after the tap stamps it (speakers, air, the mic's buffer).
 mic = through_room(VIDEO, 0.045, 0.5, IR) + usr + 0.002 * rng.standard_normal(N)
 out, room = simulate(mic, VIDEO)
 check("in time, as it comes: every sample of the mic back, in order", len(out) == len(mic), (len(out), len(mic)))
@@ -238,7 +238,7 @@ out, room = simulate(mic, VIDEO, mic_block=8000, drain_every=0.1)
 check("the recorder's half-second blocks, drained by its loop: the same", len(out) == len(mic)
       and db(mic[2 * R:5 * R]) - db(out[2 * R:5 * R]) >= 10, (len(out), db(out[2 * R:5 * R])))
 
-# Nothing has come from ScreenCaptureKit yet (it takes 0.1-0.3 s to start): no waiting.
+# Nothing has come from the tap yet (it takes a moment to start): no waiting.
 room, ref, capture, clock = pipeline()
 clock.now += 0.05
 got = room.clean(np.ones(800, "float32") * 0.1)
@@ -303,7 +303,7 @@ class Slow(roomonly.FakeCapture):
 slow = Slow()
 t = time.time()
 ref = roomonly.Reference(slow).start()
-check("the reference starts at once (ScreenCaptureKit's start is on its own thread)", time.time() - t < 0.1)
+check("the reference starts at once (the tap's start is on its own thread)", time.time() - t < 0.1)
 ref.stop()
 ref.thread.join(PATIENCE)
 check("  stopped while it was starting: stopped once it has", slow.stops == 1 and slow.target == meeting_audio.EVERYTHING,
@@ -319,25 +319,14 @@ check("  refused: said once in the log; the mic goes as it is", any("not heard (
 real_allowed = roomonly.allowed
 roomonly.allowed = lambda: False
 logs = []
-check("not allowed in System Settings: no reference, nothing asked, one calm line",
-      roomonly.start("speakers", log=logs.append) is None and any("not allowed" in m for m in logs), logs)
-roomonly.allowed = lambda: None
-env = os.environ.pop("STANDBY_NO_DEVICES", None)     # this check alone: the allowed() rule, not the test's
-try:                                                 # (the real capture is still NoRealCapture here)
-    try:
-        unknown = roomonly.start("speakers")
-    except AssertionError as exc:
-        unknown = exc
-finally:
-    if env is not None:
-        os.environ["STANDBY_NO_DEVICES"] = env
-check("  unknown whether it is: the same (never a prompt)", unknown is None and not REAL, (unknown, REAL))
+check("macOS never asked yet: no reference, nothing asked (that would bring its prompt up), one calm line",
+      roomonly.start("speakers", log=logs.append) is None and any("not asked yet" in m for m in logs), logs)
 del REAL[:]
 roomonly.allowed = lambda: True
 check("  allowed, in a test: still never the real capture", roomonly.start("speakers") is None and not REAL, REAL)
 roomonly.allowed = real_allowed
 
-# A process that exits with the Mac's sound still coming crashes in ScreenCaptureKit's
+# A process that exits with the Mac's sound still coming may crash in the tap's
 # callback (2026-10-08): whatever is still capturing is stopped at exit.
 import subprocess  # noqa: E402
 code = """import sys
@@ -361,30 +350,31 @@ from native import permissions  # noqa: E402
 from native.macos import permissions as mac_permissions  # noqa: E402
 cap = REAL_MEETING_AUDIO()
 cap.start(meeting_audio.EVERYTHING, lambda b, t: None)
-check("in a test: meeting_audio's real capture refuses (before ScreenCaptureKit)",
+check("in a test: meeting_audio's real capture refuses (before Core Audio)",
       not cap.ok and "STANDBY_NO_DEVICES" in (cap.error or ""), (cap.ok, cap.error))
 try:
     permissions.no_devices(None)
     shot = "allowed"
 except RuntimeError as exc:
     shot = str(exc)
-check("  Screen Recording's prompt and System Settings refuse",
+check("  System Audio Recording's prompt and System Settings refuse",
       "STANDBY_NO_DEVICES" in shot and all("no_devices(" in inspect.getsource(f) for f in
-                                           (mac_permissions.ask_screen, mac_permissions.open_screen_settings)), shot)
+                                           (mac_permissions.ask_sound, mac_permissions.open_sound_settings)), shot)
 
-# And the suites' tripwire (tests/agentpath.py): reaching the real ScreenCaptureKit fails a suite.
+# And the suites' tripwire (tests/agentpath.py): reaching a real tap fails a suite.
 code = """import sys
 sys.path.insert(0, "tests")
 import agentpath
-import ScreenCaptureKit as SC
+import CoreAudio
+CoreAudio.kAudioObjectSystemObject
 try:
-    SC.SCShareableContent
+    CoreAudio.CATapDescription.alloc
 except RuntimeError:
     pass
 """
 p = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=PATIENCE)
-check("a suite that reaches the real ScreenCaptureKit fails, even when it catches the error",
-      p.returncode == 1 and "reached the real ScreenCaptureKit: SCShareableContent" in p.stdout, (p.returncode, p.stdout))
+check("a suite that reaches a real Core Audio tap fails, even when it catches the error",
+      p.returncode == 1 and "reached a real Core Audio tap: alloc" in p.stdout, (p.returncode, p.stdout))
 
 
 # ---------------------------------------------------------------- the recorder's mic channels, with fakes
@@ -457,7 +447,7 @@ made = []
 
 
 class Playing(roomonly.FakeCapture):
-    """The Mac's sound as ScreenCaptureKit hands it on: 20 ms blocks, in real time,
+    """The Mac's sound as the tap hands it on: 20 ms blocks, in real time,
     each 120 ms after its own stamp (late, but within HOLD). So each of the mic's
     blocks waits a moment for it, longer than the fake mic's own drift."""
 
@@ -631,7 +621,7 @@ room_perm = dict(ok3, hear_mac=False, hear_mac_asked=False)
 rows = dictation.setup_rows(room_perm, "rcommand2")
 check("  offered: a fourth row, optional, its button Allow (macOS asks once), then Open Settings",
       [r["key"] for r in rows] == ["mic", "listen", "post", "hear_mac"] and rows[3]["optional"]
-      and rows[3]["button"] == "Allow" and rows[3]["why"] == "leaves out the Mac's sound, never the screen"
+      and rows[3]["button"] == "Allow" and rows[3]["why"] == "leaves out the Mac's sound"
       and dictation.setup_rows(dict(room_perm, hear_mac_asked=True), "rcommand2")[3]["button"] == "Open Settings…"
       and rows[3]["url"].endswith("Privacy_ScreenCapture"), rows[3])
 check("  optional: nothing is missing for it (the window never opens by itself for it)",
@@ -645,15 +635,15 @@ da.mic_status, da.apple_dictation_on = (lambda: "allowed"), (lambda: False)
 dc.install_tap = lambda: None
 for on in (False, True):
     cfg_path.write_text(json.dumps({"room_only": on}))
-    dictation.screen_allowed, dictation.SCREEN["allowed"] = (lambda: False), None
+    dictation.sound_allowed, dictation.sound_asked, dictation.SOUND["allowed"] = (lambda: False), (lambda: False), None
     dc.check_permissions()
     if not on:
-        check("  the app looks only while room_only is on", "hear_mac" not in dc.perm and dictation.SCREEN["allowed"] is None,
+        check("  the app looks only while room_only is on", "hear_mac" not in dc.perm and dictation.SOUND["allowed"] is None,
               dc.perm)
 check("  and then without asking: its last look kept for the key press", dc.perm.get("hear_mac") is False
-      and dictation.SCREEN["allowed"] is False, dc.perm)
+      and dictation.SOUND["allowed"] is False, dc.perm)
 asked_screen = []
-dictation.ask_screen = lambda: asked_screen.append(1)
+dictation.ask_sound = lambda: asked_screen.append(1)
 da.open_url = lambda url: asked_screen.append(url)
 dc.allowHearMac_(None)
 check("  from the menu (no longer in the setup window): macOS's own prompt, that once", asked_screen == [1], asked_screen)

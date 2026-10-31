@@ -2,7 +2,7 @@
 
 Each native/<area>.py says what the rest of Standby may ask of the OS there, and asks it
 of this OS's implementation: native/macos/<area>.py on a Mac, the only one so far. Only
-those implementations import the OS's own frameworks (AppKit, ScreenCaptureKit, Core
+those implementations import the OS's own frameworks (AppKit, Core
 Audio, ...); tests/test_native_imports.py keeps it so.
 
 An area is here only where another OS would really do it differently. A piece that is

@@ -1,11 +1,12 @@
-"""native/appaudio.py on a Mac (ScreenCaptureKit, and Core Audio's list of processes).
+"""native/appaudio.py on a Mac (Core Audio: its list of processes, and process taps).
 
 The other side of a call: the meeting's own audio, so Standby hears everyone.
 
 On a call with headphones the microphone hears only the user, so the people on the
-other side never reach the transcript. This captures the call app's own output
-through ScreenCaptureKit, as the recorder's "Others" channel, with no setup from
-the user beyond allowing it once.
+other side never reach the transcript. This takes the call app's own output through
+a Core Audio process tap (macOS 14.4 and later), as the recorder's "Others" channel,
+with no setup from the user beyond allowing it once. macOS asks for System Audio
+Recording only: never the screen.
 
 What the recorder uses:
 
@@ -20,38 +21,32 @@ What the recorder uses:
 start() never raises: a refusal is .ok False, .error what went wrong (for the log),
 and .state "paused" (it mends itself: keep trying) or "error" (the user has to act),
 with the words for the page and the session's events from one table, CAUSES.
-Measured on an M4 Pro, macOS 26.6: first audio 0.2 s after start, 320-sample blocks
-about 49 a second, exactly 16,000 samples a second with blocks contiguous to 42
-microseconds, 1-2% of one core, and continuous blocks (zeros) through silence.
 
-Two things to know:
-* A sleeping or locked screen stops this. ScreenCaptureKit's audio hangs off a
-  display and macOS offers none then, so the capture fails with a plain reason and
-  the recorder shows the channel as paused until the screen wakes. Core Audio
-  process taps need no display and are the way round it.
-* Standby's own audio is excluded, so Claude's spoken answers are never captured back.
+Three things to know:
+* macOS never says whether it allows this. A refused tap starts like any other and
+  hands over exact zeros, so a refusal is told by its evidence: the app is playing
+  (Core Audio says so) and only silence arrives (REFUSED_AFTER), on a build that has
+  never heard anything. The first start of a build is what brings macOS's prompt.
+* A tap needs no display: a sleeping or locked screen doesn't stop it.
+* Standby's own audio is left out, so Claude's spoken answers are never captured back.
 
 Where pyobjc stops and ctypes starts, learned the hard way here (assume it is the
 rule, not the exception): an "out" C array is unreadable through pyobjc (the audio
-process list raises, a block buffer's data comes back as a tuple of garbage); a C
-struct can arrive as a plain tuple (the stream format does); a callback takes
-exactly the arguments ObjC declares, and a Python exception on ScreenCaptureKit's
-thread aborts the process rather than raising, so every callback here catches
-everything.
+process list raises); a C struct can arrive as a plain tuple; and a Python exception
+on Core Audio's own thread aborts the process rather than raising, so the I/O
+callback here catches everything and does as little as it can.
 """
+import collections
 import ctypes
 import ctypes.util
 import os
 import threading
 import time
+import uuid
 
 import numpy as np
 
 from native import app
-
-# pyobjc warns once about the sample-buffer pointer it hands us; it is expected.
-import warnings
-warnings.filterwarnings("ignore", message=".*PyObjCPointer created.*")
 
 # ---- which apps are playing audio (read-only) ----------------------------------
 #
@@ -60,29 +55,6 @@ warnings.filterwarnings("ignore", message=".*PyObjCPointer created.*")
 
 ca = ctypes.CDLL(ctypes.util.find_library("CoreAudio"))
 cf = ctypes.CDLL(ctypes.util.find_library("CoreFoundation"))
-cm = ctypes.CDLL(ctypes.util.find_library("CoreMedia"))
-cm.CMBlockBufferGetDataPointer.restype = ctypes.c_int32
-cm.CMBlockBufferGetDataPointer.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t),
-                                           ctypes.POINTER(ctypes.c_size_t),
-                                           ctypes.POINTER(ctypes.POINTER(ctypes.c_char))]
-
-
-def _address(sbuf):
-    """A sample buffer's address: the callback gets an objc.PyObjCPointer (measured: its
-    declared type, ^{opaqueCMSampleBuffer=}, is opaque to pyobjc), which pyobjc_id refuses
-    ("not an Objective-C object"); a proxy, or the number itself, also do."""
-    if sbuf is None or isinstance(sbuf, int):
-        return sbuf or 0
-    addr = getattr(sbuf, "pointerAsInteger", None)
-    if addr is not None:
-        return addr
-    import objc
-    return objc.pyobjc_id(sbuf)
-
-
-class _CMTime(ctypes.Structure):
-    _fields_ = [("value", ctypes.c_int64), ("timescale", ctypes.c_int32), ("flags", ctypes.c_uint32),
-                ("epoch", ctypes.c_int64)]
 
 
 class _ASBD(ctypes.Structure):
@@ -92,18 +64,6 @@ class _ASBD(ctypes.Structure):
                 ("mBitsPerChannel", ctypes.c_uint32), ("mReserved", ctypes.c_uint32)]
 
 
-# A sample buffer is read by its address alone, never through pyobjc: on ScreenCaptureKit's
-# thread, pyobjc turning a returned CoreMedia object into a Python one crashed the recorder
-# (2026-10-23, macOS 14.7.1, Chrome: SIGSEGV in objc_msgSend under id_to_python, from a
-# CoreMedia call in this callback). Plain pointers and structs here make no objects at all.
-cm.CMSampleBufferGetDataBuffer.restype = ctypes.c_void_p
-cm.CMSampleBufferGetDataBuffer.argtypes = [ctypes.c_void_p]
-cm.CMSampleBufferGetPresentationTimeStamp.restype = _CMTime
-cm.CMSampleBufferGetPresentationTimeStamp.argtypes = [ctypes.c_void_p]
-cm.CMSampleBufferGetFormatDescription.restype = ctypes.c_void_p
-cm.CMSampleBufferGetFormatDescription.argtypes = [ctypes.c_void_p]
-cm.CMAudioFormatDescriptionGetStreamBasicDescription.restype = ctypes.POINTER(_ASBD)
-cm.CMAudioFormatDescriptionGetStreamBasicDescription.argtypes = [ctypes.c_void_p]
 SYSTEM_OBJECT = 1
 
 
@@ -122,6 +82,9 @@ IS_RUNNING_INPUT = _fourcc("piri")
 IS_RUNNING = _fourcc("pir?")
 BUNDLE_ID = _fourcc("pbid")
 PROCESS_PID = _fourcc("ppid")
+OUTPUT_DEVICE = _fourcc("sOut")       # kAudioHardwarePropertyDefaultSystemOutputDevice
+DEVICE_UID = _fourcc("uid ")          # kAudioDevicePropertyDeviceUID
+TAP_FORMAT = _fourcc("tfmt")          # kAudioTapPropertyFormat
 # Apps whose audio is a meeting. Anything else playing is the user's business.
 CALL_APPS = {"us.zoom.xos": "Zoom", "com.microsoft.teams2": "Microsoft Teams",
              "com.microsoft.teams": "Microsoft Teams", "com.tinyspeck.slackmacgap": "Slack",
@@ -218,22 +181,36 @@ def is_of(app, bundle):
     return bundle == app or bundle.startswith(app + ".")
 
 
-def unlisted_sound(listed_pids, sounding):
-    """The processes whose sound is an app's (sounding) that ScreenCaptureKit doesn't list:
-    a filter of the app alone wouldn't hear them."""
-    return sorted(set(sounding) - set(listed_pids))
+def processes():
+    """Every process Core Audio knows, as it lists them: (its object, pid, bundle id, playing)."""
+    out = []
+    for obj in _get(SYSTEM_OBJECT, PROCESS_LIST, ctypes.c_uint32, count=0) or []:
+        out.append((int(obj), int(_get(obj, PROCESS_PID, ctypes.c_int32) or 0), _get_string(obj, BUNDLE_ID) or "",
+                    bool(_get(obj, IS_RUNNING_OUTPUT, ctypes.c_uint32))))
+    return out
+
+
+def sound_objects(target):
+    """Every process whose sound is this app's (_owner), as (object, pid, bundle, playing):
+    target an app's bundle id (its helpers too: Chrome plays through its audio service),
+    or a pid (that process, and those macOS holds it responsible for)."""
+    out = []
+    for obj, pid, own, playing in processes():
+        if not pid:
+            continue
+        owner = _owner(pid, own)
+        if isinstance(target, int):
+            mine = pid == target or (owner is not None and owner[1] == target)
+        else:
+            mine = is_of(target, own) or (owner is not None and owner[0] == target)
+        if mine:
+            out.append((obj, pid, own, playing))
+    return out
 
 
 def sound_pids(bundle):
     """The pids of every process whose sound is this app's (_owner), as Core Audio lists them."""
-    out = []
-    for obj in _get(SYSTEM_OBJECT, PROCESS_LIST, ctypes.c_uint32, count=0) or []:
-        pid = _get(obj, PROCESS_PID, ctypes.c_int32)
-        own = _get_string(obj, BUNDLE_ID) or ""
-        owner = _owner(pid, own)
-        if pid and (own == bundle or own.startswith(bundle + ".") or (owner and owner[0] == bundle)):
-            out.append(int(pid))
-    return out
+    return [pid for _obj, pid, _own, _playing in sound_objects(bundle)]
 
 
 def by_app(rows):
@@ -404,15 +381,11 @@ def _confidence(bundle, playing, hears):
 # this channel lives here, so nobody else writes or shortens them: the page shows
 # reason (the chip) and detail (its tooltip) as they are, and the recorder keeps past
 # in the session's events (sessions/<id>/events.jsonl), so the transcript can say
-# "Meeting audio paused for 4 min: the screen was asleep". "paused" mends itself and
+# "Meeting audio paused for 4 min: Zoom was closed". "paused" mends itself and
 # the recorder keeps trying; "error" needs the user. cause is for code and tests and
-# is never shown. {app} is the app's name, {why} what macOS said. ASCII only: these
+# is never shown. {app} is the app's name, {why} what went wrong. ASCII only: these
 # reach logs, and a non-ASCII log line crashes an app started by launchd.
 CAUSES = {
-    "screen_asleep": ("paused", "the screen is asleep",
-                      "The screen is asleep or locked, so macOS offers nothing to capture. "
-                      "It resumes by itself when the screen wakes.",
-                      "the screen was asleep"),
     "app_closed": ("paused", "{app} is not running",
                    "{app} is not running, so there is no call audio to capture. "
                    "It resumes if {app} plays again.",
@@ -425,21 +398,24 @@ CAUSES = {
                 "no audio arrived"),
     "permission": ("error", "allow Standby to hear it",
                    "Allow Standby in System Settings, Privacy & Security, Screen & System Audio "
-                   "Recording, to hear {app}'s side of the call. No screen is recorded: only the sound. "
-                   "Once allowed, macOS reopens Standby (or quit and reopen it), and it hears it from then on.",
+                   "Recording, under System Audio Recording Only, to hear {app}'s side of the call. "
+                   "Standby takes only the sound, never the screen, and hears it as soon as it is allowed.",
                    "Standby was not allowed to hear it"),
     "failed": ("error", "the capture failed",
                "Standby could not capture {app}'s audio: {why}.",
                "the capture failed"),
 }
-# Silent this long after macOS complains: the capture has stopped. The same rule as the
-# recorder's own watchdog (STALL in mac/standby.py, which imports this module, so the
-# two are kept equal by test_meeting_capture rather than by an import). Then looked at
-# again CONFIRM later, because a long decode on the recorder's main thread holds this
-# module's callbacks up just as it holds the recorder's: late audio, not gone.
+# Silent this long: the capture has stopped. The same rule as the recorder's own
+# watchdog (STALL in mac/standby.py, which imports this module, so the two are kept
+# equal by test_meeting_capture rather than by an import).
 STALL = 2.0
-CONFIRM = 0.5
-_DECLINED = -3801     # SCStreamErrorUserDeclined: the user has not allowed capture
+# The app playing (Core Audio says its output runs), only exact zeros this long, on a
+# build that has never heard a sound: macOS has not allowed it. A refusal says nothing
+# else: every call succeeds and the tap hands over silence.
+REFUSED_AFTER = 3.0
+RETAP = 10.0          # while refused, the tap is made again this often (it asks macOS nothing)
+WATCH = 1.0           # how often the tapped app's processes and the output device are looked at again
+FLOOR = (14, 4)       # process taps that a user can allow: macOS 14.4 and later
 
 
 def describe(cause, app="", why=""):
@@ -460,45 +436,25 @@ class Stop(Exception):
         self.cause = cause
 
 
-def _cause_of(exc):
-    """Which of CAUSES a failure to start is. ScreenCaptureKit's own refusal code is
-    the sure sign of a missing permission; Screen Recording's preflight is only asked
-    when there is no code, because on macOS 15+ "System Audio Recording Only" is
-    enough for audio and the preflight may well say no to it. Unmeasured: the real
-    refusal on a Mac that has not allowed it."""
-    if isinstance(exc, Stop):
-        return exc.cause
-    code = getattr(exc, "code", None)
-    if code == _DECLINED:
-        return "permission"
-    if code is None and not _permitted():
-        return "permission"
-    return "failed"
+DICTATION_APP = "dev.standby.dictation"
 
 
-def _permitted():
-    """Screen & System Audio Recording, without asking (no prompt). True when it
-    cannot be told."""
-    allowed = preflight()
-    return True if allowed is None else allowed
+def grant(what):
+    """The key a grant is kept under (app.grants): macOS allows each app on its own, so
+    Standby Dictation has its own ("sound@dictation"). Standby's are its processes' too: its
+    recorder and voice are plain pythons it started, which macOS counts as Standby."""
+    return what + ("@dictation" if app.bundle_id() == DICTATION_APP else "")
 
 
-def preflight():
-    """The same, or None when it cannot be told: True, False or None. No prompt."""
-    try:
-        from native import permissions
-        return permissions.screen_allowed()
-    except Exception:
-        return None
+def heard_before():
+    """This build of this app has heard the Mac's sound through a tap: macOS allows it,
+    so silence from now on is only silence."""
+    g = app.grants().get(grant("sound")) or {}
+    return bool(g) and g.get("build") == app.build_mark()
 
 
 EVERYTHING = "*"      # start(EVERYTHING): all the Mac plays but Standby's own
 STANDBY_APPS = "dev.standby."     # Standby's apps' bundle identifiers start with this
-
-# Refused once in this process: ScreenCaptureKit is not asked again (each time it is
-# asked, macOS shows its prompt again: the user saw it over and over in a meeting)
-# until the preflight, which asks nothing, says it is allowed.
-_REFUSED = []
 
 
 class _Said(object):
@@ -520,7 +476,7 @@ class _Said(object):
 
 
 def _app_name(target):
-    """What to call the app before ScreenCaptureKit has named it."""
+    """What to call the app before its processes are looked at."""
     if target == EVERYTHING:
         return "the Mac"
     if isinstance(target, str):
@@ -528,113 +484,191 @@ def _app_name(target):
     return ""
 
 
-# ---- the call's audio, through ScreenCaptureKit -----------------------------------
+# ---- the call's audio, through a Core Audio process tap ------------------------------
+#
+# A tap (CATapDescription, AudioHardwareCreateProcessTap) mixes what some processes play
+# into one mono stream; Core Audio reads it as the input of a private aggregate device,
+# which an I/O callback runs. Private: no device shows in the user's lists. Unmuted: the
+# user still hears the call. The aggregate device is built on the default output device,
+# whose clock it runs on (AudioCap's way, Apple's sample's too).
 
-def _wait(start, timeout=10.0, args=2):
-    """Run a ScreenCaptureKit call that answers on a callback, and wait for it.
-
-    args is how many arguments that callback takes: shareable content hands back two
-    (the content and an error), startCapture one (an error alone). This has to match:
-    pyobjc calls the block with exactly what ObjC declares, and a Python callable that
-    wants a different number raises into ObjC, which aborts the whole process. The
-    first version of this probe crashed that way in the user's hands."""
-    box, done = {}, threading.Event()
-
-    def one(err=None):
-        box.update(value=True, err=err)
-        done.set()
-
-    def two(value=None, err=None):
-        box.update(value=value, err=err)
-        done.set()
-
-    start(two if args == 2 else one)
-    if not done.wait(timeout):
-        raise Stop("stalled", "ScreenCaptureKit did not answer")
-    err = box.get("err")
-    if err is not None or box.get("value") is None:
-        exc = RuntimeError(_said(err) if err is not None else "nothing came back")
-        try:
-            exc.code = err.code()            # the refusal's code says whether it is the permission
-        except Exception:
-            pass
-        raise exc
-    return box["value"]
+class _Buffer(ctypes.Structure):
+    _fields_ = [("mNumberChannels", ctypes.c_uint32), ("mDataByteSize", ctypes.c_uint32),
+                ("mData", ctypes.c_void_p)]
 
 
-def _said(err):
-    """An NSError in words, never raising."""
+class _BufferList(ctypes.Structure):
+    _fields_ = [("mNumberBuffers", ctypes.c_uint32), ("mBuffers", _Buffer * 1)]
+
+
+class _TimeStamp(ctypes.Structure):
+    _fields_ = [("mSampleTime", ctypes.c_double), ("mHostTime", ctypes.c_uint64),
+                ("mRateScalar", ctypes.c_double), ("mWordClockTime", ctypes.c_uint64),
+                ("mSMPTETime", ctypes.c_byte * 24), ("mFlags", ctypes.c_uint32), ("mReserved", ctypes.c_uint32)]
+
+
+_IOPROC = ctypes.CFUNCTYPE(ctypes.c_int32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p,
+                           ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p)
+ca.AudioHardwareCreateProcessTap.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+ca.AudioHardwareDestroyProcessTap.argtypes = [ctypes.c_uint32]
+ca.AudioHardwareCreateAggregateDevice.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32)]
+ca.AudioHardwareDestroyAggregateDevice.argtypes = [ctypes.c_uint32]
+ca.AudioDeviceCreateIOProcID.argtypes = [ctypes.c_uint32, _IOPROC, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)]
+ca.AudioDeviceDestroyIOProcID.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+ca.AudioDeviceStart.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+ca.AudioDeviceStop.argtypes = [ctypes.c_uint32, ctypes.c_void_p]
+for _fn in (ca.AudioHardwareCreateProcessTap, ca.AudioHardwareDestroyProcessTap, ca.AudioHardwareCreateAggregateDevice,
+            ca.AudioHardwareDestroyAggregateDevice, ca.AudioDeviceCreateIOProcID, ca.AudioDeviceDestroyIOProcID,
+            ca.AudioDeviceStart, ca.AudioDeviceStop):
+    _fn.restype = ctypes.c_int32
+
+
+class _Timebase(ctypes.Structure):
+    _fields_ = [("numer", ctypes.c_uint32), ("denom", ctypes.c_uint32)]
+
+
+_libc = ctypes.CDLL(None)
+_libc.mach_absolute_time.restype = ctypes.c_uint64
+_tb = _Timebase()
+_libc.mach_timebase_info(ctypes.byref(_tb))
+_TICK = _tb.numer / float(_tb.denom) / 1e9          # seconds per host tick
+
+
+def _host_now():
+    return _libc.mach_absolute_time() * _TICK
+
+
+def supported():
+    """(True, "") on a Mac that has process taps a user can allow, else (False, why)."""
+    import platform
     try:
-        return str(err.localizedDescription())
-    except Exception:
-        return str(err)
+        version = tuple(int(x) for x in (platform.mac_ver()[0] or "0").split(".")[:2])
+    except ValueError:
+        version = (0,)
+    if version < FLOOR:
+        return False, "Needs macOS %d.%d or later" % FLOOR
+    try:
+        import CoreAudio
+        CoreAudio.CATapDescription
+    except (ImportError, AttributeError):
+        return False, "Run ./install.sh again"
+    return True, ""
 
 
-# The audio delegate, declared once with the selector and signature ScreenCaptureKit
-# itself declares (SCStreamOutput), so nothing is guessed from the method name.
-_AUDIO_SELECTOR = b"stream:didOutputSampleBuffer:ofType:"
-_AUDIO_SIGNATURE = b"v@:@^{opaqueCMSampleBuffer=}q"
-_OUTPUT_CLASS = []
+def _output_uid():
+    """The default output device's UID (where the user hears the Mac), or ""."""
+    return _get_string(_get(SYSTEM_OBJECT, OUTPUT_DEVICE, ctypes.c_uint32) or 0, DEVICE_UID) or ""
 
 
-_DELEGATE_CLASS = []
+def _read(data, when):
+    """One I/O callback's input (an AudioBufferList's address) and its time (an
+    AudioTimeStamp's): (mono float32 samples, the host time of the first, in seconds), or
+    None. Copies the samples: Core Audio's buffer is gone once the callback returns."""
+    if not data:
+        return None
+    bl = ctypes.cast(data, ctypes.POINTER(_BufferList)).contents
+    if not bl.mNumberBuffers or not bl.mBuffers[0].mData or not bl.mBuffers[0].mDataByteSize:
+        return None
+    b = bl.mBuffers[0]
+    x = np.frombuffer(ctypes.string_at(b.mData, b.mDataByteSize), dtype=np.float32)
+    if b.mNumberChannels > 1:
+        x = x[:len(x) - len(x) % b.mNumberChannels].reshape(-1, b.mNumberChannels).mean(axis=1).astype(np.float32)
+    stamp = ctypes.cast(when, ctypes.POINTER(_TimeStamp)).contents if when else None
+    return x, (stamp.mHostTime * _TICK if stamp is not None and stamp.mHostTime else _host_now())
 
 
-def _delegate_class():
-    """The stream's own delegate, so a capture macOS ends says why: the laptop slept,
-    the app quit, the display changed. Without it a dead stream merely goes quiet, and
-    the recorder can only guess from the silence."""
-    if not _DELEGATE_CLASS:
-        import AppKit
+def _osstatus(err):
+    """A Core Audio error code, as its four characters when it is one ('!obj')."""
+    raw = int(err) & 0xFFFFFFFF
+    text = raw.to_bytes(4, "big")
+    return "'%s'" % text.decode() if all(32 <= b < 127 for b in text) else str(int(err))
+
+
+class _Tap(object):
+    """One tap and its aggregate device, running: block(samples, host_seconds, rate) from
+    Core Audio's own thread, as little as it can be (the samples copied, handed on)."""
+
+    def __init__(self, objects, exclude, block):
         import objc
+        import CoreAudio
+        from Foundation import NSDictionary
+        self.tap, self.device, self.proc, self._cb = 0, 0, None, None
+        if exclude:
+            desc = CoreAudio.CATapDescription.alloc().initMonoGlobalTapButExcludeProcesses_(objects)
+        else:
+            desc = CoreAudio.CATapDescription.alloc().initMonoMixdownOfProcesses_(objects)
+        desc.setPrivate_(True)
+        desc.setMuteBehavior_(0)                  # CATapUnmuted: the user still hears it
+        desc.setName_("Standby")
+        tap = ctypes.c_uint32(0)
+        err = ca.AudioHardwareCreateProcessTap(objc.pyobjc_id(desc), ctypes.byref(tap))
+        if err:
+            raise RuntimeError("the tap was refused (%s)" % _osstatus(err))
+        self.tap = tap.value
+        try:
+            fmt = _get(self.tap, TAP_FORMAT, _ASBD)
+            self.rate = float(fmt.mSampleRate) if fmt is not None and fmt.mSampleRate else 48000.0
+            self.output = _output_uid()
+            spec = {"name": "Standby", "uid": str(uuid.uuid4()), "private": True, "tapautostart": True,
+                    "taps": [{"uid": str(desc.UUID().UUIDString()), "drift": True}]}
+            if self.output:
+                spec.update(master=self.output, subdevices=[{"uid": self.output}])
+            spec = NSDictionary.dictionaryWithDictionary_(spec)
+            dev = ctypes.c_uint32(0)
+            err = ca.AudioHardwareCreateAggregateDevice(objc.pyobjc_id(spec), ctypes.byref(dev))
+            if err:
+                raise RuntimeError("its device was refused (%s)" % _osstatus(err))
+            self.device = dev.value
 
-        def stopped(self, stream, err):
-            try:
-                self.owner.complain(err.localizedDescription() if err else "no reason given")
-            except Exception:
-                pass
-
-        class _Delegate(AppKit.NSObject, protocols=[objc.protocolNamed("SCStreamDelegate")]):
-            stream_didStopWithError_ = objc.selector(stopped, selector=b"stream:didStopWithError:",
-                                                     signature=b"v@:@@")
-        _DELEGATE_CLASS.append(_Delegate)
-    return _DELEGATE_CLASS[0]
-
-
-def _output_class():
-    """A class whose instances take audio buffers for their .owner. Everything is
-    caught: this runs on ScreenCaptureKit's thread, where a Python exception would
-    abort the process (in the product, that is the user's recorder mid-meeting)."""
-    if not _OUTPUT_CLASS:
-        import AppKit
-        import objc
-        import ScreenCaptureKit as SC
-
-        def took(self, stream, sbuf, kind):
-            try:
-                if kind == SC.SCStreamOutputTypeAudio:
-                    self.owner.audio(sbuf)
-            except Exception as exc:
+            def took(_dev, _now, data, when, _out, _out_when, _client):
                 try:
-                    self.owner.fail("a frame could not be read: %r" % exc)
+                    got = _read(data, when)
+                    if got is not None:
+                        block(got[0], got[1], self.rate)
                 except Exception:
                     pass
+                return 0
+            self._cb = _IOPROC(took)                 # kept: Core Audio holds only its address
+            proc = ctypes.c_void_p(0)
+            err = ca.AudioDeviceCreateIOProcID(self.device, self._cb, None, ctypes.byref(proc))
+            if err:
+                raise RuntimeError("its callback was refused (%s)" % _osstatus(err))
+            self.proc = proc
+            err = ca.AudioDeviceStart(self.device, self.proc)      # macOS's prompt, the first time
+            if err:
+                raise RuntimeError("it did not start (%s)" % _osstatus(err))
+        except Exception:
+            self.close()
+            raise
 
-        class _Output(AppKit.NSObject, protocols=[objc.protocolNamed("SCStreamOutput")]):
-            stream_didOutputSampleBuffer_ofType_ = objc.selector(took, selector=_AUDIO_SELECTOR,
-                                                                 signature=_AUDIO_SIGNATURE)
-        _OUTPUT_CLASS.append(_Output)
-    return _OUTPUT_CLASS[0]
+    def close(self):
+        """Stopped and gone, every part of it. Never raises."""
+        try:
+            if self.device and self.proc is not None:
+                ca.AudioDeviceStop(self.device, self.proc)
+                ca.AudioDeviceDestroyIOProcID(self.device, self.proc)
+            if self.device:
+                ca.AudioHardwareDestroyAggregateDevice(self.device)
+            if self.tap:
+                ca.AudioHardwareDestroyProcessTap(self.tap)
+        except Exception:
+            pass
+        self.device, self.tap, self.proc = 0, 0, None
 
 
 class MeetingAudio(_Said):
-    """One app's output audio as mono float32 blocks, through ScreenCaptureKit.
+    """One app's output audio as mono float32 blocks, through a Core Audio process tap.
 
     The interface the recorder uses: apps(), start(target,
     feed), stop(), ok, error, name, and what the user is told (state, cause, reason,
     detail, past). feed(block, t) gets each block with the monotonic time of its
     first sample. Our own audio is left out, so Claude's spoken answers are never
     captured back. start() never raises: a failure is .error with .ok false.
+
+    Core Audio's thread only copies a block and queues it; a thread of this capture's own
+    resamples it to 16 kHz, feeds it on, and watches: the app's processes (a helper that
+    starts playing later is tapped too), the output device (moved to the new one), and
+    the evidence of a refusal (REFUSED_AFTER).
     """
 
     def __init__(self, sample_rate=16000, include_mine=False, log=None):
@@ -642,202 +676,176 @@ class MeetingAudio(_Said):
         self.log = log or (lambda msg: None)      # the recorder's log; silent by default
         self.ok, self.error, self.name, self.target = False, None, "", None
         self.blocks, self.first_at, self.started_at, self.format = [], None, None, None
-        self.note, self.last_frame = None, None       # what ScreenCaptureKit said; when audio last arrived
+        self.note, self.last_frame = None, None       # what went wrong while running; when audio last arrived
         self.opened, self.run = None, 0     # when the last start began (monotonic); which start it is
-        self.confirming = None              # the look again after a complaint, while one is due
         self.lock = threading.Lock()
-        self.stream, self._out, self._delegate, self.feed = None, None, None, None
-        self._noted = True                  # its first audio after each start is noted (note_grant)
-        self._described = True              # and its first buffer described in the log
+        self.feed, self._tap, self._tapped, self._output = None, None, (), None
+        self._queue, self._wake = collections.deque(), threading.Event()
+        self._resampler, self._thread = None, None
+        self._heard = False                 # a sound (not zeros) since the last start
+        self._described = True              # its first block described in the log
+        self._looked = 0.0                  # when the processes were last looked at (monotonic)
 
     def apps(self):
         return [a for a in audio_apps() if not a.get("own")]      # Standby's own is never a meeting
 
     def start(self, target=None, feed=None):
+        self.stop()
         self.target, self.feed = target or self.target, feed
         self.run += 1
         self.opened, self.last_frame, self.note = time.monotonic(), None, None
-        self._noted, self._described = False, False
-        app.build_mark()                     # once per process, off ScreenCaptureKit's thread
-        if _REFUSED and preflight() is not True:
-            self._stopped("permission", "not allowed yet: waiting for it, without asking macOS again")
-            return
+        self._heard, self._described = False, False
+        app.build_mark()                     # once per process, off Core Audio's thread
         try:
             self._start()
             self._recording()
-            del _REFUSED[:]
         except Exception as exc:
-            self._stopped(_cause_of(exc), str(exc))
-            if self.cause == "permission" and not _REFUSED:
-                _REFUSED.append(time.time())
+            self._stopped(getattr(exc, "cause", "failed"), str(exc))
             self.stop()
+            return
+        self._thread = threading.Thread(target=self._go, args=(self.run,), name="meeting audio", daemon=True)
+        self._thread.start()
+
+    def _objects(self):
+        """(the process objects to tap, exclude): this app's, or everything but Standby's."""
+        if self.target == EVERYTHING:
+            self.name = "the Mac"
+            mine = [] if self.include_mine else [o for o, pid, bundle, _p in processes() if is_standby(pid, bundle)]
+            return tuple(sorted(mine)), True
+        found = sound_objects(self.target)
+        if not found:
+            raise Stop("app_closed", "%s is not running" % self.target)
+        if not self.name:
+            self.name = app_name(found[0][1], found[0][2]) if isinstance(self.target, int) \
+                else (CALL_APPS.get(self.target) or BROWSERS.get(self.target) or app_name(found[0][1], self.target))
+        return tuple(sorted(o for o, _pid, _b, _p in found)), False
 
     def _start(self):
         if os.environ.get("STANDBY_NO_DEVICES"):
-            # A test never captures for real: the sessions here run where Screen Recording is
-            # allowed, so it would capture with no prompt, and a process that exits with it
-            # running crashes (2026-10-08).
+            # A test never captures for real: it would hear the Mac's sound, and on a build
+            # that macOS has never asked, bring its prompt up.
             raise Stop("failed", "no real capture in a test (STANDBY_NO_DEVICES)")
-        import ScreenCaptureKit as SC
-        content = _wait(lambda cb: SC.SCShareableContent.
-                        getShareableContentExcludingDesktopWindows_onScreenWindowsOnly_completionHandler_(
-                            False, False, cb), args=2)
-        # Audio through ScreenCaptureKit hangs off a display, and macOS offers none while
-        # the screen is asleep or locked: measured, 0 displays with 42 apps still listed.
-        # So a sleeping screen stops this capture, and the recorder has to start it again
-        # on wake. Core Audio process taps need no display, which is the way round it.
-        if not content.displays():
-            raise Stop("screen_asleep", "the screen is asleep or locked, so macOS offers nothing to capture")
-        if self.target == EVERYTHING:
-            # All the Mac plays but Standby (what to take back out of the mic). Claude's
-            # voice is voice mode's engine's to take out, so it is never taken out twice.
-            self.name = "the Mac"
-            mine = [a for a in content.applications() if (a.bundleIdentifier() or "").startswith(STANDBY_APPS)]
-            filt = SC.SCContentFilter.alloc().initWithDisplay_excludingApplications_exceptingWindows_(
-                content.displays()[0], mine, [])
-        else:
-            listed = content.applications()
-            apps = [a for a in listed if is_of(self.target, a.bundleIdentifier())]
-            if not apps:
-                raise Stop("app_closed", "%s is not running" % self.target)
-            self.name = next((a.applicationName() for a in apps if a.bundleIdentifier() == self.target), None) \
-                or apps[0].applicationName() or self.target
-            unlisted = unlisted_sound([int(a.processID()) for a in listed], sound_pids(self.target))
-            if unlisted:
-                # Its sound comes from a process ScreenCaptureKit doesn't list: Chrome's audio
-                # service, a helper (measured, macOS 14.7: the filter with Chrome alone heard
-                # only zeros). All the Mac plays then, but every other app listed: this app's
-                # helpers are in it, and so may be a system sound.
-                self.log("meeting audio: %s plays through a process not listed (pid %s): everything "
-                         "but the other apps" % (self.name, ", ".join(str(p) for p in unlisted)))
-                others = [a for a in listed if not is_of(self.target, a.bundleIdentifier())]
-                filt = SC.SCContentFilter.alloc().initWithDisplay_excludingApplications_exceptingWindows_(
-                    content.displays()[0], others, [])
-            else:
-                # This app's audio only: include it and nothing else, so music and notifications
-                # stay out. ScreenCaptureKit wants a display filter even for audio alone, so a
-                # 2x2 frame is configured and never read.
-                filt = SC.SCContentFilter.alloc().initWithDisplay_includingApplications_exceptingWindows_(
-                    content.displays()[0], apps, [])
-        cfg = SC.SCStreamConfiguration.alloc().init()
-        cfg.setCapturesAudio_(True)
-        cfg.setExcludesCurrentProcessAudio_(not self.include_mine)
-        cfg.setSampleRate_(self.rate)
-        cfg.setChannelCount_(1)
-        cfg.setWidth_(2)
-        cfg.setHeight_(2)
-        self._delegate = _delegate_class().alloc().init()
-        self._delegate.owner = self
-        self._out = _output_class().alloc().init()
-        self._out.owner = self
-        self.stream = SC.SCStream.alloc().initWithFilter_configuration_delegate_(filt, cfg, self._delegate)
-        ok, err = self.stream.addStreamOutput_type_sampleHandlerQueue_error_(
-            self._out, SC.SCStreamOutputTypeAudio, None, None)
+        ok, why = supported()
         if not ok:
-            raise RuntimeError("the audio output was refused: %s" % err)
+            raise Stop("failed", why)
+        self.name = ""
+        objects, exclude = self._objects()
+        self._tap_now(objects, exclude)
         self.started_at = time.time()
-        _wait(lambda cb: self.stream.startCaptureWithCompletionHandler_(cb), args=1)
 
-    def audio(self, sbuf):
-        """One buffer, on ScreenCaptureKit's thread. sbuf: the sample buffer as pyobjc
-        hands it to the callback (an objc.PyObjCPointer, its type being opaque here), or
-        its address."""
-        addr = _address(sbuf)
-        if not addr:
+    def _tap_now(self, objects, exclude):
+        old, self._tap = self._tap, None
+        if old is not None:
+            old.close()
+        run = self.run
+        tap = _Tap(list(objects), exclude, lambda x, at, rate: self._took(run, x, at, rate))
+        if run != self.run:                    # stopped meanwhile, from another thread
+            tap.close()
             return
-        if self.format is None:
-            self.format = self._describe(addr) or "as configured: %d Hz, 1 channel, 32-bit float" % self.rate
-        block = cm.CMSampleBufferGetDataBuffer(addr)       # the sample buffer's own: alive while it is
-        if not block:
+        self._tap = tap
+        self._tapped, self._output, self._looked = (objects, exclude), self._tap.output, time.monotonic()
+        with self.lock:
+            self._resampler = None            # a new tap may run at another rate
+        self.format = "%.0f Hz, 1 channel, 32-bit float" % self._tap.rate
+        self.log("meeting audio: tapping %s (%d process%s%s, %s, on %s)" % (
+            self.name or _app_name(self.target), len(objects), "" if len(objects) == 1 else "es",
+            " left out" if exclude else "", self.format, self._output or "no output device"))
+
+    def _took(self, run, x, at, rate):
+        """On Core Audio's thread: queued, nothing more."""
+        if run == self.run:
+            self._queue.append((x, at, rate))
+            self._wake.set()
+
+    def _go(self, run):
+        """This capture's own thread: each block resampled and fed on, and the watch."""
+        while run == self.run:
+            self._wake.wait(0.25)
+            self._wake.clear()
+            while self._queue and run == self.run:
+                try:
+                    self._block(*self._queue.popleft())
+                except Exception as exc:
+                    self.log("meeting audio: a block could not be read: %r" % exc)
+            if run == self.run:
+                try:
+                    self._watch()
+                except Exception as exc:
+                    self.log("meeting audio: the watch failed: %r" % exc)
+
+    def _block(self, x, at, rate):
+        from native.macos.duplex import Resampler
+        with self.lock:
+            if self._resampler is None or self._resampler.rate != float(rate):
+                self._resampler = Resampler(rate, self.rate)
+            samples = self._resampler.feed(x)
+        if not len(samples):
             return
-        # The samples through ctypes (pyobjc returns a tuple of garbage for this out
-        # void**): string_at copies the bytes while the buffer is retained.
-        at, total, data = ctypes.c_size_t(0), ctypes.c_size_t(0), ctypes.POINTER(ctypes.c_char)()
-        err = cm.CMBlockBufferGetDataPointer(block, 0, ctypes.byref(at), ctypes.byref(total), ctypes.byref(data))
-        if err or not total.value:
-            return
-        samples = np.frombuffer(ctypes.string_at(data, total.value), dtype=np.float32)
-        at = self._when(addr, len(samples))
+        t = at + (time.monotonic() - _host_now())          # the host clock, on the monotonic one
         if not self._described:
             self._described = True
-            cm.CMSampleBufferGetNumSamples.restype, cm.CMSampleBufferGetNumSamples.argtypes = ctypes.c_long, [ctypes.c_void_p]
-            self.log("meeting audio: %s's first buffer: %d samples, %d bytes, %s, peak %.4f" % (
-                self.name, cm.CMSampleBufferGetNumSamples(addr), total.value, self.format, float(np.abs(samples).max())
-                if len(samples) else 0.0))
+            self.log("meeting audio: %s's first block: %d samples at %.0f Hz, peak %.4f" % (
+                self.name, len(x), rate, float(np.abs(x).max())))
+        sound = bool(np.any(samples))
         with self.lock:
             self.last_frame = time.monotonic()
             if self.first_at is None:
                 self.first_at = time.time()
-            noted, self._noted = self._noted, True
             if self.feed is None:
-                self.blocks.append((at, samples))        # the buffer's own time, not arrival
-        if not noted:                                    # this build hears the Mac: once per start
-            app.note_grant("heard")
+                self.blocks.append((t, samples))
+        if sound and not self._heard:
+            self._heard = True
+            if not heard_before():
+                app.note_grant(grant("sound"))     # this build is allowed: silence is only silence from now
+            if self.cause == "permission":
+                self.log("meeting audio: sound from %s: allowed now" % self.name)
+                self._recording()
         if self.feed is not None:
-            self.feed(samples, at)
+            self.feed(samples, t)
 
-    def _when(self, sbuf, count):
-        """When this block's first sample was played, on the monotonic clock.
+    def _watch(self):
+        """Once a WATCH: a refusal told by its evidence, the tap made again while refused,
+        and the processes and output device looked at again."""
+        now = time.monotonic()
+        if now - self._looked < WATCH:
+            return
+        self._looked = now
+        refused = self.cause == "permission"
+        if not self._heard and not refused and now - self.opened >= REFUSED_AFTER and not heard_before() \
+                and self._playing():
+            self._stopped("permission", "%s is playing and only silence arrives: macOS has not allowed "
+                          "System Audio Recording" % (self.name or "the app"))
+            app.note_grant(grant("sound_refused"))     # what the setup window and the band say from now
+            self._retap_at = now + RETAP
+            return
+        objects, exclude = self._objects_or_none()
+        output = _output_uid()
+        if refused and now >= getattr(self, "_retap_at", 0):
+            self._retap_at = now + RETAP
+            self._tap_now(objects or self._tapped[0], exclude)       # a grant in System Settings takes then
+        elif objects is not None and (objects, exclude) != self._tapped:
+            self._tap_now(objects, exclude)                          # a helper started (or ended) playing
+        elif output and output != self._output:
+            self.log("meeting audio: the output device changed: tapping on it")
+            self._tap_now(*self._tapped)
 
-        Always the buffer's own stamp, never when this callback ran. ScreenCaptureKit
-        stamps every buffer from the same clock as time.monotonic() (nanoseconds, 20 ms
-        apart), and it delivers in bursts of about 50 a second: measured on this Mac,
-        arrival time leaves gaps between blocks of up to +57 ms and -20 ms, while the
-        buffer's own stamps are contiguous to within 42 microseconds. The recorder
-        places the other side of the call on the session clock from this, so arrival
-        time is only the fallback for a buffer that somehow carries no stamp."""
+    def _objects_or_none(self):
         try:
-            pts = cm.CMSampleBufferGetPresentationTimeStamp(sbuf)
-            if pts.timescale and pts.flags & 1:           # kCMTimeFlags_Valid
-                return pts.value / float(pts.timescale)
-        except Exception:
-            pass
-        return time.monotonic() - count / float(self.rate)
+            return self._objects()
+        except Stop:
+            return None, self._tapped[1]
 
-    def _describe(self, sbuf):
-        """The format as ScreenCaptureKit states it, or None (sbuf: the sample buffer's
-        address). Never raises."""
-        try:
-            desc = cm.CMSampleBufferGetFormatDescription(sbuf)
-            asbd = cm.CMAudioFormatDescriptionGetStreamBasicDescription(desc) if desc else None
-            if not asbd:
-                return None
-            a = asbd.contents
-            return "%.0f Hz, %d channel(s), %d bits" % (a.mSampleRate, a.mChannelsPerFrame, a.mBitsPerChannel)
-        except Exception:
-            return None
+    def _playing(self):
+        """Is what is tapped playing now (its output running), as Core Audio says?"""
+        objects, exclude = self._tapped
+        if exclude:
+            return any(p for o, _pid, _b, p in processes() if o not in objects)
+        return any(p for o, _pid, _b, p in processes() if o in objects)
 
     def complain(self, why):
-        """ScreenCaptureKit says it stopped. Measured: it said "Failed to find any
-        displays or windows to capture" as the screen went to sleep, while the audio
-        kept arriving perfectly for seconds afterwards. So this is a stop only if the
-        audio has stopped too, for STALL s and still CONFIRM s later; otherwise it is
-        noted and the capture carries on. Treating it as fatal would have the recorder
-        tear the channel down and build it again for ever."""
+        """The capture failed while running: said, and the recorder starts it again."""
         self.note = why
-        if not self._silent():
-            self.log("meeting audio: %s (audio is still arriving, so carrying on)" % why)
-            return
-        self.confirming = threading.Timer(CONFIRM, self._confirm, (why, self.run))   # tests join it
-        self.confirming.daemon = True
-        self.confirming.start()
-
-    def _silent(self):
-        last = self.last_frame if self.last_frame is not None else self.opened
-        return last is None or time.monotonic() - last > STALL
-
-    def _confirm(self, why, run):
-        """CONFIRM s after a complaint with no audio behind it: still none, from the
-        same start, and it has stopped. A newer start or a stop() makes this a no-op."""
-        try:
-            if run != self.run or not self.ok:
-                return
-            if self._silent():
-                self._stopped("stopped", why)
-            else:
-                self.log("meeting audio: %s (the audio was late, not gone: carrying on)" % why)
-        except Exception:
-            pass
+        self._stopped("stopped", why)
 
     def fail(self, why, cause="failed"):
         self._stopped(cause, why)
@@ -850,18 +858,14 @@ class MeetingAudio(_Said):
     def stop(self):
         """Ends the capture. Why it stopped, if it did, stays for the page to show; a
         capture that was fine has nothing more to say."""
-        stream, self.stream = self.stream, None
+        tap, self._tap = self._tap, None
         self.ok, self.run = False, self.run + 1
+        self._wake.set()
+        self._queue.clear()
         if self.state == "recording":
             self.state = None
-        if stream is None:
-            return
-        done = threading.Event()
-        try:
-            stream.stopCaptureWithCompletionHandler_(lambda err=None: done.set())
-            done.wait(5)
-        except Exception:
-            pass
+        if tap is not None:
+            tap.close()
 
 
 class FakeMeetingAudio(_Said):
@@ -870,8 +874,8 @@ class FakeMeetingAudio(_Said):
     Set apps_now to what apps() should report; fail_with (what went wrong) and
     fail_cause (one of CAUSES, "failed" if unset) to make start() refuse; stalled to
     make it go quiet without saying so (what a dead stream looks like); and call
-    lose(cause) to have it stop mid-call the way the real one does (the screen going
-    to sleep: lose("screen_asleep")). feed() gets blocks of `block_samples` zeros at
+    lose(cause) to have it stop mid-call the way the real one does (macOS refusing it
+    on the evidence: lose("permission")). feed() gets blocks of `block_samples` zeros at
     `rate`, with times from a clock that starts at start(), so a late join is visible.
     """
 

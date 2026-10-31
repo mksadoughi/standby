@@ -24,12 +24,6 @@ def capture(sample_rate=16000, include_mine=False, log=None):
     return _os().MeetingAudio(sample_rate=sample_rate, include_mine=include_mine, log=log)
 
 
-def preflight():
-    """May Standby record what the computer plays, now, without asking? True, False, or
-    None when it can't tell."""
-    return _os().preflight()
-
-
 def describe(cause, app="", why=""):
     """The words for why a capture stopped or paused: {"reason", "detail", "past"}, or None."""
     return _os().describe(cause, app, why)

@@ -54,8 +54,9 @@ def grants():
 
 
 def note_grant(what):
-    """This build was just seen allowed `what` ("heard": captured the computer's sound;
-    "screen": allowed to record the screen)."""
+    """This build was just seen allowed `what` ("mic"; "sound": a tap heard the
+    computer's sound; "sound_asked": its capture brought macOS's prompt up; Standby
+    Dictation's with "@dictation")."""
     try:
         g = grants()
         g[what] = {"at": time.time(), "build": build_mark()}

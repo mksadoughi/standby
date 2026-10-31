@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-14 retires on 2026-11-02; test Sonoma on a physical Mac.
+        # macos-14 retires on 2026-11-02; test macOS 14.4 or later on a physical Mac.
         os: [macos-15, macos-26]             # Apple Silicon: Sequoia, Tahoe
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip wheel
           python -m pip install -c constraints.txt numpy sounddevice parakeet-mlx mlx-whisper sherpa-onnx \
-            pywebview onnxruntime pyobjc-framework-AVFoundation pyobjc-framework-ScreenCaptureKit \
+            pywebview onnxruntime pyobjc-framework-AVFoundation pyobjc-framework-CoreAudio \
             pyobjc-framework-CoreML mlx-audio sentencepiece
 
       # The suites that need no microphone, speaker, model or window (group "par" in

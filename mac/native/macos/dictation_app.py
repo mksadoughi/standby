@@ -1717,8 +1717,8 @@ class Controller(NSObject):
         self.perm["mic"] = mic_status()
         self.perm["apple"] = apple_dictation_on()    # its menu item comes and goes
         if config.load_config().get("room_only", False):     # offered, never asked here
-            self.perm["hear_mac"] = core.SCREEN["allowed"] = core.screen_allowed()
-            self.perm["hear_mac_asked"] = core.ASKED_SCREEN.exists()
+            self.perm["hear_mac"] = core.SOUND["allowed"] = core.sound_allowed()
+            self.perm["hear_mac_asked"] = core.sound_asked()
             try:
                 import roomonly
                 roomonly.warm()            # off the key press: Core Audio's first answers are slow
@@ -1852,7 +1852,7 @@ class Controller(NSObject):
         if self.perm.get("hear_mac_asked"):
             open_url(core.PANE + "ScreenCapture")
         else:
-            core.ask_screen()
+            core.ask_sound()
         self.next_check = 0.0
 
     def showSetup_(self, _sender):

@@ -1,8 +1,8 @@
 """Standby's setup window before a first call or meeting ("Set up Standby"): what a start needs from
 macOS, and what the window shows.
 
-A call needs the microphone; an online meeting also needs the meeting's sound (Screen & System
-Audio Recording). While what the start needs is still undecided, the start waits and the window
+A call needs the microphone; an online meeting also needs the meeting's sound (System Audio
+Recording). While what the start needs is still undecided, the start waits and the window
 asks for both, once: each its own row, either first, macOS's own prompt only on the row's button,
 a tick as each is allowed (or the sound skipped), then the call or meeting starts by itself.
 Allowed already: no window, no wait. Plain functions; mac/ui.py holds the start and runs the window.
@@ -15,8 +15,7 @@ HELD_FOR = 15 * 60             # the most a start waits for its setup (and is ta
 ROWS = [MIC, SOUND]               # the window always asks for both: a first call also offers the meeting's sound
 
 NAMES = {MIC: ("Microphone", "Standby can hear you on calls and in meetings."),
-         SOUND: ("Meeting sound", "Hears others in online meetings. macOS mentions the screen, "
-                 "but Standby takes only the sound.")}
+         SOUND: ("Meeting sound", "Hears others in online meetings. Standby takes only the sound.")}
 TITLE, SUB = "Set up Standby", "Two things for macOS to allow, once."
 DONE = "You're all set"
 REFUSED = "Turn on Standby in System Settings, then come back."   # refused before: macOS won't ask again
@@ -40,12 +39,11 @@ def mic_state(status, heard=False):
     return "ask" if status == "undetermined" and not heard else "allowed"
 
 
-def sound_state(permitted, heard=False, asked=False):
-    """The meeting's sound: "allowed" (the screen is, or this build heard the Mac's sound), "ask"
-    (macOS has never asked: it asks once, ever) or "denied"."""
-    if permitted or heard:
-        return "allowed"
-    return "denied" if asked else "ask"
+def sound_state(state):
+    """The meeting's sound, from native.permissions.sound_state: "allowed" (heard, or asked
+    with no sign of a refusal: macOS never says), "denied" (a capture heard only silence
+    while an app played) or "ask" (this build has never asked)."""
+    return {"allowed": "allowed", "asked": "allowed", "denied": "denied"}.get(state, "ask")
 
 
 def skipped(skipped_at, now):

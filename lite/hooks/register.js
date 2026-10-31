@@ -68,8 +68,8 @@ function canWindow() { return !!(S.st && S.st.can && S.st.can.window) }
 const ACCESS = {
   mic: { denied: 'Standby can’t hear your mic · allow it in Privacy & Security > Microphone',
     ask: 'macOS will ask for your microphone · choose Allow' },
-  meeting_audio: { denied: 'Standby can’t hear the meeting’s sound · allow it in Privacy & Security > Screen & System Audio Recording',
-    ask: 'macOS will ask for Screen & System Audio Recording · choose Allow; Standby takes only the sound' },
+  meeting_audio: { denied: 'Standby can’t hear the meeting’s sound · allow it in Privacy & Security > System Audio Recording',
+    ask: 'macOS will ask for System Audio Recording · choose Allow; Standby takes only the sound' },
 }
 function access(live) {
   for (const what of live.kind === 'call' ? ['mic'] : ['mic', 'meeting_audio']) {

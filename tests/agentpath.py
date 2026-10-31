@@ -88,38 +88,48 @@ def _report():
 subprocess.Popen.__init__, subprocess.Popen._handle_exitstatus = _started, _ended
 atexit.register(_report)
 
-# Nor the real ScreenCaptureKit (2026-10-08): these sessions run where Screen Recording
-# is allowed, so a test that reached it captured the Mac's sound for real, with no
-# prompt, and crashed as it exited with the stream running. Here `import
-# ScreenCaptureKit` gives a stand-in whose every SC class fails, and touching one fails
-# the suite. A test with its own stand-in puts it in sys.modules, as before. The
-# modules check STANDBY_NO_DEVICES too, for the children a test starts.
+# Nor a real Core Audio tap: these sessions may run where System Audio Recording is
+# allowed, so a test that reached one would capture the Mac's sound for real, with no
+# prompt (and on a build never asked, bring macOS's prompt up). Here CoreAudio imports as
+# itself, but its CATapDescription is a stand-in that fails the suite when touched. A test
+# with its own stand-in puts it in sys.modules, as before. The modules check
+# STANDBY_NO_DEVICES too, for the children a test starts.
 import importlib.abc  # noqa: E402
-import importlib.machinery  # noqa: E402
-import types  # noqa: E402
+import importlib.util  # noqa: E402
 
-TOUCHED = []                      # what a test reached for in ScreenCaptureKit
+TOUCHED = []                      # what a test reached for of a real tap
 
 
-class _NoScreenCapture(types.ModuleType):
+class _NoTap(object):
     def __getattr__(self, name):
         if name.startswith("__"):
             raise AttributeError(name)
         TOUCHED.append(name)
-        raise RuntimeError("a test reached the real ScreenCaptureKit (%s): STANDBY_NO_DEVICES" % name)
+        raise RuntimeError("a test reached a real Core Audio tap (%s): STANDBY_NO_DEVICES" % name)
 
 
-class _Tripwire(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+class _Tripwire(importlib.abc.MetaPathFinder):
     def find_spec(self, name, path=None, target=None):
-        if name == "ScreenCaptureKit" and os.environ.get("STANDBY_NO_DEVICES"):
-            return importlib.machinery.ModuleSpec(name, self)
-        return None
+        if name != "CoreAudio" or not os.environ.get("STANDBY_NO_DEVICES"):
+            return None
+        sys.meta_path.remove(self)
+        try:
+            spec = importlib.util.find_spec(name)
+        finally:
+            sys.meta_path.insert(0, self)
+        if spec is None or spec.loader is None:
+            return spec
+        real = spec.loader
 
-    def create_module(self, spec):
-        return _NoScreenCapture(spec.name)
+        class _Loader(importlib.abc.Loader):
+            def create_module(self, spec):
+                return real.create_module(spec)
 
-    def exec_module(self, module):
-        pass
+            def exec_module(self, module):
+                real.exec_module(module)
+                module.CATapDescription = _NoTap()
+        spec.loader = _Loader()
+        return spec
 
 
 sys.meta_path.insert(0, _Tripwire())
@@ -127,7 +137,7 @@ sys.meta_path.insert(0, _Tripwire())
 
 def _report_capture():
     if TOUCHED:
-        print("  a test reached the real ScreenCaptureKit: %s  FAIL" % ", ".join(sorted(set(TOUCHED))))
+        print("  a test reached a real Core Audio tap: %s  FAIL" % ", ".join(sorted(set(TOUCHED))))
         print("1 FAILED")
         sys.stdout.flush()
         os._exit(1)

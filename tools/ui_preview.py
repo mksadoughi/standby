@@ -70,7 +70,7 @@ const sessions = { "live-1": { info: live, chat: ["listening", "p-starters", "su
 // the call's sound refused, the switch on for an older copy (known or not).
 const REFUSED = { id: "s2", kind: "meeting", name: "Zoom", bundle: "us.zoom.xos", level: 0, ok: false, state: "error",
   cause: "permission", reason: "allow Standby to hear it",
-  detail: "Allow Standby in System Settings, Privacy & Security, Screen & System Audio Recording, to hear Zoom's side of the call." };
+  detail: "Allow Standby in System Settings, Privacy & Security, Screen & System Audio Recording, under System Audio Recording Only, to hear Zoom's side of the call." };
 const SOURCES = ["transcript-permission", "transcript-stale", "stale-confirm"].includes(SCENE)
   ? [{ id: "s3", kind: "mic", name: "AirPods Pro", transport: "bluetooth", level: 0.05, ok: true, state: "live" },
      Object.assign({}, REFUSED, SCENE === "transcript-permission" ? {} : { stale: true })]
