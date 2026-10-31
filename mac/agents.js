@@ -175,8 +175,8 @@ const mxMicNoHtml = x => `<div class="mx-micno" title="${esc(x.detail || "")}">S
 // The meeting's own sound refused (System Audio Recording): the same line, Allow beside it;
 // switched on already but for an older copy of Standby (stale): Reset instead. It records by itself once allowed.
 const mxSoundNo = lv => (((lv && lv.sources) || []).find(x => x.kind === "meeting" && x.cause === "permission")) || null;
-const mxSoundNoHtml = x => x.stale ? `<div class="mx-micno" title="${esc(STALE_WHY)}">Standby can’t hear the meeting’s sound · it’s on for an older copy of Standby<button class="lk" onclick="resetSound()">Reset</button></div>`
-  : `<div class="mx-micno" title="${esc(x.detail || "")}">Standby can’t hear the meeting’s sound<button class="lk" onclick="allowSound()">Allow</button><button class="lk" onclick="resetSound()">It’s on already</button></div>`;
+const mxSoundNoHtml = x => x.stale ? `<div class="mx-micno" title="${esc(STALE_WHY)}">Can’t hear the other side · it’s on for an older copy of Standby<button class="lk" onclick="resetSound()">Reset</button></div>`
+  : `<div class="mx-micno" title="${esc(x.detail || "")}">Can’t hear the other side<button class="lk" onclick="allowSound()">Allow</button></div>`;
 // A meeting that will hear the Mac's sound, before macOS has ever asked: one dim line says what macOS
 // will ask and what to choose. The same words as the band in Claude Code.
 const mxSoundAsk = lv => !!(lv && lv.meeting_audio === "ask");

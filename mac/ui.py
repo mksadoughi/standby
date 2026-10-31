@@ -1193,6 +1193,50 @@ def dictation_app():
     return out
 
 
+# Settings > Permissions (permsview): what macOS lets Standby, and Standby Dictation, use, live, and fixing it.
+def permissions_info():
+    """GET /api/permissions: each permission's status now, and how many need the user."""
+    import dictation as dct
+    import permsview
+    g, build = app.grants(), app.build_mark()
+    heard = bool(build) and (g.get("mic") or {}).get("build") == build
+    no_devices = bool(os.environ.get("STANDBY_NO_DEVICES"))
+    calls = {"mic": "allowed" if no_devices else permsview.call_mic(mic_access(), heard),
+             "sound": "allowed" if no_devices else permsview.sound(_sound_state(), sound_why() == "stale")}
+    pid, s = dct.running_pid(), dct.settings()
+    st = read_json(dct.STATUS) if pid else {}
+    mine = bool(pid) and st.get("pid") == pid
+    return permsview.view(calls, permsview.dictation(st.get("permissions") if mine else None, dct.needs(s, "listen"), mine))
+
+
+def permissions_act(b):
+    """POST /api/permissions {group, key}: the row's one button, on the user's click: Allow (macOS asks), or
+    Open Settings at its pane. Standby Dictation's are its own to ask: its setup window, or the pane."""
+    group, key = str(b.get("group") or ""), str(b.get("key") or "")
+    row = next((r for g in permissions_info()["groups"] for r in g["rows"] if r["group"] == group and r["key"] == key), None)
+    if row is None or not row["button"]:
+        return {"ok": True, "status": permissions_info()}          # nothing to do now (it changed meanwhile)
+    allow = row["status"] == "ask"
+    try:
+        if group == "dictation":
+            r = dictation_action({"action": "setup"} if allow else {"action": "open", "key": key})
+            if r.get("error"):
+                return r
+        elif key == "mic" and allow:
+            log("permissions: asking macOS for the microphone")
+            permissions.ask_mic(_mic_answered)
+        elif key == "sound" and allow:
+            sound_permission()
+        else:
+            subprocess.run(OPEN + [MIC_PANE if key == "mic" else SOUND_PANE], stdin=subprocess.DEVNULL,
+                           capture_output=True, timeout=10)
+            log("permissions: System Settings opened at %s" % ("Microphone" if key == "mic" else "System Audio Recording"))
+    except Exception as exc:
+        log("permissions: %s %s failed (%r)" % (group, key, exc))
+        return {"error": "macOS didn't answer: try again"}
+    return {"ok": True, "status": permissions_info()}
+
+
 DICTATION_CONFIRM = 2.0     # how long a recorded shortcut waits for the app to register it
 
 
@@ -4281,7 +4325,7 @@ def main_page(settings=False):
 # opening it again brings it to the front. Neither the main window nor the mini one moves for it: a call
 # or a meeting stays where it is.
 SETTINGS_WIN = {}                  # "win": the Settings window, once made
-SETTINGS_PANES = ("call", "recording", "dictation", "usage")
+SETTINGS_PANES = ("call", "recording", "dictation", "permissions", "usage")
 _SETTINGS_LOCK = threading.Lock()
 
 
@@ -4372,7 +4416,6 @@ def close_settings_window():
 # takes it up. Allowed already: no window, no wait.
 SETUP = {}                         # "held": the held start; "win": its window, while it's up
 SETUP_FILE = ROOT / "setup-held.json"
-SOUND_SKIPPED = ROOT / "meeting-sound-skipped"
 SETUP_WIDTH = 440
 _SETUP_LOCK = threading.RLock()
 
@@ -4392,13 +4435,6 @@ def setup_states(steps):
     return out
 
 
-def _sound_skipped_at():
-    try:
-        return float(_read_text(SOUND_SKIPPED).split()[0])
-    except (ValueError, IndexError):
-        return None
-
-
 def setup_hold(kind, body):
     """A call's or meeting's start, before it starts: None to go on (nothing undecided, or no window
     to ask in), else {"setup": kind}, the start held and the window up; or {error} while another
@@ -4413,12 +4449,11 @@ def setup_hold(kind, body):
                 return {"error": "Standby is setting up for another call or meeting: finish it first"}
             _show_setup()
             return {"setup": held["kind"]}
-        steps = firstuse.needed(kind, body.get("capture"), setup_states(firstuse.steps_for(kind, body.get("capture"))),
-                                _sound_skipped_at(), time.time())
+        steps = firstuse.needed(kind, body.get("capture"), setup_states(firstuse.steps_for(kind, body.get("capture"))))
         if not steps:
             return None
         held = {"kind": kind, "cc": cc, "body": dict(body), "steps": steps, "pressed": [],
-                "skip": firstuse.skipped(_sound_skipped_at(), time.time()),
+                "skip": False,
                 "phase": "open", "error": None, "at": time.time(), "id": uuid.uuid4().hex[:8]}
         SETUP["held"] = held
         _save_held(held)
@@ -4543,9 +4578,8 @@ def setup_act(b):
     if do == "skip_sound":
         if not firstuse.can_skip(held["steps"]):
             return {"error": "Nothing to skip"}
-        SOUND_SKIPPED.write_text("%d\n" % time.time())
-        held["skip"] = True
-        log("setup: the meeting's sound skipped: meetings record the mic only")
+        held["skip"] = True                            # Not now: this meeting only; the next one asks again
+        log("setup: the meeting's sound put off: this meeting records the mic only")
         return {"ok": True}
     if key not in held["pressed"]:
         held["pressed"].append(key)
@@ -6058,6 +6092,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(mic_test_state())
         if path == "/api/dictation-app":
             return self._json(dictation_app())
+        if path == "/api/permissions":
+            return self._json(permissions_info())
         return self._json({"error": "not found"}, 404)
 
     def _post(self):
@@ -6121,6 +6157,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(copy_to_clipboard(str(b.get("text") or "")))
         if self.path == "/api/mic-test":
             return self._json(start_mic_test())
+        if self.path == "/api/permissions":
+            return self._json(permissions_act(b))
         if self.path == "/api/dictation-app":
             return self._json(dictation_action(b))
         if self.path == "/api/copy":
@@ -6808,6 +6846,16 @@ dialog.ask{width:400px}.ask .dhead{padding-top:20px}.ask .dbody p{margin:2px 0 6
 .dhead h3{margin:0;font-size:17px;font-weight:600;flex:1;letter-spacing:-.01em}.dhead h3:focus{outline:none}
 .dbody{padding:0 24px 8px;max-height:70vh;overflow:auto}
 .sec{padding:16px 0;border-bottom:1px solid var(--line)}.sec:last-child{border:0}
+/* Settings > Permissions: each group a bordered list; each row its name, one line, its status live, at most one button */
+.pgrp{margin:4px 0 22px}.pgrp h4{display:flex;gap:10px;align-items:baseline;margin:0 0 10px 4px}.pgrp h4 span{font-weight:400}
+.plist{border:1px solid var(--line);border-radius:12px}
+.prow{display:flex;align-items:center;gap:14px;padding:13px 16px;border-top:1px solid var(--line)}.prow:first-child{border-top:0}
+.prow .ptx{flex:1;min-width:0}.prow .ptx b{display:block;font-size:13.5px;font-weight:600}.prow .ptx span{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+.prow .ptx .pw{color:var(--warn);font-size:12.5px;margin-top:5px}
+.pst{flex:none;display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);white-space:nowrap}
+.pst i{width:8px;height:8px;border-radius:50%;background:currentColor}.pst.allowed{color:var(--ok)}.pst.off{color:var(--rec)}.pst.stale{color:var(--warn)}
+.prow .btn{flex:none}
+.pneed{flex:none;font-size:12.5px;color:var(--warn);margin-right:2px}
 .sec h4{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--muted)}
 .field{margin:12px 0}
 .field>label{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
@@ -6876,6 +6924,7 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
     <button type="button" data-p="call" onclick="setPane('call')"><span class="t"><b>Call</b><small>The voice and its model, talking over Claude, asking first</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="recording" onclick="setPane('recording')"><span class="t"><b>Recording</b><small>What's recorded, the speech model, what Claude gets</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="dictation" onclick="setPane('dictation')"><span class="t"><b>Dictation</b><small>Dictation in any app, its shortcut, word fixes</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button type="button" data-p="permissions" onclick="setPane('permissions')"><span class="t"><b>Permissions</b><small>What macOS lets Standby use, and fixing it</small></span><span class="pneed" id="permneed" hidden></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="usage" onclick="setPane('usage')"><span class="t"><b>Usage</b><small>Calls to Claude over time, by model and kind</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
   </nav>
   <div class="setmain" id="setmain">
@@ -6929,6 +6978,7 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
         <div class="row"><span class="hint" id="kwords" style="margin:0;flex:1"></span>
           <button type="button" class="btn sm" onclick="editWords()">Edit…</button></div></div>
     </div></div>
+    <div class="pane" data-p="permissions"><div class="sec" id="permbody"></div></div>
     <div class="pane" data-p="usage"><div class="sec">
       <div class="seg" id="urange"><button type="button" data-r="3h" onclick="loadUsage('3h')">3 hours</button><button type="button" data-r="today" onclick="loadUsage('today')">Today</button>
         <button type="button" data-r="7d" onclick="loadUsage('7d')">7 days</button><button type="button" data-r="30d" onclick="loadUsage('30d')">30 days</button></div>
@@ -7232,11 +7282,24 @@ function setHelp(id,t){const e=$(id);e.title=t||"";delete e.dataset.mxtip;e.setA
 // Settings' list of sections (setHome), or one section open in its place (setPane); back, and Esc, go from
 // a section to the list and from the list out of Settings
 let SETP=null;
-function setPane(p){if(p==="usage")loadUsage();SETP=p;$("setback").style.display="";const m=$("setmain");m.scrollTop=0;m.hidden=false;$("setnav").hidden=true;$("sethead").classList.remove("scrolled");
+// Settings > Permissions, live while it's open (as the dictation setup's ticks): each row's status, its one button
+let PERMT=null,PERMV=null;
+const PDOT={allowed:1,off:1,stale:1};
+function paintPerms(r){PERMV=r;const n=r&&r.need||0,el=$("permneed");el.hidden=!n;el.textContent=n?(n===1?"1 needs you":n+" need you"):"";
+  const b=$("permbody");if(!r||!r.groups){setHTML(b,'<div class="uempty"><b>Permissions are not available right now</b><span>Standby isn\'t answering.</span></div>');return}
+  setHTML(b,r.groups.map(g=>`<div class="pgrp"><h4>${esc(g.title)}${g.note?`<span>${esc(g.note)}</span>`:""}</h4><div class="plist">`+g.rows.map(x=>
+    `<div class="prow"><div class="ptx"><b>${esc(x.name)}</b><span>${esc(x.line)}</span>${x.warn?`<span class="pw">${esc(x.warn)}</span>`:""}</div>`+
+    `<span class="pst ${esc(x.status)}">${PDOT[x.status]?"<i></i>":""}${esc(x.label)}</span>`+
+    (x.button?`<button type="button" class="btn sm" onclick="permAct('${esc(x.group)}','${esc(x.key)}')">${esc(x.button)}</button>`:"")+"</div>").join("")+"</div></div>").join(""))}
+async function loadPerms(){let r=null;try{r=await api("/api/permissions")}catch(e){}if(SETP==="permissions"||!r||r.groups)paintPerms(r);
+  clearTimeout(PERMT);if(SETP==="permissions")PERMT=setTimeout(loadPerms,1000)}
+async function permAct(group,key){let r=null;try{r=await api("/api/permissions",{group,key})}catch(e){r={error:"Standby isn't answering"}}
+  if(r&&r.error){toast(r.error);return}if(r&&r.status)paintPerms(r.status)}
+function setPane(p){if(p==="usage")loadUsage();if(p==="permissions")setTimeout(loadPerms,0);SETP=p;$("setback").style.display="";const m=$("setmain");m.scrollTop=0;m.hidden=false;$("setnav").hidden=true;$("sethead").classList.remove("scrolled");
   const b=document.querySelector('.setnav button[data-p="'+p+'"] b');$("settitle").textContent=b?b.textContent:"Settings";
   document.querySelectorAll(".pane").forEach(x=>x.classList.toggle("on",x.dataset.p===p))}
 // In the Settings window the list is the top: no Back there, and Esc stays (closing is the window's own).
-function setHome(){SETP=null;$("setback").style.display=SETWIN?"none":"";$("setmain").hidden=true;$("setnav").hidden=false;$("setnav").scrollTop=0;$("sethead").classList.remove("scrolled");$("settitle").textContent="Settings"}
+function setHome(){SETP=null;clearTimeout(PERMT);loadPerms();$("setback").style.display=SETWIN?"none":"";$("setmain").hidden=true;$("setnav").hidden=false;$("setnav").scrollTop=0;$("sethead").classList.remove("scrolled");$("settitle").textContent="Settings"}
 function setBack(){if(SETP)setHome();else if(!SETWIN)settings.close()}
 let savedT=null;
 async function autosave(){const r=await api("/api/settings",formSettings());

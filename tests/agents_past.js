@@ -61,9 +61,11 @@ var STALE_WHY = "older copy";
 eval(line(/const mxSoundNo = [^\n]*\n/));
 eval(src.match(/const mxSoundNoHtml = [\s\S]*?<\/div>`;\n/)[0].replace("const ", "var "));
 const refused = mxSoundNo({sources: [{kind: "mic", cause: "permission"}, {kind: "meeting", cause: "permission", detail: "Allow it"}]});
-check("meeting audio not allowed: its line, with Allow and It's on already", refused && /Standby can’t hear the meeting’s sound/.test(mxSoundNoHtml(refused))
-  && /allowSound\(\)/.test(mxSoundNoHtml(refused)) && /resetSound\(\)/.test(mxSoundNoHtml(refused)));
-check("  on for an older copy: Reset", /older copy of Standby[\s\S]*resetSound\(\)/.test(mxSoundNoHtml({stale: true})) && !/allowSound/.test(mxSoundNoHtml({stale: true})));
+check("meeting audio not allowed: a quiet line, Can't hear the other side, and Allow alone (Settings has the rest)",
+  refused && /Can’t hear the other side<button/.test(mxSoundNoHtml(refused)) && /allowSound\(\)/.test(mxSoundNoHtml(refused))
+  && !/resetSound\(\)|It’s on already/.test(mxSoundNoHtml(refused)), refused && mxSoundNoHtml(refused));
+check("  on for an older copy: said so, and Reset", /Can’t hear the other side · it’s on for an older copy of Standby[\s\S]*resetSound\(\)/.test(mxSoundNoHtml({stale: true}))
+  && !/allowSound/.test(mxSoundNoHtml({stale: true})));
 check("  allowed: no line", mxSoundNo({sources: [{kind: "meeting", state: "recording"}]}) === null);
 // before macOS has ever asked for the meeting's sound: a dim heads-up, only while it's "ask"
 eval(line(/const mxSoundAsk = [^\n]*\n/)); eval(line(/const mxSoundAskHtml = [^\n]*\n/));

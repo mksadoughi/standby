@@ -75,7 +75,7 @@ let busy = false, shown = "";
 function step(s) {
   let end;
   if (s.state === "done") end = '<span class="ok">' + TICK + "</span>";
-  else if (s.state === "skipped") end = '<span class="sk">Skipped</span>';
+  else if (s.state === "skipped") end = '<span class="sk">Not now</span>';
   else end = (s.skip ? '<button type="button" class="sk" data-do="skip_sound">' + esc(s.skip) + "</button>" : "")
     + (s.waiting ? '<span class="wait" title="Waiting for you to turn it on"></span>' : "")      // beside its button: the button's wait
     + '<button type="button" class="btn" data-do="' + esc(s.do) + '">' + esc(s.button) + "</button>";

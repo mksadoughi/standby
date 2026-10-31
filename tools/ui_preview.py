@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-STATES = ["settings", "settings-help", "settings-call", "settings-recording", "usage", "usage-today", "usage-empty", "dictation", "dictation-shortcut", "dictation-recording", "settings-voice-prep", "settings-try-start", "settings-try-mid", "settings-try-failed", "settings-try-playing", "dictation-words", "settings-talkover", "settings-speech-dl", "settings-speech-8gb", "settings-speech-8gb-standard",
+STATES = ["settings", "settings-help", "settings-call", "settings-permissions", "settings-recording", "usage", "usage-today", "usage-empty", "dictation", "dictation-shortcut", "dictation-recording", "settings-voice-prep", "settings-try-start", "settings-try-mid", "settings-try-failed", "settings-try-playing", "dictation-words", "settings-talkover", "settings-speech-dl", "settings-speech-8gb", "settings-speech-8gb-standard",
           "mx-past", "mx-row-menu", "mx-delete-ask", "mx-past-session", "mx-past-open", "mx-past-open-menu", "mx-past-empty", "mx-live", "mx-hear", "mx-hear-open", "mx-hear-off", "mx-hear-new", "mx-ask", "mx-pausing", "mx-ending", "mx-live-menu", "mx-paused", "mx-micno", "mx-soundno", "mx-soundask", "mx-spkname", "cc-live", "cc-livemenu", "cc-call", "cc-call-tasks", "cc-call-thinking", "cc-call-pausing", "cc-call-paused", "cc-call-waiting", "cc-call-working", "cc-call-visual", "cc-callmenu", "cc-callcopy", "cc-callend", "cc-ended", "cc-long", "cc-past", "cc-past-menu"]
 
 FAKE = r"""
@@ -326,6 +326,7 @@ window.fetch = async (p, o) => { const id = p.split("?")[0].split("/").pop(), bo
   : p.startsWith("/api/usage") ? (p.includes("range=3h") && SCENE !== "usage-empty" ? Object.assign({}, USAGE, { range: "3h", bucket: "10 minutes",
       from: TEN - 17 * 600, series: TENS.map((c, i) => ({ t: TEN - (17 - i) * 600, calls: c })) }) : USAGE)
   : p === "/api/prompt" ? { prompt: "", default: "", custom: false } : p === "/api/dictation-app" ? DICTATION
+  : p === "/api/permissions" ? PERMS
   : p === "/api/voices" ? VOICES_FIX
   : p.startsWith("/api/pending/") ? { pending: SCENE === "working" ? pending : null }
   : p.startsWith("/api/live/") ? { at: NOW, age: 0.3, level: 0.05, speaking: true, partial: "so if we move the cache in front of", sources: SOURCES }
@@ -407,6 +408,7 @@ SCENES = r"""
     await wait(300); return }
   if (SCENE === "settings") { await openSettings() }
   if (SCENE === "settings-call" || SCENE === "settings-talkover") { await openSettings(); setPane("call") }
+  if (SCENE === "settings-permissions") { await openSettings(); setPane("permissions"); await wait(300) }
   if (SCENE === "dictation" || SCENE === "dictation-words") { await openSettings(); setPane("dictation") }
   if (SCENE === "settings-recording" || SCENE.startsWith("settings-speech")) { await openSettings(); setPane("recording") }
   if (SCENE === "usage" || SCENE === "usage-empty") { await openSettings(); setPane("usage") }
@@ -545,6 +547,14 @@ def visual_doc(fragment=VISUAL_SAMPLE, inline=True):
     return visuals.doc(fragment, os.environ.get("SB_KIT_LIBS") or "/nonexistent", inline=inline)
 
 
+def perms_sample():
+    """Settings > Permissions as the drafts show it: the mic allowed, the meeting's sound never asked, dictation's mic
+    off, Accessibility on for an older copy, Input Monitoring not needed (F5)."""
+    sys.path.insert(0, str(ROOT / "mac"))
+    import permsview
+    return permsview.view({"mic": "allowed", "sound": "ask"}, {"mic": "off", "post": "stale", "listen": "notneeded"})
+
+
 def page(settings_window=False):
     src = (ROOT / "mac" / "ui.py").read_text()
     html = src[src.index('PAGE = r"""') + len('PAGE = r"""'):]
@@ -552,7 +562,7 @@ def page(settings_window=False):
     if settings_window:                       # as /settings serves it (ui.main_page): Settings alone
         html = html.replace("__SB_SETWIN__", "1").replace('<script src="/agents.js"></script>', "")
     i = html.rindex("<script>")
-    html = (ROUNDED + LIGHTS + html[:i]) + "<script>const VISDOC = " + json.dumps(visual_doc()).replace("</", "<\\/") + ";" + FAKE + "</script>" + html[i:].replace(
+    html = (ROUNDED + LIGHTS + html[:i]) + "<script>const PERMS = " + json.dumps(perms_sample()) + ";const VISDOC = " + json.dumps(visual_doc()).replace("</", "<\\/") + ";" + FAKE + "</script>" + html[i:].replace(
         "</body>", "<script>" + SCENES + "</script></body>")
     # The agents view's own files, inline: the preview has no server
     mx = ROOT / "mac"

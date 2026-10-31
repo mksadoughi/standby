@@ -5,12 +5,13 @@ A call needs the microphone; an online meeting also needs the meeting's sound (S
 Recording). While what the start needs is still undecided, the start waits and the window
 asks for just that (a call never for the meeting's sound: the user's first call, 2026-10-31), each
 its own row, either first, macOS's own prompt only on the row's button, a tick as each is allowed
-(or the sound skipped), then the call or meeting starts by itself.
+(or the sound put off with Not now, for this meeting only: the next one asks again), then the call or
+meeting starts by itself. The meeting's sound holds a meeting only until it's answered: refused, the
+meeting goes on, and says so quietly while it can't hear the other side.
 Allowed already: no window, no wait. Plain functions; mac/ui.py holds the start and runs the window.
 """
 
 MIC, SOUND = "mic", "sound"
-SKIP_DAYS = 30                 # the meeting's sound skipped: not asked again for this long
 HELD_FOR = 15 * 60             # the most a start waits for its setup (and is taken up after a Quit & Reopen)
 
 NAMES = {MIC: ("Microphone", "Standby can hear you on calls and in meetings."),
@@ -52,25 +53,20 @@ def sound_state(state, stale=False):
     return "stale" if got == "denied" and stale else got
 
 
-def skipped(skipped_at, now):
-    """The meeting's sound was skipped (its row's Skip: meetings record the mic only) within SKIP_DAYS."""
-    return bool(skipped_at) and 0 <= now - skipped_at < SKIP_DAYS * 86400
-
-
 def can_skip(steps):
-    """Skip is offered only where the mic still records: the window's two rows."""
+    """Not now is offered only where the mic still records: the window's two rows."""
     return MIC in steps and SOUND in steps
 
 
 def settled(key, states, skip):
-    return states.get(key) == "allowed" or (key == SOUND and skip)
+    """Nothing more to wait for: allowed; or the meeting's sound put off (Not now), or answered with a no."""
+    return states.get(key) == "allowed" or (key == SOUND and (skip or states.get(key) in ("denied", "stale")))
 
 
-def needed(kind, capture, states, skipped_at=None, now=0):
+def needed(kind, capture, states):
     """What a start is held for and its window asks: its steps, or [] when none is undecided (no window, no wait)."""
     steps = steps_for(kind, capture)
-    skip = can_skip(steps) and skipped(skipped_at, now)
-    return steps if any(not settled(k, states, skip) for k in steps) else []
+    return steps if any(not settled(k, states, False) for k in steps) else []
 
 
 def complete(steps, states, skip=False):
@@ -109,7 +105,7 @@ def view(kind, steps, states, skip=False, phase="open", error=None):
             told = line if ask else SOUND_STALE if states.get(key) == "stale" else SOUND_REFUSED if key == SOUND else REFUSED
             st.update(button="Allow" if ask else "Open Settings",
                       do=("allow_" if ask else "settings_") + key, line=told, waiting=not ask,
-                      skip="Skip" if key == SOUND and can_skip(steps) else None)
+                      skip="Not now" if key == SOUND and can_skip(steps) else None)
         out.append(st)
     if phase == "failed":
         return {"title": "Couldn't start your %s" % what, "sub": "", "steps": out, "go": None,
