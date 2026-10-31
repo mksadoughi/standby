@@ -3221,10 +3221,22 @@ def _lite_set(sid, c, t, state, result=None):
     _lite_tasks_file(sid, c)
 
 
-def _lite_task_line(t, now=None):
+def _clip(text, n):
+    """`text` in at most about n characters, never cut mid-word: what's left out is marked as such."""
+    if len(text) <= n:
+        return text
+    return text[:n].rsplit(" ", 1)[0].rstrip(" ,;:") + " \u2026 (the rest is in the chat)"
+
+
+LITE_LINE_WHAT, LITE_LINE_RESULT = 200, 240    # a task in the list every turn reads: short, once it's been told
+
+
+def _lite_task_line(t, now=None, full=False):
     """One task as a fact: its number, its state (and since when, by the clock, so a line stays the same until
-    the task changes), and what it is; a result when it ended."""
-    what = ("(typed) " if t["source"] == "typed" else "") + (t["what"][:160] or "(nothing said)")
+    the task changes), and what it is; a result when it ended. full: what came back, being told: all of it, up
+    to LITE_RESULT_MAX (results were cut at 300, mid-word: "the summary got cut off")."""
+    what = ("(typed) " if t["source"] == "typed" else "") + (_clip(t["what"], LITE_RESULT_MAX if full else LITE_LINE_WHAT)
+                                                              or "(nothing said)")
     st, at = t["state"], lambda x: time.strftime("%H:%M:%S", time.localtime(x))
     if st == "running":
         head = "running since %s" % at(t["since"])
@@ -3238,7 +3250,7 @@ def _lite_task_line(t, now=None):
         head = "%s since %s" % (st, at(t["since"]))
     line = "#%s %s: %s" % (t["id"], head, what)
     if st in LITE_ENDED and t["result"]:
-        line += " \u2192 " + t["result"][:300]
+        line += " \u2192 " + _clip(t["result"], LITE_RESULT_MAX if full else LITE_LINE_RESULT)
     return line
 
 
@@ -3773,7 +3785,7 @@ def _lite_tell(sid):
         resumed = c.pop("rang", False)
         typed = _lite_typed_words(sid, c)
         now = time.time()
-        facts = "\n".join(_lite_task_line(t, now) for t in news)
+        facts = "\n".join(_lite_task_line(t, now, full=True) for t in news)
         how = "error" if any(t["state"] == "failed" for t in news) else "aborted" if all(
             t["state"] == "stopped" for t in news) else "done"
         t0 = time.time()

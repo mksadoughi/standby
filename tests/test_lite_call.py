@@ -371,6 +371,23 @@ check("a turn-end of the session's own, with news: told as news, once",
       wait(lambda: len(vs.told) > said_before) and "The setup window's close button is merged." in told_model[-1]
       and "Fix the film's cut-off caption" not in told_model[-1] and len(told_model) == n_model + 1, told_model[n_model:])
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+# A long result (a list of 20 items): told whole, never cut at 300 mid-word ("the summary got cut off"); the
+# list every turn reads keeps it short, cut at a word.
+ev, _s = hand("list everything from this call")
+long_result = " ".join("Item %d: the setup window close button and its test." % i for i in range(1, 21)) + " Last item done."
+replies.append("Twenty items. The first is the setup window.")
+n_model = len(told_model)
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": long_result})
+check("a long result: the voice is told all of it", wait(lambda: len(told_model) > n_model)
+      and long_result in told_model[-1], told_model[-1][-200:])
+wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+answers.append("Yes.")
+ui.ask_spoken(sid, "ok", None, None)
+row = [l for l in asked[-1].splitlines() if "list everything from this call" in l]
+kept = row[0].split(" \u2192 ", 1)[1].split(" \u2026")[0] if row and " \u2192 " in row[0] else ""
+check("  the list each turn reads: short, cut at a word, saying the rest is in the chat",
+      row and len(row[0]) < 400 and "\u2026 (the rest is in the chat)" in row[0] and kept and long_result.startswith(kept)
+      and long_result[len(kept)] == " ", row)
 # What came back, worded while they started talking: not said now, and never told again on its own (the voice
 # had it as said: "that one was a repeat"); their turn tells the voice they never heard it.
 ev, _s = hand("check the leftover sessions")
