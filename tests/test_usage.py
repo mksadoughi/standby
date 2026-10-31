@@ -178,7 +178,7 @@ check("  kinds: Standby's own only (no listen, question or deep), with the model
 check("  no busiest minute: the meeting agent's budget is the user's Claude Code's", "peak" not in sm, sm.get("peak"))
 check("  since: the first of Standby's calls ever counted", sm["since"] == day - 86400 * 3, sm["since"])
 check("every kind standby-agent records is either Standby's own or the user's work",
-      set(sbusage.STANDBY_KINDS) == {"voice", "briefing", "decisions", "call-summary", "cc-gist", "title", "words"})
+      set(sbusage.STANDBY_KINDS) == {"voice", "briefing", "decisions", "call-summary", "cc-gist", "title", "words", "visual"})
 empty = sbusage.summary(edges, os.path.join(root, "none.jsonl"))
 check("nothing counted yet: zeros, every bucket, since null",
       empty["totals"]["calls"] == 0 and len(empty["series"]) == 24

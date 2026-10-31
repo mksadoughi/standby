@@ -7048,7 +7048,7 @@ let spkEditing=false;
 // Usage: how much each model is used, from Claude Code's own replies (/api/usage).
 // Standby's own models only (sbusage.STANDBY_KINDS): what it hands your Claude Code session is that session's.
 const KIND={voice:"Voice turns",briefing:"Voice briefings",title:"Titles",decisions:"Call and meeting summaries",
-  "cc-gist":"Claude Code summaries for calls","call-summary":"Calls added to Claude Code",words:"Word fixes"};
+  "cc-gist":"Claude Code summaries for calls","call-summary":"Calls added to Claude Code",words:"Word fixes",visual:"Visuals on calls"};
 const fam=m=>/opus/i.test(m)?"Opus":/sonnet/i.test(m)?"Sonnet":/haiku/i.test(m)?"Haiku":m;
 const compact=n=>n>=1e6?(n/1e6).toFixed(n>=1e7?0:1).replace(/\.0$/,"")+"M":n>=1e4?Math.round(n/1e3)+"K":n>=1e3?(n/1e3).toFixed(1).replace(/\.0$/,"")+"K":String(n||0);
 // Input and output apart (the user, 10/30): input is what was sent (cache writes too), output what the model wrote;

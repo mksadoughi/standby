@@ -16,7 +16,7 @@ USAGE_FIELDS = (("inputTokens", "input"), ("outputTokens", "output"), ("cacheRea
 # What Standby runs itself: the call's voice (its turns and briefings), the summaries
 # (decisions, call-summary for Add to Claude Code, cc-gist for a call's voice), titles,
 # and the word-fixes pass. Not listen, question or deep: the user's Claude Code work.
-STANDBY_KINDS = ("voice", "briefing", "decisions", "call-summary", "cc-gist", "title", "words")
+STANDBY_KINDS = ("voice", "briefing", "decisions", "call-summary", "cc-gist", "title", "words", "visual")
 SHOWN = ("input", "output", "cache_read", "cache_write")                # tokens; never a cost
 
 

@@ -3078,12 +3078,104 @@ def cmd_stop(_args):
     return 0
 
 
+# Show while talking: the voice's "[VISUAL: what to show]", anywhere in its reply, never said. A side copy, a
+# fork of its own conversation (like /btw: it has the call), draws it as an HTML fragment on the card's house
+# kit, in the background: the voice never waits. Its file goes in the spool, <question>.v<k>.json, for the Mac
+# (drawing, then ready with its html, or failed with why). Only while config.json "call_visuals" is on (the
+# default); off, the voice is told nothing of it (its prelude) and nothing is drawn.
+VISUAL_OPEN = "[VISUAL"
+VISUAL_RE = re.compile(r"\[VISUAL:?\s*([^\]]*)\]")
+VISUAL_MAX = 64 * 1024                        # bytes of a fragment the card takes
+VISUAL_TIMEOUT = 90
+VISUAL_UNSAFE = re.compile(r"<script\b[^>]*\bsrc\b[^>]*>.*?</script\s*>|<script\b[^>]*\bsrc\b[^>]*/?>|"
+                           r"<(?:link|iframe|object|embed|base|meta|frame|frameset)\b[^>]*>(?:.*?</(?:iframe|object|frameset)\s*>)?",
+                           re.I | re.S)
+VISUAL_PROMPT = (
+    "[VISUAL] A side task, not part of the call: draw, for a small card beside it, what you just decided to "
+    "show: %s\n\nWrite one HTML fragment, body only: no <html>, <head>, links to files or the network, or "
+    "<script src>; inline <style> and <script> are fine. A house kit is loaded first and follows light and dark: "
+    "the colours var(--text), var(--muted), var(--accent), var(--soft), var(--line), var(--bg); h1, p, .muted, "
+    "an <ol class=\"steps\"> its reader steps through (call sb.steps(\"#its-id\")), .big for one large figure, "
+    ".row for a line of small labels; <sb-math>LaTeX</sb-math> for an equation, and <sb-diagram>mermaid"
+    "</sb-diagram> for a diagram. Put data-size on its root element: \"line\", \"small\", \"medium\" or "
+    "\"large\", the least that fits. Keep it as small as it can be and still help; make it interactive only "
+    "when that helps understanding. Reply with the fragment only.")
+
+
+def visuals_on():
+    """config.json "call_visuals": missing means on."""
+    try:
+        with open(os.path.join(ROOT, "config.json")) as fh:
+            return bool((json.load(fh) or {}).get("call_visuals", True))
+    except (IOError, OSError, ValueError, AttributeError):
+        return True
+
+
+def visual_fragment(text):
+    """A side copy's reply as the card's fragment: fences off, what could reach out removed. None if empty."""
+    text = (text or "").strip()
+    m = re.match(r"^```[a-zA-Z]*\n(.*?)\n?```$", text, re.S)
+    if m:
+        text = m.group(1).strip()
+    return VISUAL_UNSAFE.sub("", text).strip() or None
+
+
+def _visual_write(path, row):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(row, fh, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
+def draw_visual(session, ident, k, what, parent, model):
+    """One visual: its file says drawing now, then what the side copy made (a fork of the voice's conversation
+    `parent`, tool-less and never kept), or why not. Counted in Usage as its own kind."""
+    path = os.path.join(SPOOL, "%s.v%d.json" % (ident, k))
+    t0 = time.time()
+    try:
+        _visual_write(path, {"state": "drawing", "t": t0, "what": what})
+    except OSError as exc:
+        sys.stderr.write("voice: visual %s.v%d: %r\n" % (ident, k, exc))
+        return
+
+    def failed(why):
+        sys.stderr.write("voice: visual %s.v%d failed: %s\n" % (ident, k, why))
+        try:
+            _visual_write(path, {"state": "failed", "t": time.time(), "what": what, "why": why})
+        except OSError:
+            pass
+    if not parent or not os.path.exists(CLAUDE):
+        return failed("no voice conversation to draw from")
+    argv = [CLAUDE, "-p", VISUAL_PROMPT % what, "--resume", parent, "--fork-session", "--no-session-persistence",
+            "--model", model_for(model), "--tools", "", "--strict-mcp-config", "--output-format", "json"]
+    cwd = conversation_dir(parent) or workspace_for(session)
+    try:
+        r = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=VISUAL_TIMEOUT,
+                           cwd=start_dir(cwd, argv))
+        res = json.loads(r.stdout or "")
+    except subprocess.TimeoutExpired:
+        return failed("took too long")
+    except (OSError, ValueError) as exc:
+        return failed("could not be drawn (%s)" % exc.__class__.__name__)
+    if isinstance(res, dict) and isinstance(res.get("modelUsage"), dict) and res["modelUsage"]:
+        record_usage(session, "visual", "visual", time.time() - t0, usage_share(res["modelUsage"], {}))
+    html = visual_fragment(res.get("result") if isinstance(res, dict) and not res.get("is_error") else "")
+    if html is None:
+        return failed("nothing came back")
+    if len(html.encode("utf-8")) > VISUAL_MAX:
+        return failed("too big")
+    _visual_write(path, {"state": "ready", "t": time.time(), "what": what, "html": html,
+                         "ms": int((time.time() - t0) * 1000)})
+    sys.stderr.write("voice: visual %s.v%d drawn in %.1fs\n" % (ident, k, time.time() - t0))
+
+
 class DeepMarker(object):
     """Streamed answer text, minus the [DEEP] handoff line and a call's [QUIET]: they are
     signals, never something to show or say. A tail that may still become one of them
     is held back until it is clear."""
 
-    TAGS = (DEEP_TAG, QUIET_TAG, END_TAG, "[CANCEL")
+    TAGS = (DEEP_TAG, QUIET_TAG, END_TAG, "[CANCEL", VISUAL_OPEN)
+    BRACKETED = ("[CANCEL", VISUAL_OPEN)     # signals that end at their "]": dropped whole
 
     def __init__(self):
         self.held, self.deep = "", False
@@ -3097,8 +3189,8 @@ class DeepMarker(object):
         for tag in self.TAGS[:3]:
             buf = buf.replace(tag, "")
         self.held = ""
-        while "[CANCEL" in buf:              # "[CANCEL #3]": the voice stops a task; never said
-            i = buf.index("[CANCEL")
+        while any(t in buf for t in self.BRACKETED):     # "[CANCEL #3]", "[VISUAL: …]": never said
+            i = min(buf.index(t) for t in self.BRACKETED if t in buf)
             j = buf.find("]", i)
             if j < 0:
                 self.held, buf = buf[i:], buf[:i]
@@ -3798,6 +3890,15 @@ class Voice(object):
             text, rc = engine_claude(msg, session, self.model, self.args.timeout, kind="voice",
                                      should_interrupt=interrupt, on_event=progress, label="voice")
         replied, replied_at = text, time.time()
+        if VISUAL_RE.search(text or ""):     # never said, nor in a task; drawn beside the call when it's on
+            asks = [w.strip() for w in VISUAL_RE.findall(text) if w.strip()]
+            text = VISUAL_RE.sub("", text).strip()
+            if rc == 0 and asks and call and visuals_on():
+                engine = _LIVE_SESSION.get((session, "voice"))
+                for k, what in enumerate(asks, 1):
+                    threading.Thread(target=draw_visual, name="visual",
+                                     args=(session, ident, k, what, getattr(engine, "sid", None),
+                                           live_voice_model(self.model)), daemon=True).start()
         (commit if rc in (0, ClaudeSession.INTERRUPTED) else restore)()
         went = runs(session, "voice", self.model)
         # Cut off as it spoke (not "they went on", whose next turn has it all): a hand-off its reply made in

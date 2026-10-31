@@ -18,6 +18,13 @@ seen = %r
 if "--help" in sys.argv:
     print('--permission-mode <mode>  (choices: "acceptEdits", "auto", "dontAsk", "plan")\\n--permission-prompts <x>')
     sys.exit(0)
+if "--fork-session" in sys.argv and "--no-session-persistence" in sys.argv and "--input-format" not in sys.argv:   # a visual's side copy
+    open(seen, "a").write(json.dumps({"kind": "visual", "argv": sys.argv, "pid": os.getpid()}) + "\\n")
+    time.sleep(2.0)                                   # drawing takes a while; the voice never waits for it
+    print(json.dumps({"result": "```html\\n<div data-size=\\"small\\"><h1>Release</h1><script src=\\"https://x.test/a.js\\"></script>"
+                                "<ol class=\\"steps\\" id=\\"r\\"><li>Build</li><li>Test</li></ol><script>sb.steps(\\"#r\\")</script></div>\\n```",
+                      "modelUsage": {"claude-sonnet-5-5": {"inputTokens": 10, "outputTokens": 40, "costUSD": 0.001}}}))
+    sys.exit(0)
 if "--no-session-persistence" in sys.argv and "--input-format" not in sys.argv:   # the one-shot title call
     open(seen, "a").write(json.dumps({"kind": "title", "prompt": sys.argv[sys.argv.index("-p") + 1]}) + "\\n")
     print("Caching The Map Page"); sys.exit(0)
@@ -46,6 +53,9 @@ while True:
         if kind == "voice" and "Held, not sent" in text and "name it notes" in text.split("They said:")[-1]:
             emit({"type": "result", "is_error": False,     # the held hand-off, updated with what they said since
                   "result": "Got it. [DEEP] Create a sample text file named notes.txt in the project folder."}); continue
+        if kind == "voice" and "how the release goes" in text.split("They said:")[-1]:     # words, a visual, words
+            emit({"type": "result", "is_error": False,
+                  "result": "Here's how it goes. [VISUAL: the release steps, build then test] Build first, then test."}); continue
         if kind == "voice" and "sample text file" in text.split("They said:")[-1]:     # as a real voice hands it on
             emit({"type": "result", "is_error": False,
                   "result": "Sure. [DEEP] Create a sample text file in the project folder."}); continue
@@ -455,6 +465,41 @@ try:
           (ask("[VOICE] what time is it there") or True) and
           "You took this deeper, and are working on it now: Create a sample text file"
           in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
+    # Show while talking: "[VISUAL: …]" is never said; a fork of the voice's conversation draws it in the
+    # background, its file in the spool for the Mac (drawing, then ready), counted in Usage as its own kind.
+    m = sa.DeepMarker()
+    check("the stream never says a visual signal, even split across pieces",
+          "".join([m.feed("Here's how [VIS"), m.feed("UAL: the steps, build then"), m.feed(" test] it goes."), m.flush()])
+          == "Here's how  it goes.")
+    ids = []
+    got = ask("[VOICE] show me how the release goes", ident=ids)
+    vfile = os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".v1.json")
+    t_answer = time.time()
+    first = json.load(open(vfile)) if os.path.exists(vfile) else {}
+    deadline = time.time() + 20
+    while time.time() < deadline and not (os.path.exists(vfile) and json.load(open(vfile)).get("state") != "drawing"):
+        time.sleep(0.05)
+    v = json.load(open(vfile)) if os.path.exists(vfile) else {}
+    side = [json.loads(l) for l in open(seen) if '"kind": "visual"' in l]
+    check("a visual asked for: never in the answer, and drawn in its file, ready, by a fork of the voice's conversation",
+          got == "Here's how it goes.  Build first, then test." and v.get("state") == "ready" and v.get("what") == "the release steps, build then test"
+          and side and "--resume" in side[-1]["argv"] and "--tools" in side[-1]["argv"]
+          and side[-1]["argv"][side[-1]["argv"].index("--tools") + 1] == "", (got, v, side[-1:]))
+    check("  its fragment: fences off, no <script src>, its own inline script kept, data-size on its root",
+          v.get("html", "").startswith('<div data-size="small">') and "x.test" not in v.get("html", "")
+          and 'sb.steps("#r")' in v.get("html", ""), v.get("html"))
+    usage = os.path.join(root, "agent", "usage.jsonl")
+    check("  counted in Usage as its own kind", os.path.exists(usage) and any(json.loads(l).get("kind") == "visual" for l in open(usage)))
+    check("  the voice never waits: its answer came while the visual was still drawing (2 s), which said so at once",
+          first.get("state") == "drawing" and v.get("ms", 0) >= 1900, (first, v.get("ms")))
+    json.dump({"call_visuals": False}, open(os.path.join(root, "config.json"), "w"))
+    ids, n = [], len([l for l in open(seen) if '"kind": "visual"' in l])
+    got = ask("[VOICE] show me how the release goes", ident=ids)
+    time.sleep(1.0)
+    check("  visuals off: nothing drawn, no file, and the signal still never said",
+          not os.path.exists(os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".v1.json"))
+          and len([l for l in open(seen) if '"kind": "visual"' in l]) == n and "[VISUAL" not in got, got)
+    os.remove(os.path.join(root, "config.json"))
     # An early question the user went on from: answered with a hand-off, then dropped (agentctl.cancel's
     # .x). The hand-off never went, so the voice's next turn has no note that it's working on it; it's held
     # for the turn: its own conversation still has that answer (a call's two lost hand-offs, 10/30), and its
