@@ -172,6 +172,10 @@ function work(t) {
   }
   const ok = pop(span(mq, .55, 1));                                      // the mini window: Standby's mark, over everything
   if (ok > 0) g += orbApp(ORB[0], ORB[1], 40 * ok, callState(t), t, clamp(ok));
+  // as it suggests the changes, a card above the mini window lists them; it's put away when the page moves over
+  const vk = pop(span(t, SAY.c3.at + .3, SAY.c3.at + .65)) * (1 - span(t, MOVE - .5, MOVE));
+  if (vk > 0) g += visualCard(1572, ORB[1] - 58, 440, t < SAY.c3.at + 1.4 ? { brief: "The changes to the page" } :
+    { title: "Two changes", steps: ["Lighter header", "Sign-up button in the accent colour"], active: t < SAY.c3.at + 2.2 ? 0 : 1 }, clamp(vk));
   // the meeting, on a video call beside it
   const vw = 0;                                                        // the meeting is the room (the options are in meeting-options.html)
   if (vw > 0) g += `<g opacity="${fo(vw)}" transform="translate(${f((1 - vw) * 40)} 0)">` + videoCall(VCALL, t) + "</g>";
@@ -323,7 +327,7 @@ function confRoom(t, youOp = 1, onScreen = null) {
   return g + voice(N.x + 54, N.y + 16, 1, NADIA, tn * .8, t) + tag(N.x, N.y - 82, "Nadia", NADIA, 1) + tag(I.x, I.y - 82, "Ines", INES, 1);
 }
 // the meeting: the room, then into your laptop until its screen fills the frame
-const BIG = { x: 124, y: 134, w: 1351, h: 760 };
+const BIG = { x: 213, y: 134, w: 1173, h: 660 };   // its frame clear of the spoken words under it
 function meeting(t) {
   if (t < MEET0 + PULL) {                                              // from the call's own screen back to the room
     const q = 1 - inout(span(t, MEET0, MEET0 + PULL)), FULL = { x: 0, y: 0, w: 1600, h: 900 };
@@ -399,10 +403,10 @@ function outro(t) {
 // ---- every word said, as a caption at the bottom ---------------------------------------------------------------------
 function subtitle(t) {
   const l = STORY_LINES.find(l => t > l.at - .1 && t < l.at + l.dur + .35); if (!l) return "";
-  const k = fade(t, l.at - .1, l.at + l.dur + .35, .15), s = l.text, w = s.length * 12.6 + l.who.length * 13 + 70, x = 800 - w / 2, y = 852;
-  return `<g opacity="${fo(k)}">` + box(x, y - 30, w, 52, 26, DARK ? "#2b2b40" : "#1b1a2e", { op: .92 }) +
-    (l.who === "Claude" ? orbApp(x + 28, y - 4, 11, "speaking", t) : "") +
-    ui(x + (l.who === "Claude" ? 48 : 26), y + 4, `<tspan font-weight="700" fill="${l.who === "Claude" ? "#b9b4ff" : l.who === "You" ? "#ffffff" : COL[l.who]}">${l.who}</tspan>  ${esc(s)}`, 23, { fill: "#f4f4fa" }) + "</g>";
+  const k = fade(t, l.at - .1, l.at + l.dur + .35, .15), s = l.text, w = s.length * 11.6 + l.who.length * 15 + 100, x = 800 - w / 2, y = 856;
+  return `<g opacity="${fo(k)}">` + box(x, y - 36, w, 62, 31, DARK ? "#2b2b40" : "#1b1a2e", { op: .92 }) +
+    (l.who === "Claude" ? orbApp(x + 33, y - 5, 13, "speaking", t) : "") +
+    ui(x + (l.who === "Claude" ? 56 : 30), y + 5, `<tspan font-weight="700" fill="${l.who === "Claude" ? "#b9b4ff" : l.who === "You" ? "#ffffff" : COL[l.who]}">${l.who}</tspan>  ${esc(s)}`, 27, { fill: "#f4f4fa" }) + "</g>";
 }
 
 function film(t0) {
