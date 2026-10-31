@@ -17,7 +17,7 @@
 <meta property="og:url" content="https://mksadoughi.github.io/standby/">
 <meta property="og:image" content="https://mksadoughi.github.io/standby/img/og.png">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Standby", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 14 or later (Apple Silicon)", "description": "Standby is a free, open-source Claude Code plugin for your Mac: call your Claude Code session and brainstorm by voice, bring it to your meetings, and dictate anywhere. Speech runs on your Mac; Claude Code gets your words as text.", "url": "https://mksadoughi.github.io/standby/", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "license": "https://opensource.org/licenses/MIT", "codeRepository": "https://github.com/mksadoughi/standby"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Standby", "applicationCategory": "DeveloperApplication", "operatingSystem": "macOS 14.4 or later (Apple Silicon)", "description": "Standby is a free, open-source Claude Code plugin for your Mac: call your Claude Code session and brainstorm by voice, bring it to your meetings, and dictate anywhere. Speech runs on your Mac; Claude Code gets your words as text.", "url": "https://mksadoughi.github.io/standby/", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}, "license": "https://opensource.org/licenses/MIT", "codeRepository": "https://github.com/mksadoughi/standby"}</script>
 <link rel="icon" href="img/icon.png">
 <style>
 :root{--ink:#1b1b2f;--muted:#66667a;--line:#e5e3dc;--card:#ffffffcc;--accent:#4f46e5;--accent-soft:#ebeafd;--mark:#f6e3a1;
@@ -385,7 +385,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
 cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-copy="cmd">Copy</button></div>
           <p class="use"><span class="n">2</span><span>Ask your Claude Code to call you or join your meeting. Or run <code>/standby call</code> or <code>/standby listen</code> yourself.</span></p>
         </div>
-        <p class="req-line">An Apple Silicon Mac with macOS 14 or later, Claude Code signed in, and a one-time download of about 4.5 GB.</p>
+        <p class="req-line">An Apple Silicon Mac with macOS 14.4 or later, Claude Code signed in, and a one-time download of about 4.5 GB.</p>
       </div>
     </div></div>
   </div>
@@ -431,7 +431,7 @@ cd standby &amp;&amp; ./install.sh</pre><button type="button" class="cp" data-co
     <details><summary>Will it drain my Claude plan?</summary><p>Hardly, and there's nothing to pay per use: Standby is free, needs no API key, and goes through your own Claude Code and its subscription. Speech-to-text, speaker labels and the voice all run on your Mac. Claude gets your words as text, and conversation is a small amount of text. People speak two or three words a second. Even if you stayed on a call for a whole eight-hour workday and never stopped talking, everything said would come to around 100,000 tokens. That's about what Claude reads when it looks over a medium-sized codebase once. Most of it goes to Haiku, the smallest and lightest model. The heavier work you hand your session counts there, as usual. In the developer's own use, a full day of about ten calls took 1 to 2% of a $20 Pro plan's weekly limit, and Settings shows exactly what Standby used.</p></details>
     <details><summary>When does Claude see the meeting?</summary><p>When you ask: the transcript goes with your question. Or, if you'd rather, as it goes.</p></details>
     <details><summary>What leaves my Mac?</summary><p>Audio and voice prints never leave it. A meeting's transcript and what you say on a call go to your own Claude Code as text, along with anything you paste or attach; Claude Code and its tools handle data their own way. Deleting a meeting or call in Standby removes Standby's copies on your Mac, not what was already sent to Claude or exported.</p></details>
-    <details><summary>What will macOS ask for?</summary><p>Each permission the first time it's needed. The microphone on your first call or meeting. Screen &amp; System Audio Recording for the first meeting that records your Mac's sound: that's how Standby hears the other side of a video call, and it takes the sound only, never the screen. Input Monitoring and Accessibility when you turn on dictation, to notice your dictation shortcut and type the text for you.</p></details>
+    <details><summary>What will macOS ask for?</summary><p>Each permission the first time it's needed. The microphone on your first call or meeting. System Audio Recording for the first meeting that records your Mac's sound: that's how Standby hears the other side of a video call. Input Monitoring and Accessibility when you turn on dictation, to notice your dictation shortcut and type the text for you.</p></details>
     <details><summary>Can I record any meeting?</summary><p>Tell people when you're transcribing, and follow the rules that apply to you. In many places everyone has to agree to being recorded.</p></details>
   </div>
 </section>
