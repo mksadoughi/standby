@@ -441,7 +441,7 @@ CARD_VISUALS = {
   B --> C[Deeper side works]
   C --> D[Answer comes back]</sb-diagram></div>""",
     6: """<div data-size="medium"><h1>Which should ship first?</h1><p class="muted">Pick one, or just say it.</p>
-<button data-choice="Guest TTL">Guest TTL</button><button data-choice="Regional fares">Regional fares</button><button data-choice="Both, this week" class="chosen">Both, this week</button></div>""",
+<button data-choice="Guest TTL">Guest TTL</button><button data-choice="Regional fares">Regional fares</button><button data-choice="Both, this week">Both, this week</button></div>""",
     4: """<div data-size="large"><h1>Cache times, by route</h1><table><tr><th>Route</th><th>Members</th><th>Guests</th><th>Warm on start</th></tr>
 <tr><td>/fares</td><td>15 min</td><td>2 min</td><td>yes</td></tr><tr><td>/routes</td><td>15 min</td><td>2 min</td><td>yes</td></tr>
 <tr><td>/regional</td><td>30 min</td><td>5 min</td><td>no</td></tr><tr><td>/search</td><td>5 min</td><td>1 min</td><td>no</td></tr>
@@ -515,7 +515,7 @@ setTimeout(() => { if (SCENE.startsWith("left")) edge("left", "bottom");
 def companion_page():
     html = (ROOT / "mac" / "companion.html").read_text()
     i = html.rindex("<script>")
-    docs = {n: visual_doc(f, inline=True) for n, f in CARD_VISUALS.items() if f}
+    docs = {n: visual_doc(f, inline=True, chosen="Both, this week" if n == 6 else None) for n, f in CARD_VISUALS.items() if f}
     docs[2] = visual_doc(inline=True)
     return html[:i] + "<script>const CARD_DOCS = " + json.dumps(docs).replace("</", "<\\/") + ";" + CMP_FAKE + "</script>" + html[i:].replace(
         "</body>", "<script>" + CMP_AFTER + "</script></body>")
@@ -554,10 +554,10 @@ VISUAL_SAMPLE = """<div data-size="medium"><h1>How long a route is kept</h1>
 <p class="muted" style="margin-top:10px">Since this morning's fix: <sb-math>t_{guest} = \\tfrac{2}{15}\\,t_{member}</sb-math></p></div>"""
 
 
-def visual_doc(fragment=VISUAL_SAMPLE, inline=True):
+def visual_doc(fragment=VISUAL_SAMPLE, inline=True, chosen=None):
     sys.path.insert(0, str(ROOT / "mac"))
     import visuals
-    return visuals.doc(fragment, os.environ.get("SB_KIT_LIBS") or "/nonexistent", inline=inline)
+    return visuals.doc(fragment, os.environ.get("SB_KIT_LIBS") or "/nonexistent", inline=inline, chosen=chosen)
 
 
 def perms_sample():

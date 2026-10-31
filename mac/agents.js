@@ -238,7 +238,8 @@ function mxRows(d, lv, live, paused, calling, tasks) {
   // a call's visuals, each under the voice line it was drawn for (its question's id); one with no such line (the
   // voice still talking, or its early question dropped for the one they went on to) by its own time, never last
   const vsid = i && i.id, vis = isCall ? ((d && d.visuals) || []).filter(v => v.state !== "failed" && !MXVHIDE.has(vsid + ":" + v.id)) : [];
-  const placed = new Set(), visRows = qid => { for (const v of vis) if ((qid === null || v.qid === qid) && !placed.has(v.id)) { placed.add(v.id); add("v:" + v.id + ":" + v.state, mxVisHTML(vsid, v)) } };
+  const vkey = v => "v:" + v.id + ":" + v.state + (v.chosen ? ":" + v.chosen : "");      // picked: drawn again, from the app, with its pick
+  const placed = new Set(), visRows = qid => { for (const v of vis) if ((qid === null || v.qid === qid) && !placed.has(v.id)) { placed.add(v.id); add(vkey(v), mxVisHTML(vsid, v)) } };
   const runs = (i && i.runs) || [], at = r => { let k = 0; while (k + 1 < runs.length && r.t >= runs[k + 1].t - 0.01) k++; return runs.length ? runs[k].start + (r.t - runs[k].t) : (i && i.started || 0) + r.t };
   // the meeting's own events between its lines: started, paused and resumed, the mic muted, the call's sound paused
   const tOf = t => runs.length ? at({t}) : (i && i.started || 0) + t, sep = (when, text) => ({at: when, sep: text});
@@ -262,7 +263,7 @@ function mxRows(d, lv, live, paused, calling, tasks) {
   let lastWho, asked = 0, came = 0, prev = null, lastAt = null, lastClock = null;
   const QUIET = 120;
   for (const x of rows) {
-    if (x.vis) { if (!placed.has(x.vis.id)) { placed.add(x.vis.id); add("v:" + x.vis.id + ":" + x.vis.state, mxVisHTML(vsid, x.vis)) } prev = null; continue }
+    if (x.vis) { if (!placed.has(x.vis.id)) { placed.add(x.vis.id); add(vkey(x.vis), mxVisHTML(vsid, x.vis)) } prev = null; continue }
     if (x.sep) { add("s:" + x.sep, `<div class="mx-sep2">${esc(x.sep)}</div>`); lastWho = undefined; prev = null; if (/^Started /.test(x.sep)) lastClock = x.sep.slice(8); continue }
     if (x.c && isCall && !(x.c.role === "ai" && (x.c.unsaid || x.c.result != null && !String(x.c.text || "").trim()))) {
       if (lastAt != null && (x.c.at || 0) - lastAt >= QUIET) { add("t:" + x.n, `<div class="mx-time">${esc(clock(x.c.at))}</div>`); prev = null }

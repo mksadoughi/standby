@@ -36,14 +36,18 @@
       send({ sb: "size", want, w: Math.ceil(r.width), h: Math.ceil(r.height), need });
     },
   };
+  // what was picked: that pill chosen, the others dimmed; kept by the app, so it's there again on reopening (data-chosen)
+  const labelOf = c => (c.getAttribute("data-choice") || c.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const mark = c => { document.querySelectorAll("[data-choice].chosen").forEach(o => o.classList.remove("chosen")); c.classList.add("chosen");
+    document.documentElement.classList.add("sb-chose") };
   // links: only https, only on a click, and only by the card: the visual itself never navigates
   document.addEventListener("click", e => {
     // a choice (data-choice): their answer, to the voice; marked as theirs here, the card's check decides the rest
     const c = e.target.closest && e.target.closest("[data-choice]");
     if (c) {
       e.preventDefault();
-      const label = (c.getAttribute("data-choice") || c.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
-      if (label) { document.querySelectorAll("[data-choice].chosen").forEach(o => o.classList.remove("chosen")); c.classList.add("chosen"); send({ sb: "chose", label }) }
+      const label = labelOf(c);
+      if (label) { mark(c); send({ sb: "chose", label }) }
       return;
     }
     const a = e.target.closest && e.target.closest("a[href]");
@@ -85,5 +89,7 @@
     }
   });
   whenRead(() => new ResizeObserver(() => sb.size()).observe(document.body));
+  whenRead(() => { const was = document.documentElement.getAttribute("data-chosen");
+    const c = was && [...document.querySelectorAll("[data-choice]")].find(x => labelOf(x) === was); if (c) mark(c) });
   addEventListener("load", () => sb.size());
 })();

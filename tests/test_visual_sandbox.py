@@ -62,6 +62,19 @@ check("  nothing in or out: no request to Standby's server, no web image", said 
 check("a choice clicked: one message, its label as the kit sends it, and marked chosen there",
       [m["label"] for m in got if m["sb"] == "chose"] == ["Option 2"], got)
 check("  and it never left its own document", str(view.web.URL().absoluteString()) == visualview.HOME, view.web.URL())
+# what was picked, kept by the app: the kit marks it on loading, the others dimmed
+picked = []
+again = visualview.VisualView(visuals.doc('<div><button data-choice="Yes">Yes</button><button data-choice="No">No</button>'
+    '<script>setTimeout(() => webkit.messageHandlers.card.postMessage({ sb: "open", href: "https://report.invalid/" + '
+    '[...document.querySelectorAll("[data-choice].chosen")].map(b => b.textContent).join("+") + "/" + encodeURIComponent(document.documentElement.className) }), 600)</script></div>',
+    "/nonexistent", inline=True, chosen="No"), visuals.CSP, (0, 0, 300, 120), picked.append)
+win.contentView().addSubview_(again.web)
+end = time.time() + 6
+while time.time() < end and not any(m["sb"] == "open" for m in picked):
+    Foundation.NSRunLoop.currentRunLoop().runUntilDate_(Foundation.NSDate.dateWithTimeIntervalSinceNow_(0.1))
+check("a visual opened again: what was picked shows picked (the others dim)", [m["href"] for m in picked if m["sb"] == "open"]
+      == ["https://report.invalid/No/sb-inline%20sb-chose"], picked)
+again.close()
 view.close()
 check("closed: let go, its messages no longer heard", view.web is None and view.on_message({"sb": "size"}) is None)
 

@@ -172,6 +172,10 @@ vn = visuals.listed(root / "sessions" / sid)[-1]["id"]
 check("the labels it offers: its data-choice values, as the kit sends them", ui.visual_choices(frag) == {"Option 1", "Tom & Jerry"})
 check("a choice it offers: told to the voice, with the visual's brief", ui.visual_choice(sid, vn, "Tom &   Jerry") == {"ok": True}
       and told == [(sid, "the two options", "Tom & Jerry")], told)
+check("  and kept with the visual: in the windows' list, and its document marks it (the label quoted safely)",
+      visuals.one(root / "sessions" / sid, vn)["chosen"] == "Tom & Jerry" and visuals.listed(root / "sessions" / sid)[-1].get("chosen") == "Tom & Jerry"
+      and 'data-chosen="Tom &amp; Jerry"' in visuals.doc(frag, root / "no-libs", inline=True, chosen="Tom & Jerry")
+      and 'data-chosen="&quot;&gt;&lt;x"' in visuals.doc(frag, root / "no-libs", chosen='"><x'))
 check("  one it doesn't offer (a page making one up): never told", "error" in ui.visual_choice(sid, vn, "Delete everything") and len(told) == 1)
 check("  another at once: too soon", "error" in ui.visual_choice(sid, vn, "Option 1") and len(told) == 1)
 ui._CHOICES[(sid, vn)] = (ui.CHOICES_MAX, 0.0)

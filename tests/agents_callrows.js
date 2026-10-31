@@ -86,6 +86,8 @@ const dropped = mxRows(Object.assign({}, vd, {visuals: [{id: 7, state: "ready", 
 const dk = dropped.map(r => r.k);
 check("a visual whose question was dropped: placed by its own time, before the later lines", dk.indexOf("v:7:ready") > dk.findIndex(k => /c:1/.test(k))
   && dk.indexOf("v:7:ready") < dk.findIndex(r => dropped[dk.indexOf(r)].h.includes("Later question")), dk);
+check("  picked: its row drawn again from the app, with the pick (its key says so)",
+  mxRows(Object.assign({}, vd, {visuals: [Object.assign({}, vd.visuals[0], {chosen: "Yes"})]}), null, false, false, true).some(r => r.k === "v:1:ready:Yes"));
 MXVHIDE.add("talk-4:1");
 check("  closed in this window: gone from the conversation", !mxRows(vd, null, false, false, true).some(r => r.k.startsWith("v:1")));
 check("  a meeting has none", !mxRows(Object.assign({}, vd, {info: {id: "meet-1", kind: "meeting", runs: []}}), null, false, false).some(r => r.k.startsWith("v:")));

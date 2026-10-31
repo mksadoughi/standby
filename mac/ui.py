@@ -5427,7 +5427,9 @@ def visual_choice(sid, n, label):
         log("visual: a choice made, but this voice can't take one yet")
         return {"error": "The voice can't take a choice yet"}
     log("visual: a choice made on visual %s" % n)
-    tell(sid, got.get("what") or "", label)
+    r = tell(sid, got.get("what") or "", label)
+    if not (isinstance(r, dict) and r.get("error")):
+        visuals.choose(SESSIONS / sid, n, label)       # kept with it: every window shows it picked, after paging or reopening
     return {"ok": True}
 
 
@@ -5579,7 +5581,7 @@ class CompanionHooks(object):
         got = visuals.one(SESSIONS / sid, n) if valid_id(sid) else None
         if not got or got.get("state") != "ready" or not got.get("html"):
             return None
-        return visuals.doc(got["html"], ROOT / "kit", inline=True), visuals.CSP       # clear: on the card's own ground
+        return visuals.doc(got["html"], ROOT / "kit", inline=True, chosen=got.get("chosen")), visuals.CSP   # clear: on the card's own ground
 
     def visual_chose(self, sid, n, label):
         """A choice clicked on the card's visual (the pointer on the card): checked, then told to the voice."""
@@ -6285,7 +6287,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"visuals": visuals.listed(SESSIONS / sid), "on": visuals_on()})
             got = visuals.one(SESSIONS / sid, q.get("id"))
             if got and q.get("doc") and got.get("html"):          # the whole document for the visual's sandbox
-                got = dict(got, doc=visuals.doc(got.pop("html"), ROOT / "kit", inline=q.get("doc") == "inline"))
+                got = dict(got, doc=visuals.doc(got.pop("html"), ROOT / "kit", inline=q.get("doc") == "inline", chosen=got.get("chosen")))
             return self._json(got if got else {"error": "no such visual"}, 200 if got else 404)
         if path.startswith("/api/voice/"):
             sid = path.rsplit("/", 1)[1]

@@ -106,7 +106,7 @@ def listed(sdir):
         return []
     if _LISTED.get(d, (None,))[0] != mtime:
         rows = sorted(_ours(sdir).values())
-        _LISTED[d] = (mtime, [{k: v for k, v in data.items() if k in ("id", "state", "qid", "at", "what")} for _n, data in rows])
+        _LISTED[d] = (mtime, [{k: v for k, v in data.items() if k in ("id", "state", "qid", "at", "what", "chosen")} for _n, data in rows])
     return list(_LISTED[d][1])
 
 
@@ -118,6 +118,14 @@ def one(sdir, n):
         return None
     data = _read(os.path.join(folder(sdir), "%d.json" % n)) if n > 0 else None
     return {k: v for k, v in data.items() if k != "src"} if data else None
+
+
+def choose(sdir, n, label):
+    """What was picked on visual n (one of its data-choice labels), kept with it: every window draws it from here."""
+    path = os.path.join(folder(sdir), "%d.json" % int(n))
+    data = _read(path)
+    if data is not None:
+        _write(path, dict(data, chosen=str(label)[:80]))
 
 
 # The visual's document: the kit, then the fragment, under a policy that lets nothing in or out. Everything is
@@ -164,9 +172,11 @@ def _b64(path):
         return base64.b64encode(fh.read()).decode("ascii")
 
 
-def doc(fragment, libs, inline=False):
+def doc(fragment, libs, inline=False, chosen=None):
     """The whole document for one visual's sandbox. libs: where install.sh put KaTeX and Mermaid; inline: in the
-    main window's conversation, on the card's own tint (a clear background)."""
+    main window's conversation, on the card's own tint (a clear background); chosen: what was picked on it, which
+    the kit marks (and the other choices dim)."""
+    import html
     libs = str(libs)
     head = ['<meta charset="utf-8">', '<meta http-equiv="Content-Security-Policy" content="%s">' % CSP,
             '<meta name="viewport" content="width=device-width">', _part("kit", libs)]
@@ -174,5 +184,6 @@ def doc(fragment, libs, inline=False):
         head.insert(3, _part("math", libs))
     if "<sb-diagram" in fragment:
         head.insert(3, _part("diagram", libs))
+    attrs = (' class="sb-inline"' if inline else "") + (' data-chosen="%s"' % html.escape(chosen, quote=True) if chosen else "")
     return "<!doctype html><html%s><head>%s</head><body><div id=\"sb-root\">%s</div></body></html>" % (
-        ' class="sb-inline"' if inline else "", "".join(head), fragment)
+        attrs, "".join(head), fragment)

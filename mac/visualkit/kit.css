@@ -37,6 +37,7 @@ button{font:inherit;color:var(--accent);background:var(--soft);border:0;border-r
   border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);background:transparent;color:var(--accent);font-weight:550;
   cursor:pointer;-webkit-user-select:none;user-select:none}
 [data-choice]:hover{background:var(--soft)}[data-choice].chosen{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+html.sb-chose [data-choice]:not(.chosen){opacity:.45}
 code{font:12px ui-monospace,Menlo,monospace;background:var(--soft);padding:1px 4px;border-radius:4px}
 sb-math{display:inline-block}sb-math[display]{display:block;text-align:center;margin:6px 0;font-size:15px}
 sb-math.raw,sb-diagram.raw{font:12px ui-monospace,Menlo,monospace;color:var(--muted);white-space:pre-wrap}
