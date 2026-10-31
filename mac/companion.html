@@ -207,8 +207,8 @@ color:var(--c-muted);background:var(--c-hover);font:inherit;cursor:default}
 .vmk{display:none;position:absolute;top:4%;right:4%;width:22%;height:22%;border-radius:50%;background:#fff;color:#5046e5;
 box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.12);align-items:center;justify-content:center;pointer-events:auto;cursor:default}
 .vmk svg{width:62%;height:62%}.vmk:before{content:"";position:absolute;inset:-22%;border-radius:50%}
-.cmp.vis .vmk{display:flex}.cmp.vis.waiting .vmk{top:1%;right:15%}
-body:not(.r) .vmk{right:auto;left:4%}body:not(.r) .cmp.vis.waiting .vmk{right:auto;left:15%}
+.cmp.vis .vmk{display:flex}.cmp.vis.waiting .vmk{top:2%;right:19%}
+body:not(.r) .vmk{right:auto;left:4%}body:not(.r) .cmp.vis.waiting .vmk{right:auto;left:19%}
 @media (prefers-color-scheme:dark){.vmk{background:#242426;color:#8f86ff;box-shadow:0 0 0 .5px rgba(255,255,255,.14),0 1px 2px rgba(0,0,0,.4)}}
 </style></head><body>
 <div class="cmp idle" id="cmp" style="display:none"></div>
@@ -326,8 +326,8 @@ function size(el, g, c, r_, top) {
   if (k !== lastSize) { lastSize = k; post(m) }
   const cx = r_ ? W - INSET - g / 2 : INSET + g / 2, cy = top ? INSET + g / 2 : H - INSET - g / 2;
   // the picture mark on the orb's edge takes its clicks too (most of it is over the orb already)
-  // (where .vmk sits: its centre .35 of the orb out from the orb's, .24 and .38 behind the red dot; 28 px across)
-  const wt = $("cmp").classList.contains("waiting"), dx = g * (wt ? .24 : .35), dy = g * (wt ? .38 : .35);
+  // (where .vmk sits: its centre .35 of the orb out from the orb's, .20 and .37 behind the red dot; 28 px across)
+  const wt = $("cmp").classList.contains("waiting"), dx = g * (wt ? .20 : .35), dy = g * (wt ? .37 : .35);
   const mk = C && C.visual_mark ? [{ x: cx + (r_ ? dx : -dx), y: top ? cy + dy : cy - dy, r: 14 }] : [];
   const hit = { type: "hit", areas: [{ x: cx, y: cy, r: g / 2 }].concat(pill ? [pill] : [], mk) }, hk = JSON.stringify(hit);
   if (hk !== lastHit) { lastHit = hk; post(hit) }
