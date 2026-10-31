@@ -1128,6 +1128,10 @@ class Presence(object):
             self._place_card(_seconds(m, WORDS), WORDS_EASE)
         elif self.pill.visible:
             self._show_card()
+        sides = rules.edges(tuple(self.pill.frame()), self.pill.corner, self.pill._screen())
+        if sides != getattr(self, "_card_sides", None):          # its page keeps its pager on the orb's side
+            self._card_sides = sides
+            self.card.call("edge", *sides)
         self._show_visual(str(m.get("session") or ""), m.get("id"), m.get("area"))
 
     def _card_at(self, orb):

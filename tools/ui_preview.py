@@ -428,7 +428,7 @@ SCENES = r"""
 CMP_SCENES = ["idle", "recording", "recording-roll", "recording-hover", "left-hover",
               "listening", "hearing", "thinking", "thinking-steps", "thinking-steps-hover", "holding", "speaking", "muted", "muted-waiting", "muted-waiting-hover", "voice-hover", "left-voice-hover",
               "preparing", "down", "down-hover", "micdenied", "words-micdenied", "words-speaking",
-              "visuals-hover", "visuals-off-hover", "card-drawing", "card-ready", "card-stack", "card-back-new", "card-line", "card-large", "card-diagram", "visuals-mark", "visuals-mark-waiting"]
+              "visuals-hover", "visuals-off-hover", "card-drawing", "card-ready", "card-stack", "card-back-new", "card-line", "card-large", "card-diagram", "visuals-mark", "visuals-mark-waiting", "card-stack-top", "card-stack-left"]
 # The visual card's scenes: the visuals in the call so far, the one the voice is on (n), and the documents
 # their sandboxes would hold (mac/visuals.py), here each in a frame where the panel lays the sandbox.
 CARD_VISUALS = {
@@ -471,8 +471,9 @@ const DATA = { idle: { live: null, voice: V("off") }, recording: { live: LIVE(),
 // the visual card: the call's visuals, the newest the voice's
 const VIS = (n, state) => ({ id: n, state: state || "ready", qid: "q" + n, at: 0, what: ["", "Where the meeting's sound goes", "How long a route is kept", "The tests", "Cache times, by route"][n] });
 const CARDS = { "card-drawing": [VIS(1, "drawing")], "card-ready": [VIS(1)], "card-stack": [VIS(2), VIS(3), VIS(1)].map((v, i) => Object.assign({}, v, { id: i + 1, at: i })),
-  "card-back-new": [VIS(1), VIS(2), VIS(3), VIS(4)], "card-line": [VIS(3)], "card-large": [VIS(4)], "card-diagram": [VIS(1)] };
-const CDOC = { "card-diagram": { 1: 5 }, "card-ready": { 1: 1 }, "card-stack": { 1: 2, 2: 3, 3: 1 }, "card-back-new": { 1: 1, 2: 2, 3: 3, 4: 4 }, "card-line": { 3: 3 }, "card-large": { 4: 4 } };   // visual -> its document
+  "card-back-new": [VIS(1), VIS(2), VIS(3), VIS(4)], "card-line": [VIS(3)], "card-large": [VIS(4)], "card-diagram": [VIS(1)],
+  "card-stack-top": [VIS(2), VIS(3), VIS(1)].map((v, i) => Object.assign({}, v, { id: i + 1 })), "card-stack-left": [VIS(2), VIS(3), VIS(1)].map((v, i) => Object.assign({}, v, { id: i + 1 })) };
+const CDOC = { "card-stack-top": { 1: 2, 2: 3, 3: 1 }, "card-stack-left": { 1: 2, 2: 3, 3: 1 }, "card-diagram": { 1: 5 }, "card-ready": { 1: 1 }, "card-stack": { 1: 2, 2: 3, 3: 1 }, "card-back-new": { 1: 1, 2: 2, 3: 3, 4: 4 }, "card-line": { 3: 3 }, "card-large": { 4: 4 } };   // visual -> its document
 for (const k in CARDS) { const l = CARDS[k], top = l[l.length - 1]; DATA[k] = { live: LIVE(), voice: V("listening", { visual: Object.assign({ n: l.length }, top) }), visuals_on: true } }
 // ?live=1: your voice moves while it hears you, so a page can show the real orb moving
 const LIVEV = new URLSearchParams(location.search).get("live");
@@ -496,9 +497,11 @@ if (CARD) { const box = $("vcard"), bg = document.createElement("div");
     if (!doc) { if (f) { f.remove(); f = null } return }
     if (!f || f.dataset.id != m.id) { if (f) f.remove(); f = document.createElement("iframe"); f.dataset.id = m.id; f.setAttribute("sandbox", "allow-scripts");
       f.style.cssText = "position:fixed;left:0;top:0;z-index:1;border:0;background:transparent;border-radius:16px"; f.srcdoc = doc; document.body.appendChild(f) }
-    f.style.width = m.area.w + "px"; f.style.height = m.area.h + "px" };
+    f.style.width = m.area.w + "px"; f.style.height = m.area.h + "px"; f.style.top = (m.area.y || 0) + "px" };
   lay(); new MutationObserver(lay).observe(box, { attributes: true, attributeFilter: ["data-card"] });
   if (SCENE === "card-back-new") setTimeout(() => { cardGo(-1); cardGo(-1) }, 400);
+  if (SCENE === "card-stack-top") edge("right", "top");
+  if (SCENE === "card-stack-left") edge("left", "bottom");
  }
 setTimeout(() => { if (SCENE.startsWith("left")) edge("left", "bottom");
   if (SCENE.endsWith("-hover")) { open = true; render() }

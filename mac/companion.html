@@ -193,7 +193,11 @@ background-size:200% 100%;animation:vshim 1.4s ease-in-out infinite}.vdraw i+i{w
 @keyframes vshim{from{background-position:100% 0}to{background-position:-100% 0}}
 .vft{position:absolute;left:0;right:0;bottom:0;height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 12px 4px 14px;
 font-size:11.5px;color:var(--c-muted)}
-.vft .pager{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
+.vft .pager{display:flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}.vft .pager>span{min-width:38px;text-align:center}
+/* the pager on the card's fixed side, the orb's (each visual has its own width): ‹ › never move under the pointer */
+body.r .vft{flex-direction:row-reverse}
+/* below the orb (a top corner) the fixed edge is the top: the pager in a top row, the close keeping its corner */
+[data-v=top] .vft{top:0;bottom:auto;padding:4px 44px 0 14px;justify-content:flex-start}body.r[data-v=top] .vft{justify-content:flex-start;padding:4px 44px 0 14px}
 .vft button{height:22px;min-width:22px;border-radius:6px;border:0;padding:0;display:flex;align-items:center;justify-content:center;gap:4px;
 color:var(--c-muted);background:var(--c-hover);font:inherit;cursor:default}
 .vft button:disabled{opacity:.4}.vft button:not(:disabled):hover{background:var(--c-press);color:var(--c-text)}
@@ -406,8 +410,9 @@ function visualCard() {
   box.style.display = "";
   const ch = drawing ? Math.ceil(($("vdraw") || box).getBoundingClientRect().height) : (sz.h || 120);
   const H = Math.round(Math.max(VMIN_H, Math.min(maxH, ch + foot)));
-  const hit = [{ x: W - 32, y: 10, w: 22, h: 22, radius: 11 }].concat(foot ? [{ x: 0, y: H - VFOOT, w: W, h: VFOOT, radius: 0 }] : []);
-  cardPost({ type: "card", w: W, h: H, area: { x: 0, y: 0, w: W, h: H - foot }, session: VC.sid, id: drawing ? 0 : v.id, hit, ms: 180 });
+  const topRow = document.body.dataset.v === "top", rowY = topRow ? 0 : H - VFOOT;
+  const hit = [{ x: W - 32, y: 10, w: 22, h: 22, radius: 11 }].concat(foot ? [{ x: 0, y: rowY, w: W, h: VFOOT, radius: 0 }] : []);
+  cardPost({ type: "card", w: W, h: H, area: { x: 0, y: topRow ? foot : 0, w: W, h: H - foot }, session: VC.sid, id: drawing ? 0 : v.id, hit, ms: 180 });
 }
 function cardOpen() { VC.closed = false; VC.at = null; render() }
 // the app keeps whether the card is closed: the orb shows its picture mark meanwhile, to open it again
