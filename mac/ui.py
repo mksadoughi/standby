@@ -589,7 +589,7 @@ def drop_chat_row(sid, row, text=None):
 TALK_OVER_MIC = "Needs the Mac's default microphone (Settings > Recording)"
 DEFAULTS = {"push_lines": 10, "speakers": True, "capture": "auto",
             "remember_voices": True, "lite_transcript": "ask",
-            "auto_stop_min": 15, "auto_accept": False}
+            "auto_stop_min": 15, "auto_accept": False, "call_visuals": True}
 LITE_PASSES = ("ask", "live")     # a meeting from Claude Code: its transcript with each prompt, or pushed as it goes
 VOICES = ROOT / "voices.json"
 # the speech model being downloaded, if one is: {"key", "state", "done", "total", "error"}.
@@ -682,6 +682,8 @@ def get_settings():
             "remember_voices": bool(cfg.get("remember_voices", DEFAULTS["remember_voices"])),
             # Claude starts calls and listening without the incoming panel (the user's Always accept)
             "auto_accept": bool(cfg.get("auto_accept", DEFAULTS["auto_accept"])),
+            # a call's visual card: off, the voice is never asked for one and nothing is made (standby-agent reads it)
+            "call_visuals": bool(cfg.get("call_visuals", DEFAULTS["call_visuals"])),
             "lite_transcript": cfg.get("lite_transcript") if cfg.get("lite_transcript") in LITE_PASSES else DEFAULTS["lite_transcript"],
             "auto_stop_min": _auto_stop_min(cfg),
             "voices": sorted(read_json(VOICES).get("voices", {})),
@@ -839,6 +841,8 @@ def set_settings(b):
         cfg["remember_voices"] = bool(b["remember_voices"])
     if "auto_accept" in b:
         cfg["auto_accept"] = bool(b["auto_accept"])
+    if "call_visuals" in b:
+        cfg["call_visuals"] = bool(b["call_visuals"])
     if b.get("lite_transcript") in LITE_PASSES:
         cfg["lite_transcript"] = b["lite_transcript"]
     if "auto_stop_min" in b:
@@ -903,6 +907,7 @@ def _named_settings():
         ("speakers", "tell the speakers apart", onoff(st["speakers"]), list(ON_OFF), "speakers"),
         ("remember_voices", "remember voices, yours and the ones you name", onoff(st["remember_voices"]), list(ON_OFF), "remember_voices"),
         ("auto_accept", "Claude starts calls and listening without asking", onoff(st["auto_accept"]), list(ON_OFF), "auto_accept"),
+        ("visuals", "a small card showing what goes with what the voice says, on calls", onoff(st["call_visuals"]), list(ON_OFF), "call_visuals"),
         ("ai_update", "sentences between the meeting agent's updates", str(st["push_lines"]), ["1 to 200"], "push_lines"),
         ("auto_stop", "minutes with nothing said before a meeting stops itself (0: never)", str(st["auto_stop_min"]),
          ["0 to %d" % AUTO_STOP_MAX], "auto_stop_min"),
@@ -2036,6 +2041,8 @@ def _run_ask(sid, question, voice=False, on_event=None, on_queued=None, heard=No
         with _lock:
             if sid in PENDING:
                 PENDING[sid]["qid"] = qid
+        if voice:
+            visual_turn(qid, sid)
         if on_queued is not None:
             on_queued(qid)
 
@@ -2119,7 +2126,9 @@ def _run_ask(sid, question, voice=False, on_event=None, on_queued=None, heard=No
     else:
         # a hand-off's row: exactly what the voice said before taking it deeper, or nothing; never a line of the app's
         spoken = " ".join("".join(written).split())
-        ai_row = append_chat(sid, "ai", spoken if more else answer.strip(), steps, voice=voice, more=more)
+        if voice and pending.get("qid"):               # a visual drawn for this turn sits under this row
+            more = dict(more or {}, qid=pending["qid"])
+        ai_row = append_chat(sid, "ai", spoken if (more or {}).get("handoff") else answer.strip(), steps, voice=voice, more=more)
     answer += cancels
     with _lock:
         if voice and pending.get("qid") and pending.get("row") is not None and ai_row is not None:
@@ -5129,6 +5138,8 @@ def voice_status(sid):
     st = vs.status() if vs is not None else {"state": "off"}
     if sid in LITE_CALLS:                          # the call's tasks, for the windows' busy cue
         st = dict(st, tasks=lite_task_list(sid))
+    if vs is not None:                             # the call's newest visual, for the windows to notice it cheaply
+        st = dict(st, visual=visual_latest(sid))
     return dict(st, waiting=True) if lite_waiting(sid, st) else st
 
 
@@ -5136,6 +5147,42 @@ def lite_waiting(sid, st):
     """A paused call with what came back held for Resume: news (a task ended), never bookkeeping."""
     c = LITE_CALLS.get(sid)
     return bool(st.get("muted")) and c is not None and bool(_lite_untold(c, sid))
+
+
+# A call's visuals (visuals.py): the agent's side copy drops them in its spool by the voice question they
+# go with; the windows' polls move them into the call's folder.
+VISUAL_TURNS = {}                     # voice question ident -> the session it was asked in (the newest few hundred)
+_VISUALS = {"at": 0.0}
+
+
+def visual_turn(qid, sid):
+    with _lock:
+        VISUAL_TURNS[qid] = sid
+        while len(VISUAL_TURNS) > 400:
+            VISUAL_TURNS.pop(next(iter(VISUAL_TURNS)))
+
+
+def take_visuals():
+    """The spool's visuals into their calls, at most four times a second (both windows ask, often)."""
+    import visuals
+    now = time.time()
+    if now - _VISUALS["at"] < 0.25:
+        return
+    _VISUALS["at"] = now
+
+    def call_for(qid):
+        sid = VISUAL_TURNS.get(qid) or _live_now()          # a turn the Mac didn't queue (a result told): the live call
+        return SESSIONS / sid if sid and valid_id(sid) and (SESSIONS / sid).is_dir() else None
+    for sdir in visuals.take(ROOT / "agent" / "spool", call_for, now):
+        log("visual: %s" % Path(sdir).name)
+
+
+def visual_latest(sid):
+    """{n, id, state} of the call's newest visual, or None."""
+    import visuals
+    take_visuals()
+    rows = visuals.listed(SESSIONS / sid)
+    return dict(rows[-1], n=len(rows)) if rows else None
 
 
 def stop_voice():
@@ -5950,6 +5997,17 @@ class Handler(BaseHTTPRequestHandler):
             if not valid_id(sid):
                 return self._json({"error": "no such session"}, 404)
             return self._json(dict(live_status(sid) or {}, **access(sid, live_capture(sid))) if sid == live_session() else {})
+        if path in ("/api/visuals", "/api/visual"):
+            import visuals
+            q = {k: v[-1] for k, v in urllib.parse.parse_qs(query).items()}
+            sid = q.get("session") or ""
+            if not valid_id(sid) or not (SESSIONS / sid).is_dir():
+                return self._json({"error": "no such session"}, 404)
+            take_visuals()
+            if path == "/api/visuals":
+                return self._json({"visuals": visuals.listed(SESSIONS / sid), "on": get_settings()["call_visuals"]})
+            got = visuals.one(SESSIONS / sid, q.get("id"))
+            return self._json(got if got else {"error": "no such visual"}, 200 if got else 404)
         if path.startswith("/api/voice/"):
             sid = path.rsplit("/", 1)[1]
             if not valid_id(sid):
@@ -6810,6 +6868,8 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
       <div class="field"><label class="tgl"><input type="checkbox" id="s_autoaccept" data-save> Let Claude start calls and listening without asking<span class="mx-help" tabindex="0" title="The same as Always accept on Claude Code's band. Off: the band asks each time." aria-label="About starting without asking" onclick="event.preventDefault()"></span></label></div>
       <div class="field"><label class="tgl"><input type="checkbox" id="s_talkover" data-save> Let me talk over Claude<span class="mx-help" tabindex="0" title="Echo cancelling, for laptop speakers; not needed with headphones." aria-label="About talking over Claude" onclick="event.preventDefault()"></span></label>
         <div class="hint fine" id="s_talkovernote" hidden></div></div>
+      <div class="field"><label class="tgl"><input type="checkbox" id="s_visuals" data-save> Show visuals during calls<span class="mx-help" tabindex="0" title="When it helps, or when you ask, a small card above the mini window shows a list, a diagram or numbers that go with what the voice says. An extra Claude call makes it, beside the voice, so the voice never waits. Off: none are made." aria-label="About visuals during calls" onclick="event.preventDefault()"></span></label>
+        <div class="hint">A small card above the mini window, when a picture helps.</div></div>
     </div></div>
     <div class="pane" data-p="recording"><div class="sec">
       <div class="field"><label>Record<span class="mx-help" id="s_caphint" tabindex="0" title="" aria-label="About Record" onclick="event.preventDefault()"></span></label><input type="hidden" id="s_capture">
@@ -7170,7 +7230,7 @@ async function showSettings(pane){const r=await api("/api/settings"),s=r.setting
   $("s_vmodel").value=s.voice_model||"haiku";$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
   $("s_remember").checked=!!s.remember_voices;
   // Talking over Claude (the duplex engine): from the next voice mode; a quiet line when the mic chosen can't
-  $("s_autoaccept").checked=!!s.auto_accept;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}
+  $("s_autoaccept").checked=!!s.auto_accept;$("s_visuals").checked=s.call_visuals!==false;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}
   MYVOICE=s.my_voice;paintMyVoice();
   $("s_voices").innerHTML=s.voices.length?s.voices.map(esc).join(", ")+' \u00b7 <a href="#" onclick="event.preventDefault();forgetVoices()">Forget all</a>':"No remembered voices yet";$("mictest").innerHTML="";
   api("/api/prompt").then(p=>{if(!p.error)$("s_prompt").textContent=p.custom?"Customized instructions.":"Default instructions."}).catch(()=>{});
@@ -7190,7 +7250,7 @@ function watchModel(){loadModels();
 function markModels(off){["s_vmodel"].forEach(id=>{for(const o of $(id).options){o.dataset.label=o.dataset.label||o.textContent;
   o.disabled=off.includes(o.value);o.textContent=o.disabled?o.dataset.label.split(" (")[0]+" (not available)":o.dataset.label}})}
 function formSettings(){return {voice_model:$("s_vmodel").value,
-  push_lines:$("s_push").value,lite_transcript:$("s_litepass").value,speakers:$("s_speakers").checked,remember_voices:$("s_remember").checked,talk_over:$("s_talkover").checked,auto_accept:$("s_autoaccept").checked,capture:$("s_capture").value,mic_device:$("s_mic").value,
+  push_lines:$("s_push").value,lite_transcript:$("s_litepass").value,speakers:$("s_speakers").checked,remember_voices:$("s_remember").checked,talk_over:$("s_talkover").checked,auto_accept:$("s_autoaccept").checked,call_visuals:$("s_visuals").checked,capture:$("s_capture").value,mic_device:$("s_mic").value,
   speech_model:SPEECHSET?($("s_speech").value||undefined):undefined,english_only:$("s_english").checked}}
 let VOICES=null;
 const Q={premium:"Premium",enhanced:"Enhanced",standard:"Standard"};
