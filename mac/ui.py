@@ -4365,8 +4365,8 @@ def close_settings_window():
 
 
 # Standby's setup window before a first call or meeting (firstuse): while the mic, or an online meeting's
-# sound, is still undecided, the start is held and the window asks for both, each on its own row; once both are
-# allowed (or the sound skipped)
+# sound, is still undecided, the start is held and the window asks for what it needs, each on its own row; once
+# all are allowed (or the sound skipped)
 # Standby starts it itself, and the band (waiting on /api/lite/state) carries on as for any start. Allowing
 # the meeting's sound ends in macOS's Quit & Reopen: the held start is in SETUP_FILE, and the next launch
 # takes it up. Allowed already: no window, no wait.
@@ -4388,7 +4388,7 @@ def setup_states(steps):
     if firstuse.MIC in steps:
         out[firstuse.MIC] = firstuse.mic_state(mic_access(), mine("mic"))
     if firstuse.SOUND in steps:
-        out[firstuse.SOUND] = firstuse.sound_state(_sound_state())
+        out[firstuse.SOUND] = firstuse.sound_state(_sound_state(), stale=sound_why() == "stale")
     return out
 
 
@@ -4417,8 +4417,7 @@ def setup_hold(kind, body):
                                 _sound_skipped_at(), time.time())
         if not steps:
             return None
-        rows = list(firstuse.ROWS)
-        held = {"kind": kind, "cc": cc, "body": dict(body), "steps": rows, "pressed": [],
+        held = {"kind": kind, "cc": cc, "body": dict(body), "steps": steps, "pressed": [],
                 "skip": firstuse.skipped(_sound_skipped_at(), time.time()),
                 "phase": "open", "error": None, "at": time.time(), "id": uuid.uuid4().hex[:8]}
         SETUP["held"] = held

@@ -507,11 +507,13 @@ def companion_page():
 
 
 # The setup window before a first call or meeting (mac/firstuse.html), each state as firstuse.view makes it.
-SETUP_SCENES = [("start", "call", {"mic": "ask", "sound": "ask"}, False, "open"),
-                ("mic-allowed", "call", {"mic": "allowed", "sound": "ask"}, False, "open"),
-                ("mic-refused", "call", {"mic": "denied", "sound": "ask"}, False, "open"),
+SETUP_SCENES = [("call", "call", {"mic": "ask"}, False, "open"),
+                ("call-refused", "call", {"mic": "denied"}, False, "open"),
+                ("call-done", "call", {"mic": "allowed"}, False, "starting"),
+                ("meeting", "meeting", {"mic": "ask", "sound": "ask"}, False, "open"),
+                ("meeting-mic-allowed", "meeting", {"mic": "allowed", "sound": "ask"}, False, "open"),
                 ("sound-refused", "meeting", {"mic": "allowed", "sound": "denied"}, False, "open"),
-                ("done", "call", {"mic": "allowed", "sound": "allowed"}, False, "starting"),
+                ("sound-stale", "meeting", {"mic": "allowed", "sound": "stale"}, False, "open"),
                 ("skipped", "meeting", {"mic": "allowed", "sound": "ask"}, True, "starting"),
                 ("failed", "meeting", {"mic": "allowed", "sound": "allowed"}, False, "failed")]
 
@@ -520,7 +522,7 @@ def setup_page(scene):
     sys.path.insert(0, str(ROOT / "mac"))
     import firstuse
     _, kind, states, skip, phase = next(x for x in SETUP_SCENES if x[0] == scene)
-    view = firstuse.view(kind, firstuse.ROWS, states, skip, phase, ("Standby is busy with another call or meeting: end it first" if kind == "call" else "Your Mac didn't start")
+    view = firstuse.view(kind, firstuse.steps_for(kind), states, skip, phase, ("Standby is busy with another call or meeting: end it first" if kind == "call" else "Your Mac didn't start")
                          if phase == "failed" else None)
     html = (ROOT / "mac" / "firstuse.html").read_text()
     fake = "<script>window.fetch = async p => ({ json: async () => (%s) })</script>" % json.dumps(view)

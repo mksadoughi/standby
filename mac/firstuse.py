@@ -3,8 +3,9 @@ macOS, and what the window shows.
 
 A call needs the microphone; an online meeting also needs the meeting's sound (System Audio
 Recording). While what the start needs is still undecided, the start waits and the window
-asks for both, once: each its own row, either first, macOS's own prompt only on the row's button,
-a tick as each is allowed (or the sound skipped), then the call or meeting starts by itself.
+asks for just that (a call never for the meeting's sound: the user's first call, 2026-10-31), each
+its own row, either first, macOS's own prompt only on the row's button, a tick as each is allowed
+(or the sound skipped), then the call or meeting starts by itself.
 Allowed already: no window, no wait. Plain functions; mac/ui.py holds the start and runs the window.
 """
 
@@ -12,13 +13,16 @@ MIC, SOUND = "mic", "sound"
 SKIP_DAYS = 30                 # the meeting's sound skipped: not asked again for this long
 HELD_FOR = 15 * 60             # the most a start waits for its setup (and is taken up after a Quit & Reopen)
 
-ROWS = [MIC, SOUND]               # the window always asks for both: a first call also offers the meeting's sound
-
 NAMES = {MIC: ("Microphone", "Standby can hear you on calls and in meetings."),
          SOUND: ("Meeting sound", "Hears others in online meetings. Standby takes only the sound.")}
-TITLE, SUB = "Set up Standby", "Two things for macOS to allow, once."
+TITLE = "Set up Standby"
+SUB = {1: "One thing for macOS to allow, once.", 2: "Two things for macOS to allow, once."}
 DONE = "You're all set"
 REFUSED = "Turn on Standby in System Settings, then come back."   # refused before: macOS won't ask again
+# the meeting's sound refused, though System Settings may show Standby on: macOS keeps the switch of the copy it
+# allowed, and a new build (install.sh signs each) is another copy; turning it off and on gives it to this one
+SOUND_REFUSED = "Turn on Standby in System Settings. Already on? Turn it off and on again."
+SOUND_STALE = "macOS still has an older Standby allowed. Turn it off and on again in System Settings."
 RETRY = "Try again from Claude Code."
 
 
@@ -39,11 +43,13 @@ def mic_state(status, heard=False):
     return "ask" if status == "undetermined" and not heard else "allowed"
 
 
-def sound_state(state):
+def sound_state(state, stale=False):
     """The meeting's sound, from native.permissions.sound_state: "allowed" (heard, or asked
     with no sign of a refusal: macOS never says), "denied" (a capture heard only silence
-    while an app played) or "ask" (this build has never asked)."""
-    return {"allowed": "allowed", "asked": "allowed", "denied": "denied"}.get(state, "ask")
+    while an app played), "stale" (denied, an earlier build known to have heard it: the switch
+    on in System Settings is that one's) or "ask" (this build has never asked)."""
+    got = {"allowed": "allowed", "asked": "allowed", "denied": "denied"}.get(state, "ask")
+    return "stale" if got == "denied" and stale else got
 
 
 def skipped(skipped_at, now):
@@ -61,8 +67,7 @@ def settled(key, states, skip):
 
 
 def needed(kind, capture, states, skipped_at=None, now=0):
-    """What a start is held for: its steps still undecided, or [] (no window, no wait). The window then
-    asks for all ROWS."""
+    """What a start is held for and its window asks: its steps, or [] when none is undecided (no window, no wait)."""
     steps = steps_for(kind, capture)
     skip = can_skip(steps) and skipped(skipped_at, now)
     return steps if any(not settled(k, states, skip) for k in steps) else []
@@ -101,8 +106,9 @@ def view(kind, steps, states, skip=False, phase="open", error=None):
             st["state"] = "skipped"
         else:
             ask = states.get(key) == "ask"
+            told = line if ask else SOUND_STALE if states.get(key) == "stale" else SOUND_REFUSED if key == SOUND else REFUSED
             st.update(button="Allow" if ask else "Open Settings",
-                      do=("allow_" if ask else "settings_") + key, line=line if ask else REFUSED, waiting=not ask,
+                      do=("allow_" if ask else "settings_") + key, line=told, waiting=not ask,
                       skip="Skip" if key == SOUND and can_skip(steps) else None)
         out.append(st)
     if phase == "failed":
@@ -113,4 +119,4 @@ def view(kind, steps, states, skip=False, phase="open", error=None):
             if st["state"] == "open":
                 st.update(state="done", button=None, do=None, waiting=False, skip=None)
         return {"title": DONE, "sub": "", "steps": out, "go": "Starting your %s…" % what, "error": None, "button": None}
-    return {"title": TITLE, "sub": SUB, "steps": out, "go": None, "error": None, "button": None}
+    return {"title": TITLE, "sub": SUB[len(out)] if len(out) in SUB else "", "steps": out, "go": None, "error": None, "button": None}
