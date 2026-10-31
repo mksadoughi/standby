@@ -658,6 +658,7 @@ class VoiceSession(object):
         self._line = random.randrange(len(HANDOFF_LINES))     # the handoff line said last
         self._told = deque(maxlen=3)  # lines to say when nobody is talking (announce): news, not answers
         self._opening = None     # a first turn of Claude's own, before the user says anything (open_with)
+        self._chosen = deque()   # their picks on a visual card (choose): each a turn at the next quiet moment
 
     # -- control, from the app's request handlers ---------------------------
     def start(self):
@@ -732,6 +733,18 @@ class VoiceSession(object):
         out = []
         while self._told:
             out.append(self._told.popleft()[0])
+        return out
+
+    def choose(self, question):
+        """They clicked a choice on a visual card: `question` (a [CHOSE] line) is a turn of theirs, at the next quiet
+        moment, never over anyone; one of theirs that comes first takes it instead (take_chosen)."""
+        self._chosen.append(question)
+
+    def take_chosen(self):
+        """Picks not yet asked, taken by a turn of theirs that came first: its lines, oldest first."""
+        out = []
+        while self._chosen:
+            out.append(self._chosen.popleft())
         return out
 
     def open_with(self, question):
@@ -975,6 +988,12 @@ class VoiceSession(object):
                 opening, self._opening = self._opening, None
                 self._set_turn("open")
                 self._converse(opening, shown="")
+                if self._stop.is_set():
+                    return
+            if self._chosen and self.state == "listening" and not heard and not st.get("speaking") \
+                    and not self._you_speaking() and not self._pending and self._q is None:
+                self._set_turn("chose")
+                self._converse(self._chosen.popleft(), shown="")      # their click on a card, answered
                 if self._stop.is_set():
                     return
             if self._fresh_told() and self.state == "listening" and not heard and not st.get("speaking") \

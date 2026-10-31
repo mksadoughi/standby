@@ -3114,6 +3114,7 @@ VISUAL_OPEN = "[VISUAL"
 # The voice's "[SHOW VISUAL]": the call's visuals brought into view (the mini window if no window is up, its
 # card opened again), only on the user's yes. Never said; kept for the Mac (ui.lite_ask), whatever else it did.
 SHOW_TAG = "[SHOW VISUAL]"
+CHOSE_TAG = "[CHOSE]"                     # a choice they clicked on a card (the Mac's ui.visual_chose)
 VISUAL_RE = re.compile(r"\[VISUAL:?\s*([^\]]*)\]")
 VISUAL_MAX = 64 * 1024                        # bytes of a fragment the card takes
 VISUAL_TIMEOUT = 90
@@ -3141,7 +3142,9 @@ VISUAL_PROMPT = (
     "inline or <sb-math display>TeX</sb-math> as a block; <sb-diagram>mermaid</sb-diagram> for a diagram. Say as "
     "little as still helps (the card's size is for reading it). The voice never sees a click, so make it "
     "interactive only where what it does shows on the card itself (stepping through, a slider that recalculates), "
-    "and only when that helps understanding; never anything that looks like a choice to make. Reply with the "
+    "and only when that helps understanding. Nothing looks like a choice to make, except when you're asking them to "
+    "pick: then mark each real choice with data-choice (a button: <button data-choice=\"Option 3\">Option 3</button>), "
+    "at most 6, never decorative; their click reaches you, and you still ask the question aloud. Reply with the "
     "fragment only.")
 
 
@@ -3923,6 +3926,8 @@ class Voice(object):
             said = "They said: %s\n\n%s" % (words, came_back(folded, RESULT_LATER))
         elif result:
             said = came_back(result, RESULT_TURN)
+        elif words.split("\n")[-1].startswith(CHOSE_TAG):
+            said = words                     # a click on a card: their pick, as the line says, not words they said
         else:
             said = "They said: " + (words if ledger else self._went_on(session, words, ident))
         turn = None                          # a call's turn: its own Claude Code (VoiceTurn), stopped after it

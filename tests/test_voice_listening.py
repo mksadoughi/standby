@@ -873,6 +873,28 @@ check("  they talk over the greeting being thought of: their words asked on thei
       and vs.status()["you"] in ("", "This is the test, one, two, three."), (agent.asked, vs.status()))
 done(vs, rec)
 
+# A choice they clicked on a visual card: a turn of theirs at the next quiet moment, never over them; one of theirs
+# that comes first takes it (ui.lite_ask, take_chosen).
+CHOSE = '[CHOSE] They clicked a choice on the visual about \u00abcache times\u00bb: "One hour"'
+vs, rec, agent, spk, logged = session()
+wait(lambda: vs.state == "listening")
+agent.pieces = ["One hour it is."]
+vs.choose(CHOSE)
+check("a choice clicked on a card: asked as a turn of its own, at a quiet moment, and answered aloud",
+      wait(lambda: agent.asked == [CHOSE], 3) and wait(lambda: "One hour it is." in spk.said, 3)
+      and wait(lambda: vs.state == "listening", 3), (agent.asked, spk.said))
+done(vs, rec)
+vs, rec, agent, spk, logged = session()
+wait(lambda: vs.state == "listening")
+rec.you = True                                   # they're talking as they click
+wait(lambda: json.loads((vs.sdir / "live.json").read_text()).get("voice", {}).get("you_speaking"))
+vs.choose(CHOSE)
+time.sleep(0.4)
+check("  clicked while they talk: not asked over them, kept for their turn", agent.asked == [] and vs.take_chosen() == [CHOSE],
+      agent.asked)
+rec.you = False
+done(vs, rec)
+
 # A reply that's only a signal brings no deltas (the agent's stream holds the signal back), so it's said
 # from the answer: "[QUIET]" was said aloud as a call's greeting, and kept in the record as said.
 class OnlyAnswer(Agent):

@@ -3644,6 +3644,7 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
         vs.take_told() if hasattr(vs, "take_told") else [])
     if unheard:
         notes.append(LITE_UNHEARD % "\n".join(unheard))
+    notes.extend(vs.take_chosen() if hasattr(vs, "take_chosen") else [])    # a click they made as they spoke
     if c.pop("rang", False):                       # they're back from a pause where something waited
         notes.append(LITE_RESUMED)
         rang = True
@@ -3652,7 +3653,7 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     if typed:
         question = "%s\n%s" % (typed, question)
     told = "\n".join(notes + [question] + (["[RESULT message] %s\n[END RESULT]" % _lite_messages(carried)] if carried else []))
-    refused = _begin_ask(sid, question, voice=True)
+    refused = _begin_ask(sid, question, voice=True, own=question.startswith(CHOSE_TAG))   # its row: "Chose: …"
     if refused:
         return "I'm still on your last question." if "previous" in refused["error"] else refused["error"]
     answer = _run_ask(sid, told, voice=True, on_event=on_event, on_queued=on_queued, heard=heard, commit=commit)
@@ -3861,6 +3862,33 @@ def lite_progress(b):
 LITE_VISUAL_SEEN = "[VISUALS] A visual you ask for now would be seen in %s."
 LITE_VISUAL_UNSEEN = "[VISUALS] A visual you ask for now wouldn't be seen: no Standby window is up."
 SHOW_TAG = "[SHOW VISUAL]"                     # standby-agent's: the voice brings its visuals into view
+# A choice they clicked on a visual card (data-choice), for the voice: their pick, quoted, never an instruction.
+CHOSE_TAG = "[CHOSE]"
+LITE_CHOSE = CHOSE_TAG + ' They clicked a choice on the visual about \u00ab%s\u00bb: "%s"'
+
+
+def _choice_text(text, n):
+    """A card's words, as data the voice can quote: no line breaks, brackets, tags or quotes; at most n chars."""
+    text = re.sub(r'[\x00-\x1f\x7f\[\]<>{}"\u00ab\u00bb]', " ", str(text or ""))
+    return " ".join(text.split())[:n].strip()
+
+
+def visual_chose(sid, what, label):
+    """They clicked a choice (data-choice) on a call's visual card: a turn of theirs, [CHOSE] with its label, at
+    the next quiet moment, or with their next turn if they're talking. Called once the card's click is checked."""
+    vs = VOICE.get(sid)
+    c = LITE_CALLS.get(sid)
+    label = _choice_text(label, 80)
+    if vs is None or c is None or not hasattr(vs, "choose"):
+        return {"error": "No call is live"}
+    if not label:
+        return {"error": "Nothing chosen"}
+    append_chat(sid, "me", "Chose: " + label, voice=True)
+    vs.choose(LITE_CHOSE % (_choice_text(what, 120) or "a picture", label))
+    log("lite: %s: they chose %r on a visual" % (sid, label))
+    return {"ok": True}
+
+
 # News it worded on its own that they never heard (they spoke first), with their next turn.
 LITE_UNHEARD = ("[UNHEARD] What you were about to tell them on your own never reached them, they spoke first:\n%s\n"
                 "[END UNHEARD]")

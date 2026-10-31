@@ -549,6 +549,10 @@ try:
     got = ask("[VOICE] yes, put it up")
     check("[SHOW VISUAL] with a hand-off: the work goes, the tag after it for the Mac, never in the work",
           got == "[HANDOFF] Draw the release flow. [SHOW VISUAL]", got)
+    ask('[VOICE] [CHOSE] They clicked a choice on the visual about \u00abcache times\u00bb: "One hour"')
+    check("a choice clicked on a card reaches the voice as that line, never as words they said",
+          texts("voice", TALK)[-1].rstrip().endswith('[CHOSE] They clicked a choice on the visual about \u00abcache times\u00bb: "One hour"')
+          and "They said: [CHOSE]" not in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
     m = sa.DeepMarker()
     check("the stream never says \"[SHOW VISUAL]\" either", "".join([m.feed("Here it is. [SHOW VI"), m.feed("SUAL] Look."), m.flush()])
           == "Here it is.  Look.")
@@ -571,9 +575,10 @@ try:
           and side and "--resume" in side[-1]["argv"] and "--tools" in side[-1]["argv"]
           and side[-1]["argv"][side[-1]["argv"].index("--tools") + 1] == "", (got, v, side[-1:]))
     told = side[-1]["argv"][side[-1]["argv"].index("-p") + 1] if side else ""
-    check("  told no title or heading, and interactive only where it shows on the card (the voice never sees a click)",
-          "no title or heading" in told and "never sees a click" in told and "looks like a choice" in told
-          and "h1 (the title)" not in told, told[-900:])
+    check("  told no title or heading, and interactive only where it shows on the card",
+          "no title or heading" in told and "looks like a choice" in told and "h1 (the title)" not in told, told[-900:])
+    check("  a real choice, when it asks them to pick: data-choice, at most 6, and still asked aloud (clicks reach it)",
+          "data-choice" in told and "at most 6" in told and "ask the question aloud" in told, told[-900:])
     check("  the side copy is told the card's real sizes and its 13 px text, so a diagram fits (one was scaled tiny)",
           all(w in told for w in ("You choose the card's size", "a width in px", "a diagram usually wants", "260", "about 750",
                                   "13 px", "flowchart TD", "(.steps)", 'data-size=\"large\"')), told[-900:])
