@@ -240,6 +240,39 @@ else
     warn "could not download the speaker diarization model: speakers are matched by voice prints alone"
   fi
 fi
+# A call's visuals draw math with KaTeX and diagrams with Mermaid, both MIT, kept here and inlined into each
+# visual's sandbox (mac/visuals.py): fixed versions, checked by their sha256. Without them, a visual shows
+# its math or diagram as text.
+KIT="$ROOT/kit"
+KATEX_URL="https://registry.npmjs.org/katex/-/katex-0.16.11.tgz"
+KATEX_SUM="8c5494c5f7d8e8bf73ff3fe64d4bd09a340e4878b7eec9bbd9ef8d8f3e24193f"
+MERMAID_URL="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"
+MERMAID_SUM="a43bc1afd446f9c4cc66ac5dd45d02e8d65e26fc5344ec0ef787f88d6ddb6f9e"
+mkdir -p "$KIT"
+if [[ -s "$KIT/katex/katex.min.js" ]]; then
+  ok "math for visuals already present"
+elif curl -fsSL -o "$KIT/katex.tgz.part" "$KATEX_URL" \
+     && printf '%s  %s\n' "$KATEX_SUM" "$KIT/katex.tgz.part" | shasum -a 256 -c --status \
+     && rm -rf "$KIT/katex.part" && mkdir -p "$KIT/katex.part" \
+     && tar -xzf "$KIT/katex.tgz.part" -C "$KIT/katex.part" --strip-components=2 \
+          package/dist/katex.min.js package/dist/katex.min.css package/dist/fonts \
+     && rm -rf "$KIT/katex" && mv "$KIT/katex.part" "$KIT/katex"; then
+  rm -f "$KIT/katex.tgz.part"
+  ok "math for visuals (KaTeX)"
+else
+  rm -rf "$KIT/katex.tgz.part" "$KIT/katex.part"
+  warn "could not download KaTeX: visuals show their math as text"
+fi
+if [[ -s "$KIT/mermaid.min.js" ]]; then
+  ok "diagrams for visuals already present"
+elif curl -fsSL -o "$KIT/mermaid.min.js.part" "$MERMAID_URL" \
+     && printf '%s  %s\n' "$MERMAID_SUM" "$KIT/mermaid.min.js.part" | shasum -a 256 -c --status \
+     && mv "$KIT/mermaid.min.js.part" "$KIT/mermaid.min.js"; then
+  ok "diagrams for visuals (Mermaid)"
+else
+  rm -f "$KIT/mermaid.min.js.part"
+  warn "could not download Mermaid: visuals show their diagrams as text"
+fi
 # The speech model Settings > Speech would choose here (Small on an 8 GB Mac,
 # Standard otherwise, the English one on an English Mac), pinned, unless it is here. Public models: the
 # download library's advice to sign in for higher rate limits is not for the user.

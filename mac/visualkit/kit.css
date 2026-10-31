@@ -34,5 +34,5 @@ button{font:inherit;color:var(--accent);background:var(--soft);border:0;border-r
 code{font:12px ui-monospace,Menlo,monospace;background:var(--soft);padding:1px 4px;border-radius:4px}
 sb-math{display:inline-block}sb-math[display]{display:block;text-align:center;margin:6px 0;font-size:15px}
 sb-math.raw,sb-diagram.raw{font:12px ui-monospace,Menlo,monospace;color:var(--muted);white-space:pre-wrap}
-sb-diagram{display:block;text-align:center;margin:4px 0}sb-diagram svg{max-width:100%;height:auto}
+sb-diagram{display:block;text-align:center;margin:4px 0}sb-diagram svg{max-width:100% !important;height:auto}
 svg{max-width:100%}

@@ -51,3 +51,13 @@ Mac. None is in this repository.
 | Silero VAD v5.1.2 (ONNX) | Is talking over the voice speech? | [snakers4/silero-vad](https://github.com/snakers4/silero-vad) tag `v5.1.2` (`6478567`), `silero_vad.onnx` | sha256 in install.sh | [MIT](https://github.com/snakers4/silero-vad/blob/master/LICENSE) |
 
 CC BY 4.0 asks for attribution: Pocket TTS is by Kyutai, and Parakeet by NVIDIA, as above.
+
+## Libraries for a call's visuals
+
+Downloaded once by [install.sh](install.sh) into `~/.standby/kit`, from a fixed version, and inlined into
+a visual's sandbox only when it draws math or a diagram. Neither is in this repository.
+
+| Library | Used for | Source, pinned | Checked | License |
+|---|---|---|---|---|
+| KaTeX 0.16.11 | Math in a visual (`<sb-math>`) | [npm `katex@0.16.11`](https://www.npmjs.com/package/katex/v/0.16.11) | sha256 in install.sh | [MIT](https://github.com/KaTeX/KaTeX/blob/main/LICENSE) |
+| Mermaid 11.4.1 | Diagrams in a visual (`<sb-diagram>`) | [npm `mermaid@11.4.1`](https://www.npmjs.com/package/mermaid/v/11.4.1), `dist/mermaid.min.js` | sha256 in install.sh | [MIT](https://github.com/mermaid-js/mermaid/blob/develop/LICENSE) |
