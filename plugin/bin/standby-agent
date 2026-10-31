@@ -3378,8 +3378,11 @@ class Note(str):
 # said it did (a call's two lost hand-offs, 2026-10-30, "I sent it twice"). It's held for the turn instead:
 # shown at each of the turn's later asks, so its answer, once the turn is theirs, can send what still
 # stands with all they've said since; never sent itself. Gone once an answer is committed (agentctl's .k).
-HELD = ("Held, not sent, because they were still talking when you took it deeper:\n%s\nWith all they've said now, "
-        "send one [DEEP] that covers what of it still stands, updated, or none if none does.")
+# It came from only part of their words: once it anchored the voice on a point they'd moved past (it sent the
+# release list when they meant something else, talk-20261031-013229), so it's judged afresh, never kept by default.
+HELD = ("Held, not sent: you took this deeper on only part of their words, before they'd finished:\n%s\nJudge it "
+        "afresh from everything they've said. If their point has moved, drop it; send one [DEEP] only for what they "
+        "want now, or none.")
 
 
 # A [DEEP] with no task after it: the voice is asked for one, once, in its own conversation (it

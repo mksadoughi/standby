@@ -603,6 +603,8 @@ try:
     mark(ids, ".x")
     ids2 = []
     got2 = ask("[VOICE] and name it notes", ident=ids2)
+    check("  the held note says it came from part of their words, to be judged afresh (once it anchored a misread)",
+          "only part of their words" in sa.HELD and "afresh from everything" in sa.HELD and "drop it" in sa.HELD)
     check("a hand-off whose early question they went on from: held for the turn, never a note it's working on it",
           got.startswith("[HANDOFF]") and "You took this deeper" not in texts("voice", TALK)[-1] and held(task)
           and not os.path.exists(os.path.join(spool, ids[-1] + ".x")), (sorted(os.listdir(spool))[-6:], texts("voice", TALK)[-1][-400:]))
