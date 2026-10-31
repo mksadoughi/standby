@@ -252,6 +252,17 @@ try:
     check("back from a pause: the [RESUMED] line, then what waited as news; no \"They said\"",
           "[RESUMED] They're back. While paused, they saw something was waiting.\n\n[RESULT] Not from the user: the work you took "
           "deeper is done. What it came to:\n<<<\nThe film is built.\n>>>" in last and "They said:" not in last, last[-400:])
+    # What the session tells its voice (its tell_voice tool): read as it is, its short label and nothing more
+    ask("[VOICE] [RESULT message] Deeper side: The tests pass, and the fix is merged.")
+    last = texts("voice", TALK)[-1]
+    check("the session's own message: \"Deeper side: ...\" as it is, no preamble, not the user's words",
+          last.rstrip().endswith("Deeper side: The tests pass, and the fix is merged.") and "Not from the user" not in last
+          and "They said:" not in last and "[RESULT" not in last.split("Deeper side:")[-1], last[-300:])
+    ask("[VOICE] how is it going\n[RESULT message] Deeper side: Developer 8 answered: nothing to hold.\n[END RESULT]")
+    last = texts("voice", TALK)[-1]
+    check("  one that came while they talked: their words first, then it, as it is",
+          "They said: how is it going\n\nDeeper side: Developer 8 answered: nothing to hold." in last
+          and "[END RESULT]" not in last and "Background, not from the user" not in last, last[-300:])
     # Cut off as it speaks, once its hand-off has begun ([DEEP] streamed, the task still coming): the task streams
     # to its end and the work still goes, as it said it would. "They went on" (the next turn has it all) never.
     import threading
@@ -312,27 +323,33 @@ try:
     check("a call's voice: it IS the session, its mouth and ears, with its own deeper side; one self; its judgement; its folder",
           call.startswith("You are the user's Claude Code session in /Users/you/code/orion, on a voice call with them: its mouth and ears.")
           and "It's all you: same agent, same work, same memory, so never speak of a separate agent or helper." in call
-          and "Anything that does something, like changing a file, running a command or searching the web, is your deeper side's" in call
-          and "reply [DEEP] and what to do, in your words, with what it needs to know." in call
+          and "Anything else, like changing a file, running a command, searching the web or reading where your tools can't, is your deeper side's" in call
+          and "reply [DEEP] and what to do, in your words; what was said goes with it." in call
           and "Answer them first, then take it deeper; it works while you keep talking." in call
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and "[RESULT]" in call and len(call.split()) < 300, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and len(call.split()) < 300, (len(call.split()), call[:300]))
+    check("  brief: a sentence or two, longer only when they ask it to explain",
+          "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
           "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming anything you're picking up." in call
           and "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming anything you're picking up." in ledger
           and "last message" not in ledger)
-    check("  saying nothing sits with the notes, where it's mostly used", "ask first if they want it. To say nothing, reply [QUIET]." in call)
+    check("  saying nothing sits with the notes, where it's mostly used", "so never guess. To say nothing, reply [QUIET]." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
-          "Your own tools are for looking: you can read and search where your session works, and ~/.standby." in call
+          "Your own tools are only for looking: you can read and search where your session works, and ~/.standby." in call
           and "So whatever they ask for is yours to do" in call
           and "Don't try it yourself first; a tool refusing you only means it's your deeper side's to do, never that it can't be done." in call
           and "this whole Claude Code session, with all its context and every tool and connection it has." in call
           and "Never say you will look into something" not in call and "SUGGEST" not in call)
-    check("  honest hand-offs: nothing started until the session says it has it; never a guess at why not",
-          "Only your session's notes say what has happened, so never guess: nothing has started until a [SESSION] note says "
-          "your session has it (till then, you're sending it), and a [RESULT] says what it came to." in call)
+    check("  honest hand-offs: TASKS and its deeper side say what has happened; never a guess",
+          "TASKS says what you've sent and whether it's running or ended; only that and your deeper side say what has "
+          "happened, so never guess." in call and "[SESSION]" not in call and "[RESULT]" not in call)
+    check("  its deeper side never talks to them: it tells the voice, and the voice judges what they hear",
+          "Your deeper side never talks to them. It tells you what it thinks they should know, as \"Deeper side: ...\", "
+          "and what reaches them is yours to judge: now, later or not at all, the gist in your words." in call
+          and "Your deeper side never talks to them: it tells you what it thinks they should know" in ledger)
     check("  on the record, the voice can stop or change a task by its number in TASKS",
           "To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]." in ledger)
     json.dump({}, open(os.path.join(live, TALK + ".voice.json"), "w"))
@@ -434,9 +451,7 @@ try:
     check("  nor [CANCEL #n], the voice stopping a task, even split across pieces", spoken == "Okay, I've stopped that.  Anything else?", spoken)
     json.dump({"handoff": True}, open(os.path.join(live, TALK + ".voice.json"), "w"))
     call = " ".join(sa.voice_prelude(TALK).split())
-    check("  a result: background, what they're saying first; at a natural moment, the gist, then they ask; with a lot, it asks first",
-          "A result is background; what they're saying comes first. At a natural moment, give the gist and let them ask; "
-          "with a lot, ask first if they want it." in call, call[-700:])
+    check("  what they're saying comes first", "What they're saying comes first." in call, call[-700:])
     check("  a call's voice ends the call itself: its own goodbye and [END]; if unsure, ask",
           "Ending the call is yours: when they ask, or are clearly done, say goodbye and add [END]; if unsure, ask." in call, call[-400:])
     json.dump({"handoff": True, "gist": "The user is raising the cache TTL."}, open(os.path.join(live, TALK + ".voice.json"), "w"))

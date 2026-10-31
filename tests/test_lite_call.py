@@ -147,6 +147,9 @@ check("call: voice mode on a talk, in the session's folder, on this Mac", sid an
       and talks[-1]["where"] == "local", (r, talks))
 check("  with the voice's hand-off on, and no earlier voice yet", v.get("handoff") is True and v.get("from") is None
       and "Claude Code" in v.get("name", "") and v.get("folder") == work and not v.get("brief"), v)
+check("  the session is told it's on a call: a quiet note, who is who and how it works",
+      any(e.get("call") == "note" and e.get("text") == ui.LITE_CALL_NOTE for _c, e in out)
+      and "tell_voice" in ui.LITE_CALL_NOTE and "never you" in ui.LITE_CALL_NOTE, [e for _c, e in out if e.get("call") == "note"])
 check("  the voice speaks first: the call opens with its greeting turn (who it is: the agent's call prelude)",
       getattr(ui.VOICE[sid], "opening", None) == ui.LITE_OPENING, v)
 _title, ui.cc_title = ui.cc_title, lambda cc: "Planner" if cc == CC else ""
@@ -309,7 +312,17 @@ ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Tes
 for t in ui.LITE_CALLS[sid]["tasks"].values():
     t["seen"] = True
 
-# ---------------------------------------------------------------- what came back: told when both are quiet, worded then
+# ---------------------------------------------------------------- what came back: the session tells its voice
+# One channel: a turn's end is a state for the tasks (TASKS), and what came of it is the session's to tell, with its
+# tell_voice tool. Told when both are quiet, worded then; never read off the turn's end.
+
+
+def back(text="", reason=None):
+    ui.LITE_POST["/api/lite/progress"](dict({"session": sid, "kind": "done"}, **({"reason": reason} if reason else {})))
+    if text:
+        ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "tell", "text": text})
+
+
 import agentctl  # noqa: E402
 told_model, replies = [], []
 
@@ -329,15 +342,14 @@ hand("Create a sample text file in the project folder.")
 said_before, n_model = len(vs.told), len(told_model)
 replies.append("Done! I made that empty test file in your project folder.\nSUGGEST: Should I fill it in?")
 t0 = time.time()
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "turnId": "t3", "kind": "done", "text": "I created an empty file at %s." % PATH})
-check("done: once both sides are quiet a moment, the voice is asked, as news, from the record",
+back("I created an empty file at %s." % PATH)
+check("the session tells its voice: once both sides are quiet a moment, the voice is asked, its message as it is",
       wait(lambda: len(told_model) > n_model) and time.time() - t0 >= ui.LITE_QUIET_GAP - 0.1
-      and re.match(re.escape(ui.VOICE_TAG + "[RESULT done] #") + r"\d+ done at [\d:]{8}: Create a sample text file in the project folder\. → I created an empty file at",
-                   told_model[-1]), told_model[n_model:])
+      and told_model[-1] == ui.VOICE_TAG + "[RESULT message] Deeper side: I created an empty file at %s." % PATH, told_model[n_model:])
 check("  and what it says is said, in its words: no path, no follow-up chips",
       wait(lambda: len(vs.told) > said_before) and vs.told[-1] == "Done! I made that empty test file in your project folder.", vs.told[-1:])
 came = [k for _a, k in chat if k.get("more", {}).get("result", "").startswith("I created an empty file")]
-check("  in the call's log: what came back, in full", came and came[-1]["more"]["reason"] == "done", came[-1:])
+check("  in the call's log: what came back, in full", came and came[-1]["more"]["reason"] == "message", came[-1:])
 answers.append("Yes.")
 vs.ledger = True                               # as every call's voice session is (its turns kept in the record)
 ui.ask_spoken(sid, "anything else?", None, None)
@@ -356,10 +368,24 @@ vs.ledger = False
 ev, _s = hand("Add the star food, the score and the win at 20")
 replies.append("It got the board done, but the stars and the score aren't in yet.")
 n_model = len(told_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "I added the board; next I'll add the stars."})
-check("one step, then the session stops: the task is done with what it said, never shown as running",
-      wait(lambda: len(told_model) > n_model) and "done" in told_model[-1] and "I added the board; next I'll add the stars." in told_model[-1]
-      and not ui.lite_busy(sid) and "running" not in tasks_txt(), (told_model[n_model:], tasks_txt()))
+back("I added the board; next I'll add the stars.")
+check("one step, then the session stops: the task is done, never shown as running; what it says is its own message",
+      wait(lambda: len(told_model) > n_model) and "I added the board; next I'll add the stars." in told_model[-1]
+      and not ui.lite_busy(sid) and "running" not in tasks_txt()
+      and re.search(r"#\d+ done at [\d:]{8}: Add the star food, the score and the win at 20\n", tasks_txt()), (told_model[n_model:], tasks_txt()))
+ev, _s = hand("say what it found")
+n_model = len(told_model)
+back("Here is what I found.")
+check("  a turn's end alone is never forwarded: only what the session tells (nothing of its last answer)",
+      wait(lambda: len(told_model) > n_model) and told_model[-1].count("Deeper side:") == 1 and "#" not in told_model[-1], told_model[n_model:])
+wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+for _ in range(1):
+    ev, _s = hand("finish quietly")
+    n_model = len(told_model)
+    back()
+    time.sleep(ui.LITE_QUIET_GAP + 0.3)
+    check("  a turn that ends with nothing told: nothing said, the task done in TASKS",
+          len(told_model) == n_model and re.search(r"#\d+ done at [\d:]{8}: finish quietly", tasks_txt()), told_model[n_model:])
 # Mid-turn and quiet too long: stalled.
 ev, _s = hand("render the film")
 t = ui._lite_of(ui.LITE_CALLS[sid], ev["id"])
@@ -371,7 +397,7 @@ check("  a step again: running", t["state"] == "running", t)
 replies.append("The film's rendered, but its caption is cut off, so I'm fixing that.\n[HANDOFF] Fix the film's cut-off caption.")
 n_model, said_before = len(told_model), len(vs.told)
 out.clear()
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Rendered. The caption is cut off at the edge."})
+back("Rendered. The caption is cut off at the edge.")
 check("news it takes deeper (\"I'm fixing that\"): its words are said, and the work goes to the session (a call's four lost)",
       wait(lambda: len(vs.told) > said_before) and vs.told[-1] == "The film's rendered, but its caption is cut off, so I'm fixing that."
       and wait(lambda: any(e.get("call") == "handoff" and "Fix the film's cut-off caption." in json.dumps(e) for _c, e in out)),
@@ -384,7 +410,7 @@ for t in ui.LITE_CALLS[sid]["tasks"].values():
 # never dropped, never the last tasks again (a call's "repeats", 2026-10-30).
 replies.append("The close button is merged.")
 n_model, said_before = len(told_model), len(vs.told)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "The setup window's close button is merged."})
+back("The setup window's close button is merged.")
 check("a turn-end of the session's own, with news: told as news, once",
       wait(lambda: len(vs.told) > said_before) and "The setup window's close button is merged." in told_model[-1]
       and "Fix the film's cut-off caption" not in told_model[-1] and len(told_model) == n_model + 1, told_model[n_model:])
@@ -395,17 +421,15 @@ ev, _s = hand("list everything from this call")
 long_result = " ".join("Item %d: the setup window close button and its test." % i for i in range(1, 21)) + " Last item done."
 replies.append("Twenty items. The first is the setup window.")
 n_model = len(told_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": long_result})
+back(long_result)
 check("a long result: the voice is told all of it", wait(lambda: len(told_model) > n_model)
       and long_result in told_model[-1], told_model[-1][-200:])
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 answers.append("Yes.")
 ui.ask_spoken(sid, "ok", None, None)
 row = [l for l in asked[-1].splitlines() if "list everything from this call" in l]
-kept = row[0].split(" \u2192 ", 1)[1].split(" \u2026")[0] if row and " \u2192 " in row[0] else ""
-check("  the list each turn reads: short, cut at a word, saying the rest is in the chat",
-      row and len(row[0]) < 400 and "\u2026 (the rest is in the chat)" in row[0] and kept and long_result.startswith(kept)
-      and long_result[len(kept)] == " ", row)
+check("  the list each turn reads: the task's state only, never what came of it (that was told)",
+      row and " \u2192 " not in row[0] and len(row[0]) < 200, row)
 # What came back, worded while they started talking: not said now, and never told again on its own (the voice
 # had it as said: "that one was a repeat"); their turn tells the voice they never heard it.
 ev, _s = hand("check the leftover sessions")
@@ -413,7 +437,7 @@ replies.append("The leftover sessions are cleaned up.")
 n_model, said_before = len(told_model), len(vs.told)
 real_reply = agentctl.ask
 agentctl.ask = lambda q, **kw: (setattr(vs, "speaking_now", True), fake_voice_ask(q, **kw))[1]
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Two leftovers removed."})
+back("Two leftovers removed.")
 wait(lambda: len(told_model) > n_model)
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 agentctl.ask = real_reply
@@ -470,7 +494,7 @@ check("queued in a busy session: queued, never called lost, nothing said for it 
 ui.LITE_POST["/api/lite/progress"]({"session": sid, "id": ev["id"], "kind": "received"})
 check("  it starts: running", q["state"] == "running")
 replies.append("Ten seconds are up.")
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Ten seconds are up."})
+back("Ten seconds are up.")
 wait(lambda: len(told_model) > n_model)
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 
@@ -478,14 +502,15 @@ wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 hand("build the panel")
 n, n_model = len(vs.told), len(told_model)
 vs.st = {"state": "listening", "you": "End the", "claude": ""}
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "It's being built."})
+back("It's being built.")
 time.sleep(ui.LITE_QUIET_GAP + 0.3)
 check("work back while they talk: not told on its own, nothing said over them", len(told_model) == n_model and len(vs.told) == n,
       (told_model[n_model:], vs.told[n:]))
 answers.append("Before we hang up: it's being built. Talk soon!")
 ui.ask_spoken(sid, "End the call.", None, None)
-check("  their turn carries it, as a task that's done, before their words",
-      re.search(r"#\d+ done at [\d:]{8}: build the panel → It's being built\.", asked[-1]) and asked[-1].endswith("End the call."), asked[-1:])
+check("  their turn carries it: their words, then the session's message",
+      re.search(r"#\d+ done at [\d:]{8}: build the panel\n", asked[-1])
+      and asked[-1].endswith("End the call.\n[RESULT message] Deeper side: It's being built.\n[END RESULT]"), asked[-1:])
 vs.st = {"state": "listening", "you": "", "claude": ""}
 time.sleep(ui.LITE_QUIET_GAP + 0.3)
 check("  and it's never told again on its own", len(told_model) == n_model and len(vs.told) == n, told_model[n_model:])
@@ -496,20 +521,20 @@ n, n_model = len(vs.told), len(told_model)
 real_ask = agentctl.ask
 agentctl.ask = lambda q, **kw: (vs.st.update(you="wait"), fake_voice_ask(q, **kw))[1]
 replies.append("The logs are clean.")
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "The logs are clean."})
+back("The logs are clean.")
 check("worded as they began to speak: not said", wait(lambda: len(told_model) > n_model) and (time.sleep(0.3) or True)
       and len(vs.told) == n, vs.told[n:])
 agentctl.ask = real_ask
 vs.st = {"state": "listening", "you": "", "claude": ""}
 answers.append("Clean, yes.")
 ui.ask_spoken(sid, "and the logs?", None, None)
-check("  their next turn carries it", "check the logs → The logs are clean." in asked[-1], asked[-1])
+check("  their next turn carries it", "[UNHEARD]" in asked[-1] and "The logs are clean." in asked[-1], asked[-1])
 
 # The voice may choose silence: nothing said, and what came back is still in the log.
 replies.append("[QUIET]")
 hand("tidy the imports")
 n, rows = len(vs.told), len(chat)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Tidied the imports in " + PATH})
+back("Tidied the imports in " + PATH)
 check("the voice chooses silence: nothing is said, and what came back is still in the log",
       wait(lambda: len(chat) > rows) and (time.sleep(0.2) or True) and len(vs.told) == n
       and chat[-1][1].get("more", {}).get("result", "").startswith("Tidied"), (vs.told[n:], chat[rows:]))
@@ -519,30 +544,29 @@ wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 replies.append("All set, I created **%s** for you." % PATH)
 hand("make another")
 n = len(vs.told)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Created " + PATH})
+back("Created " + PATH)
 check("  a path the model repeats anyway is said as the file's name only, no markdown",
       wait(lambda: len(vs.told) > n) and vs.told[-1] == "All set, I created standby-test.txt for you.", vs.told[-1:])
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
-replies.append("Okay, Claude Code stopped before finishing that.")
 hand("commit it")
-n = len(vs.told)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "", "reason": "aborted"})
-check("stopped from Claude Code: stopped, told so, said its way",
-      wait(lambda: len(vs.told) > n) and told_model[-1].startswith(ui.VOICE_TAG + "[RESULT aborted]") and "stopped" in told_model[-1]
-      and vs.told[-1] == "Okay, Claude Code stopped before finishing that.", (told_model[-1:], vs.told[-1:]))
-for broken, how, key in ((OSError("the agent is gone"), "done", "done"), ("Could not reach the agent (OSError()). Try again", "error", "error")):
+n, n_model = len(vs.told), len(told_model)
+back("", reason="aborted")
+time.sleep(ui.LITE_QUIET_GAP + 0.3)
+check("stopped from Claude Code: stopped in TASKS, nothing said for it on its own",
+      len(told_model) == n_model and len(vs.told) == n and re.search(r"#\d+ stopped at [\d:]{8}: commit it", tasks_txt()), tasks_txt())
+for broken, how, key in ((OSError("the agent is gone"), "done", "message"), ("Could not reach the agent (OSError()). Try again", "error", "message")):
     wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
     replies.append(broken)
     hand("once more")
     n = len(vs.told)
-    ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Wrote " + PATH, "reason": how})
+    back("Wrote " + PATH, reason=how)
     check("  the voice's model can't answer (%s): a short line of ours, never the session's words" % how,
           wait(lambda: len(vs.told) > n) and vs.told[-1] == ui.LITE_FALLBACK[key] and PATH not in vs.told[-1], vs.told[-1:])
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 n, n_model = len(vs.told), len(told_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Wrote " + PATH})
+back()
 time.sleep(ui.LITE_QUIET_GAP + 0.3)
-check("  a done with nothing running, saying again what ended: nothing said, nothing asked", len(vs.told) == n and len(told_model) == n_model)
+check("  a turn's end with nothing running and nothing told: nothing said, nothing asked", len(vs.told) == n and len(told_model) == n_model)
 
 # Cancel by voice: [CANCEL #n] stops a task; alone in its turn, the turn stops; with others, the session is told to drop it.
 ev, _s = hand("make the snake gold")
@@ -567,7 +591,7 @@ check("  replaced while another runs in the same turn: the session is told to dr
 ui.LITE_POST["/api/lite/progress"]({"session": sid, "id": sent_now[-1]["id"], "kind": "received"})
 replies.append("The changelog's done.")
 n_model = len(told_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Changelog updated."})
+back("Changelog updated.")
 check("  a stopped task is never told back to the voice that stopped it", wait(lambda: len(told_model) > n_model)
       and "write the release notes" not in told_model[-1], told_model[-1:])
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
@@ -594,9 +618,9 @@ ui.ask_spoken(sid, "ok", None, None)
 check("    once", "Typed in the chat" not in asked[-1], asked[-1])
 replies.append("It's the snake board, twenty cells across.")
 n_model = len(told_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "That's the snake game's board."})
-check("  the session's answer to it: told as its task ended, a plain one included",
-      wait(lambda: len(told_model) > n_model) and "(typed) what is this? → That's the snake game's board." in told_model[-1], told_model[n_model:])
+back("That's the snake game's board.")
+check("  the session's answer to it: what it tells its voice, as it is",
+      wait(lambda: len(told_model) > n_model) and told_model[-1].endswith("Deeper side: That's the snake game's board."), told_model[n_model:])
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 
 # Paused: what comes back waits in silence, with the bell; several are told as one on Resume, [RESUMED] first.
@@ -607,7 +631,7 @@ n, n_model = len(vs.told), len(told_model)
 ui.LITE_POST["/api/lite/progress"]({"session": sid, "turnId": "t7", "kind": "tool", "text": "Reading the film script"})
 time.sleep(0.3)
 check("paused, with background progress: no bell, nothing said", not ui.voice_status(sid).get("waiting") and len(told_model) == n_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "The film and the cards are done."})
+back("The film and the cards are done.")
 check("  paused when work comes back: nothing said, the voice not asked, and the bell shows",
       wait(lambda: ui.voice_status(sid).get("waiting")) and (time.sleep(0.4) or True) and len(told_model) == n_model and len(vs.told) == n
       and ui.LITE_GET["/api/lite/state"]({"cc": CC})["live"].get("waiting") is True, ui.voice_status(sid))
@@ -618,13 +642,13 @@ check("a call's state: what macOS says of the mic, for the band, and never the m
 replies.append("While you were away: the film and the cards are done.")
 ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": False})
 check("  Resume: one [RESUMED] turn with both, said once; the bell clears",
-      wait(lambda: len(vs.told) > n) and told_model[-1].startswith(ui.VOICE_TAG + ui.LITE_RESUMED + "\n[RESULT done] #")
-      and "build the film" in told_model[-1] and "make the cards" in told_model[-1] and len(told_model) == n_model + 1
+      wait(lambda: len(vs.told) > n) and told_model[-1].startswith(ui.VOICE_TAG + ui.LITE_RESUMED + "\n[RESULT message] Deeper side: ")
+      and "The film and the cards are done." in told_model[-1] and len(told_model) == n_model + 1
       and not ui.voice_status(sid).get("waiting"), told_model[n_model:])
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 hand("wait fifteen seconds")
 ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": True})
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "The wait is over."})
+back("The wait is over.")
 wait(lambda: ui.voice_status(sid).get("waiting"))
 time.sleep(0.3)
 vs.st = {"state": "listening", "you": "so", "claude": ""}
@@ -634,7 +658,7 @@ answers.append("The wait's over.")
 ui.ask_spoken(sid, "so is it done?", None, None)
 vs.st = {"state": "listening", "you": "", "claude": ""}
 check("  they speak first on Resume: their turn carries the task and the [RESUMED] line, once; the bell is gone",
-      "wait fifteen seconds → The wait is over." in asked[-1] and ui.LITE_RESUMED + "\nso is it done?" in asked[-1]
+      ui.LITE_RESUMED + "\nso is it done?\n[RESULT message] Deeper side: The wait is over." in asked[-1]
       and not ui.voice_status(sid).get("waiting"), asked[-1])
 answers.append("Yes.")
 ui.ask_spoken(sid, "great", None, None)
@@ -686,7 +710,7 @@ check("  a click on the mini window pauses the call", ui.call_muted(sid) is True
 check("  and the log says so, and where it came from", ("lite: %s: paused (mini window)" % sid) in logged, logged[-5:])
 hand("make the slides")
 n, asked_model = len(ui.VOICE[sid].told), len(told_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "The slides are done."})
+back("The slides are done.")
 check("  a result that comes back while paused is held: nothing said, and the call says something waits",
       wait(lambda: ui.voice_status(sid).get("waiting")) and (time.sleep(0.3) or True) and len(told_model) == asked_model
       and len(ui.VOICE[sid].told) == n, ui.voice_status(sid))
@@ -710,17 +734,18 @@ ev, _s = hand("The user wants a maximum score of 20 in the snake game in ~/Docum
 ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "tool", "text": "editing game.js"})
 n, n_model = len(vs.told), len(told_model)
 vs.speaking_now = True                          # 06:21:58: they began to speak; nothing decoded yet
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Movement is in: the snake now steps one cell per "
-                                    "tick and resets if it hits a wall or itself. The stars, the score and the win at 20 aren't in yet."})
+back("Movement is in: the snake now steps one cell per "
+     "tick and resets if it hits a wall or itself. The stars, the score and the win at 20 aren't in yet.")
 time.sleep(ui.LITE_QUIET_GAP + 0.4)
 check("replay 061950 · 06:22:01: work back while they've begun to speak (nothing decoded yet): not worded, not said",
       len(told_model) == n_model and len(vs.told) == n, told_model[n_model:])
 vs.speaking_now = False
 answers.append("Movement is in; the stars and the score aren't yet.")
 ui.ask_spoken(sid, "How has your day been? What's the progress so far?", None, None)
-check("  their turn carries it, as a task the session ended (done, with its own words), nothing claimed as running",
-      re.search(r"#\d+ done at [\d:]{8}: The user wants a maximum score of 20 .* \u2192 Movement is in: the snake now steps", asked[-1])
-      and "running" not in asked[-1].split("[END TASKS]")[0].split("maximum score")[1], asked[-1])
+check("  their turn carries it: the task ended in TASKS, nothing claimed as running, then the session's own words",
+      re.search(r"#\d+ done at [\d:]{8}: The user wants a maximum score of 20", asked[-1])
+      and "running" not in asked[-1].split("[END TASKS]")[0].split("maximum score")[1]
+      and "progress so far?\n[RESULT message] Deeper side: Movement is in: the snake now steps" in asked[-1], asked[-1])
 time.sleep(ui.LITE_QUIET_GAP + 0.4)
 check("  never told again on its own (06:22:24's aside, and 06:23:44's stale \"is on it\", don't happen)",
       len(told_model) == n_model and len(vs.told) == n, (told_model[n_model:], vs.told[n:]))
@@ -738,7 +763,7 @@ vs.ledger = True
 hand("tag the release")
 n_model = len(told_model)
 vs.st = {"state": "speaking", "you": "", "claude": "..."}       # a turn on: nothing told on its own meanwhile
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Tagged v2.0."})
+back("Tagged v2.0.")
 tline = [t for t in ui.LITE_CALLS[sid]["tasks"].values() if t["what"] == "tag the release"][0]["line"]
 sbledger.append(sid, "tasks", tasks_txt())                      # as the agent does, building that turn
 answers.append("It's tagged.")
@@ -746,10 +771,11 @@ os.environ["STANDBY_VOICE_LEDGER"] = "1"                         # the agent bui
 ui.ask_spoken(sid, "is it tagged?", None, None)
 del os.environ["STANDBY_VOICE_LEDGER"]
 vs.st = {"state": "listening", "you": "", "claude": ""}
-check("on the record: lite_ask adds no [TASKS] of its own (the agent places them)", "[TASKS]" not in asked[-1] and asked[-1].endswith("is it tagged?"), asked[-1])
+check("on the record: lite_ask adds no [TASKS] of its own (the agent places them); the message after their words",
+      "[TASKS]" not in asked[-1] and asked[-1].endswith("is it tagged?\n[RESULT message] Deeper side: Tagged v2.0.\n[END RESULT]"), asked[-1])
 time.sleep(ui.LITE_QUIET_GAP + 0.4)
-check("  a task its [TASKS] entry carried is the voice's: never told again on its own",
-      "Tagged v2.0." in tline and sbledger.carried(sid, tline) and len(told_model) == n_model, told_model[n_model:])
+check("  a task its [TASKS] entry carried, and a message their turn carried, are the voice's: never told again",
+      sbledger.carried(sid, tline) and len(told_model) == n_model, told_model[n_model:])
 vs.ledger = False
 
 # Once the voice has said goodbye ([END]), work that comes back is kept, not said.
@@ -757,7 +783,7 @@ wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 hand("one more thing")
 ui.LITE_CALLS[sid]["hanging_up"] = True
 n, n_model = len(vs.told), len(told_model)
-ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Done after the goodbye."})
+back("Done after the goodbye.")
 time.sleep(ui.LITE_QUIET_GAP + 0.4)
 check("after its goodbye: what came back is kept, not said or worded", len(vs.told) == n and len(told_model) == n_model
       and any(k.get("more", {}).get("result") == "Done after the goodbye." for _a, k in chat), vs.told[n:])
@@ -1006,6 +1032,35 @@ check("  another turn's word changes nothing", [r for r in (json.loads(x) for x 
 ui._voice_heard(sid, "q-cut", "", False, True)
 rows = [json.loads(x) for x in (ui.SESSIONS / sid / "chat.jsonl").read_text().splitlines()]
 check("  one never played: unsaid", any(r.get("at") == ai_row["at"] and r.get("unsaid") for r in rows))
+
+# Each hand-off carries what was said since the last one (the whole call, the first time), as heard
+cs2 = "talk-20990102-000000"
+os.makedirs(str(ui.SESSIONS / cs2), exist_ok=True)
+t = 1793400000.0
+with open(str(ui.SESSIONS / cs2 / "chat.jsonl"), "w") as fh:
+    for r in ({"role": "ai", "text": "Hi, I'm here.", "at": t, "voice": True},
+              {"role": "me", "text": "Run the tests, and check the cache too.", "at": t + 5, "voice": True},
+              {"role": "ai", "text": "On it, and the cache after.", "at": t + 7, "voice": True, "cut": True, "heard": "On it,"},
+              {"role": "ai", "text": "Never played.", "at": t + 8, "voice": True, "unsaid": True},
+              {"role": "ai", "text": "", "at": t + 9, "voice": True, "result": "x", "reason": "message"}):
+        fh.write(json.dumps(r) + "\n")
+c2 = {}
+first = ui._lite_conversation(cs2, c2)
+at = lambda x: time.strftime("%H:%M:%S", time.localtime(x))
+check("a hand-off carries the call so far: the user's words, the voice's as they were heard, nothing unsaid",
+      first == ui.LITE_CONVERSATION % ("it started", "Voice %s: Hi, I'm here.\nUser %s: Run the tests, and check the cache too.\n"
+                                       "Voice %s: On it," % (at(t), at(t + 5), at(t + 7))), first)
+with open(str(ui.SESSIONS / cs2 / "chat.jsonl"), "a") as fh:
+    fh.write(json.dumps({"role": "me", "text": "And the docs.", "at": t + 20, "voice": True}) + "\n")
+check("  the next one: only what was said since", ui._lite_conversation(cs2, c2)
+      == ui.LITE_CONVERSATION % ("the last hand-off", "User %s: And the docs." % at(t + 20)))
+check("  nothing new: nothing", ui._lite_conversation(cs2, c2) == "")
+ui.LITE_CALLS[cs2] = {"cc": CC}
+out.clear()
+ui.lite_ended(cs2)
+check("the call ends: the session is told, then the band", [e.get("call") for _c, e in out] == ["note", "state"]
+      and out[0][1]["text"] == ui.LITE_CALL_NOTE_END, out)
+check("a message for no call: said so", "error" in ui.LITE_POST["/api/lite/progress"]({"session": "talk-20200101-0000", "kind": "tell", "text": "hi"}))
 
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
 sys.exit(1 if fails else 0)

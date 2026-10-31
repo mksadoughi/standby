@@ -233,6 +233,9 @@ async function heard($, ev) {
     // (Claude Code takes it into a running turn). Standby hears whether it really got here
     S.fromCall.add(ev.text.trim())
     void handOn($, ev)
+  } else if (ev.call === 'note') {
+    // a call started or ended: the session's own picture of it, a quiet note with no turn of its own
+    await note($, ev.text)
   } else if (ev.call === 'summary') {
     // After a call, the user chose to add it here: what it discussed that this session didn't know yet.
     // A quiet note, read with the next prompt: no turn of its own
@@ -288,6 +291,8 @@ async function handOn($, ev) {
   // the session busy (a turn running): Claude Code queues it and starts it when that turn ends; said now,
   // so the voice knows it waits rather than went missing
   if (S.turn || S.holding) await app($, '/api/lite/progress', { session: ev.session, id: ev.id || '', kind: 'queued', text: '' })
+  // what was said on the call since the last hand-off: a quiet note just before it, which Claude reads with it
+  if (ev.context) await note($, ev.context).catch(() => {})
   let r
   try { r = await $.prompt.submit({ text: ev.text, asUser: true }) } catch (err) { r = { drop: String((err && err.message) || err) } }
   const got = !!r && !r.drop
@@ -836,6 +841,27 @@ async function band($, e, next) {
   return Box({ flexDirection: 'column', children: [top, ...sub] })
 }
 
+// The session's one way to its call's voice (the tool's description is its picture of the call, with the
+// note the call starts with): the voice judges what of it the user hears
+const TELL_VOICE = 'On a voice call with the user, tell your voice side something. The voice hears the user and speaks for you; '
+  + 'while the call is on they hear only it, never you. Use this when you judge they\u2019d want to know something: what came of '
+  + 'their work, a question for them, something waiting on their OK, something you found. Write it for the voice, plainly and '
+  + 'whole; it decides whether, when and how to say it, and their answer comes back from the call.'
+
+// The call this session is on, if any: the one it started, or one Standby says is live for it
+function callSession() {
+  const live = S.st && S.st.live
+  return (S.call && S.call.session) || (live && live.kind === 'call' && live.session) || null
+}
+
+async function tellVoice($, text, source) {
+  const session = callSession()
+  if (!session) return 'No call is on: answer the user here.'
+  if (!text.trim()) return 'Nothing to tell: say what the voice should know.'
+  const r = await app($, '/api/lite/progress', { session, kind: 'tell', text, source })
+  return r && r.ok ? 'The voice has it, and decides whether and when the user hears it.' : 'The voice didn\u2019t get it: ' + ((r && r.error) || 'Standby isn\u2019t answering')
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -847,6 +873,7 @@ export function register(on) {
       ['stop', 'Stop listening to the meeting; Standby keeps its summary'],
       ['call', 'Start a voice call with Standby, which hands real work to this session'],
       ['end_call', 'End the voice call'],
+      ['tell_voice', TELL_VOICE, { text: { type: 'string', description: 'what the voice should know, written for it' } }],
       ['meeting', 'Read the transcript of the meeting Standby recorded for this session (the latest, live or ended): use it whenever the user asks about the meeting and the transcript isn\u2019t already here'],
       ['settings', 'Standby\u2019s settings: with no setting, lists each with its value and choices; with a setting and a value, changes it (only when the user asks)',
         { setting: { type: 'string', description: 'the setting, as the list names it (transcript, capture, mic, voice, ...)' },
@@ -907,6 +934,7 @@ export function register(on) {
         return { result: act === 'call' ? 'Accepted: the call is starting' : 'Accepted: listening is starting' }
       }
     }
+    if (act === 'tell_voice') return { result: await tellVoice($, String(e.text || ''), 'session') }
     const how = ['ask', 'live'].includes(e.pass) ? e.pass : undefined     // the tool's arguments ride on the event
     const answer = act === 'listen' ? await startListening($, how) : act === 'stop' ? await stopListening($)
       : act === 'call' ? await startCall($) : act === 'end_call' ? await endCall($)
@@ -914,6 +942,20 @@ export function register(on) {
       : 'No such Standby action'
     return { result: answer }
     } finally { S.holding-- }
+  })
+
+  // On a call the user hears only the voice: a permission dialog waiting is told to it (they answer in the
+  // dialog), and a question is theirs to answer by voice, so Claude asks it through tell_voice instead
+  on('classic.PermissionRequest', async ($, e, next) => {
+    if (callSession()) {
+      const input = e.tool_input && typeof e.tool_input === 'object' ? e.tool_input : {}
+      void tellVoice($, 'Waiting for the user\u2019s OK in Claude Code, for ' + toolWords({ tool: e.tool_name, ...input }) + '.', 'permission')
+    }
+    return next(e)
+  })
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => {
+    if (callSession() && !e.agentId) return { deny: 'The user is on a call and hears only your voice: put the question to them with tell_voice; their answer comes back from the call.' }
+    return next(e)
   })
 
   // Turns: whether the session is busy, and a call's progress back to the voice
@@ -924,7 +966,8 @@ export function register(on) {
     for (const t of due) $.prompt.submit(t.asUser ? { text: t.text, asUser: true } : { text: t.text })
     if (S.call && !e.agentId) {
       const reason = e.isAborted ? 'aborted' : (e.reason || 'answer')
-      await app($, '/api/lite/progress', { session: S.call.session, turnId: e.turnId, kind: 'done', text: e.answer || '', reason })
+      // a state for the call's tasks; what came of it is the session's to tell, with tell_voice
+      await app($, '/api/lite/progress', { session: S.call.session, turnId: e.turnId, kind: 'done', reason })
     }
     return next(e)
   })

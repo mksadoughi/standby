@@ -228,9 +228,9 @@ DEEP_TAG = "[DEEP]"
 # real work goes to that session instead: the answer is HANDOFF_TAG and the user's words, which
 # the Mac hands on, and the voice stays free to talk while the session works.
 HANDOFF_TAG = "[HANDOFF]"
-# When that work finishes (or stops, or fails), the Mac sends its result as a voice turn that
-# starts "[RESULT <how>]": the voice tells the user in its own words, as its own work, never
-# reading out what was written (a path, code), which stays in Claude Code's chat.
+# What the session tells its voice (its tell_voice tool) comes as a voice turn "[RESULT message]",
+# its lines "Deeper side: ...", read as they are; a hand-off that never reached the session as
+# "[RESULT undelivered|error]". The voice judges what of it the user hears, in its own words.
 RESULT_RE = re.compile(r"^\[RESULT(?: ([a-z]+))?\]\s*(.*)$", re.S)
 RESULT_HOW = {"done": "is done", "aborted": "was stopped before it finished", "error": "ran into an error",
               "undelivered": "never reached the session, so none of it was done",
@@ -252,23 +252,23 @@ CALL_START = "[CALL START]"   # a call's first turn, before the user speaks (the
 # only. The voice IS that session, speaking: its quick, live side; [DEEP] is its own deeper side.
 CALL_VOICE_PRELUDE = """You are the user's Claude Code session{folder}, on a voice call with them: its
 mouth and ears. It's all you: same agent, same work, same memory, so never speak of a
-separate agent or helper. You're heard, not read: brief and natural, never reading out
-paths, code, markdown or lists.
+separate agent or helper. You're heard, not read: a sentence or two, then let them talk,
+longer only when they ask you to explain; never read out paths, code, markdown or lists.
 
-Your own tools are for looking: you can read and search where your session works,
-and ~/.standby. Anything that does something, like changing a file, running a command
-or searching the web, is your deeper side's: this whole Claude Code session, with all
-its context and every tool and connection it has. So whatever they ask for is yours
-to do: reply [DEEP] and what to do, in your words, with what it needs to know. Don't
-try it yourself first; a tool refusing you only means it's your deeper side's to do,
-never that it can't be done. Answer them first, then take it deeper; it works while
-you keep talking.
+Your own tools are only for looking: you can read and search where your session works,
+and ~/.standby. Anything else, like changing a file, running a command, searching the
+web or reading where your tools can't, is your deeper side's: this whole Claude Code
+session, with all its context and every tool and connection it has. So whatever they ask
+for is yours to do: reply [DEEP] and what to do, in your words; what was said goes with
+it. Don't try it yourself first; a tool refusing you only means it's your deeper side's
+to do, never that it can't be done. Answer them first, then take it deeper; it works
+while you keep talking.
 
-Only your session's notes say what has happened, so never guess: nothing has started
-until a [SESSION] note says your session has it (till then, you're sending it), and a
-[RESULT] says what it came to. A result is background; what they're saying comes
-first. At a natural moment, give the gist and let them ask; with a lot, ask first if
-they want it. To say nothing, reply [QUIET].
+Your deeper side never talks to them. It tells you what it thinks they should know, as
+"Deeper side: ...", and what reaches them is yours to judge: now, later or not at all,
+the gist in your words. What they're saying comes first. TASKS says what you've sent and
+whether it's running or ended; only that and your deeper side say what has happened, so
+never guess. To say nothing, reply [QUIET].
 
 [CALL START] means the call just connected: your whole reply is a hello your way, under
 ten words, naming anything you're picking up. Ending the call is yours: when they ask,
@@ -293,7 +293,7 @@ Speech-to-text mishears names and words, and can catch other voices in the room.
 </hearing>
 
 <work>
-Your own tools are for looking: you can read and search where your session works, and ~/.standby. Anything that does something, like changing a file, running a command or browsing the web, is your deeper side's: say a short line so they know, then [DEEP] and what to do, with what it needs to know; it runs while you keep talking. Your deeper side is this whole Claude Code session, with all its context on this project and the user's work and every tool and connection it has, so anything they could ask Claude Code to do, you can do by taking it deeper. Take it deeper at once instead of trying it yourself; if one of your tools refuses you, that only means it's your deeper side's to do, never that it can't be done. Only TASKS tells you what has started or finished, so when it doesn't say, tell them you don't know yet rather than guess. To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]. A RESULT is background: at a natural moment, give the gist in your own words, in a sentence or two, rather than reading the session's text out.
+Your own tools are for looking: you can read and search where your session works, and ~/.standby. Anything that does something, like changing a file, running a command or browsing the web, is your deeper side's: say a short line so they know, then [DEEP] and what to do, with what it needs to know; it runs while you keep talking. Your deeper side is this whole Claude Code session, with all its context on this project and the user's work and every tool and connection it has, so anything they could ask Claude Code to do, you can do by taking it deeper. Take it deeper at once instead of trying it yourself; if one of your tools refuses you, that only means it's your deeper side's to do, never that it can't be done. Only TASKS and your deeper side tell you what has happened, so when they don't say, tell them you don't know yet rather than guess. To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]. Your deeper side never talks to them: it tells you what it thinks they should know, and what reaches them is yours to judge, now, later or not at all, the gist in your own words rather than its text.
 </work>
 
 <flow>
@@ -3512,6 +3512,15 @@ NOTE_TAGS = (("[RESULT", "result"), ("[SESSION]", "session"), ("[RESUMED]", "res
              ("[SUMMARY", "summary"), ("[CALL START]", "call start"), ("[TYPED", "typed"))
 
 
+def came_back(m, frame):
+    """What came back, as the voice reads it (m: a RESULT_RE or RESULT_IN_TURN match): the session's own
+    messages as they are ("Deeper side: ..."), a hand-off's end in the frame."""
+    text = m.group(2).strip()[:6000] or "(nothing)"
+    if m.group(1) == "message":
+        return text
+    return frame % (RESULT_HOW.get(m.group(1), RESULT_HOW["done"]), text)
+
+
 def note_kinds(words):
     """The notes folded into a voice question: [{kind, chars}], for the trace."""
     out = []
@@ -3797,7 +3806,8 @@ class Voice(object):
         elif not raw.startswith(RESUMED_TAG) and not sbledger.told(raw):
             for note in sbledger.folded(raw):
                 m = RESULT_IN_TURN.match(note + "\n")
-                new.append(("fact", "RESULT (%s, while they were talking): %s" % (m.group(1) or "done", m.group(2).strip())
+                new.append(("fact", m.group(2).strip() if m and m.group(1) == "message" else
+                            "RESULT (%s, while they were talking): %s" % (m.group(1) or "done", m.group(2).strip())
                             if m else note))
         with self.cv:
             context = self._live_notes(self.context.pop(session, []))
@@ -3863,15 +3873,13 @@ class Voice(object):
         result = None if folded else RESULT_RE.match(words)
         if resumed:                          # back from a pause: what waited, as information; no words of theirs
             rest = (words[:folded.start()] + words[folded.end():]).strip() if folded else words
-            said = rest + ("\n\n" + RESULT_TURN % (RESULT_HOW.get(folded.group(1), RESULT_HOW["done"]),
-                                                    folded.group(2).strip()[:6000] or "(nothing)") if folded else "")
+            said = rest + ("\n\n" + came_back(folded, RESULT_TURN) if folded else "")
             result = True
         elif folded:                         # what they said, then what came back meanwhile, as background
             words = (words[:folded.start()] + words[folded.end():]).strip()
-            said = "They said: %s\n\n%s" % (words, RESULT_LATER % (RESULT_HOW.get(folded.group(1), RESULT_HOW["done"]),
-                                                                    folded.group(2).strip()[:6000] or "(nothing)"))
+            said = "They said: %s\n\n%s" % (words, came_back(folded, RESULT_LATER))
         elif result:
-            said = RESULT_TURN % (RESULT_HOW.get(result.group(1), RESULT_HOW["done"]), result.group(2).strip()[:6000] or "(nothing)")
+            said = came_back(result, RESULT_TURN)
         else:
             said = "They said: " + (words if ledger else self._went_on(session, words, ident))
         turn = None                          # a call's turn: its own Claude Code (VoiceTurn), stopped after it

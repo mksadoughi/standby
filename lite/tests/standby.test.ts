@@ -1594,3 +1594,72 @@ test('every request to Standby carries this launch\'s token, from its file; the 
   expect(seen.spawned[seen.spawned.indexOf('-H') + 1]).toBe('@/tmp/standby-test-home/.standby/ui.header')
   expect(seen.spawned.join(' ')).not.toContain('tok-launch-1')
 })
+
+// ---------------------------------------------------------------- one channel: the session tells its voice
+test('on a call, the session tells its voice with tell_voice; with no call it is told to answer here', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1, phase: 'listening' } }
+  mock.clock(on)
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  const r: any = await $.tool.call({ tool: 'mcp__standby__tell_voice', text: 'The tests pass, and the fix is merged.' } as any)
+  expect(r.result).toBe('The voice has it, and decides whether and when the user hears it.')
+  const told = seen.posts.filter((p: any) => p.path === '/api/lite/progress' && p.body.kind === 'tell').map((p: any) => p.body)
+  expect(told).toEqual([{ session: 'c1', kind: 'tell', text: 'The tests pass, and the fix is merged.', source: 'session' }])
+  seen.live = null
+  seen.idle = true
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  const none: any = await $.tool.call({ tool: 'mcp__standby__tell_voice', text: 'Anyone there?' } as any)
+  expect(none.result).toBe('No call is on: answer the user here.')
+})
+
+test('a turn\'s end on a call is a state only: nothing of its answer goes to the voice', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1, phase: 'listening' } }
+  mock.clock(on)
+  on('turn.start', ($: any, e: any) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await $.command.run({ command: 'standby', args: 'call' })
+  await $.turn.start({ turnId: 't2' })
+  await $.turn.complete({ turnId: 't2', answer: 'Here is everything I found, in full.', durationMs: 900, isAborted: false, usage: null })
+  const done = seen.posts.find((p: any) => p.path === '/api/lite/progress' && p.body.kind === 'done').body
+  expect(done).toMatchObject({ session: 'c1', turnId: 't2' })
+  expect(JSON.stringify(done)).not.toContain('everything I found')
+})
+
+test('the call starts and ends with a quiet note to the session; a hand-off carries what was said, unseen in the chat', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1, phase: 'listening' } }
+  mock.clock(on)
+  const session = mock.session(on)
+  fakeApp(on, [
+    { call: 'note', session: 'c1', text: '[Standby] The user is on a voice call with you now.' },
+    { call: 'handoff', session: 'c1', id: 'c1-1', text: 'From your call: run the tests', context: 'The call since it started:\nUser 10:00:01: run the tests' },
+    { call: 'note', session: 'c1', text: '[Standby] The call has ended. Answer the user here, as usual.' },
+  ], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  const notes = session.appended().map((n: any) => n.message.content[0].text)
+  expect(notes).toEqual(['[Standby] The user is on a voice call with you now.', 'The call since it started:\nUser 10:00:01: run the tests',
+    '[Standby] The call has ended. Answer the user here, as usual.'])
+  expect(seen.submitted.some((s: any) => s.text === 'From your call: run the tests')).toBe(true)
+  await $.prompt.submit({ text: 'and this one?' })
+  expect(seen.submitted.find((s: any) => s.text === 'and this one?').context).toBeUndefined()
+})
+
+test('on a call, a permission dialog waiting is told to the voice, and a question goes through the voice, not a dialog', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], live: { kind: 'call', session: 'c1', started: 1, phase: 'listening' } }
+  mock.clock(on)
+  on('classic.PermissionRequest', () => ({}))
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await settle()
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'npm test', description: 'Run the tests' } } as any)
+  await settle()
+  const told = seen.posts.filter((p: any) => p.path === '/api/lite/progress' && p.body.kind === 'tell').map((p: any) => p.body)
+  expect(told).toEqual([{ session: 'c1', kind: 'tell', text: 'Waiting for the user’s OK in Claude Code, for running Run the tests.', source: 'permission' }])
+  const q: any = await $.tool.call({ tool: 'AskUserQuestion', questions: [{ question: 'Which one?' }] } as any)
+  expect(String(q.deny)).toContain('put the question to them with tell_voice')
+  expect(DIALOGS).toEqual([])                     // Claude Code's own question dialog never came up
+})

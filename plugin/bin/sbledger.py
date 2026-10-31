@@ -99,6 +99,8 @@ def asked_block(raw):
         return w
     if told(w):
         m = _RESULT.match(w)
+        if m.group(1) == "message":                 # the session's own message to its voice, as it reads
+            return m.group(2).strip() or "(nothing)"
         return "RESULT (%s): %s" % (m.group(1) or "done", m.group(2).strip() or "(nothing)")
     return "THEM: " + w
 

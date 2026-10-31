@@ -2882,7 +2882,7 @@ def _card_text(sessions, name, me="You"):
                 continue                                             # said with its hand-off, above
             elif "result" in m:                                      # and what it came back with
                 out.append("Claude Code came back: %s" % (" ".join(str(m["result"] or text).split())[:600]
-                                                           if m.get("reason") == "done" else text))
+                                                           if m.get("reason") in ("done", "message") else text))
             else:
                 if is_talk(s) and m.get("role") != "me":             # what the voice did itself, before it said this
                     out += ["Voice ran: %s" % re.sub(r"^Running ", "", str(step))[:300] for step in m.get("steps") or []]
@@ -3163,7 +3163,19 @@ END_TAG = "[END]"                              # after its goodbye: the voice en
 LITE_END_WAIT = 60.0                           # the longest a goodbye may take before the call ends anyway
 LITE_OPENING = "[CALL START]"                 # the voice's first turn, before the user speaks: never shown
 LITE_ORB = set()                               # sessions the user sent to the orb (minimize to orb, Cmd+M): only these have one
-LITE_RESULT_MAX = 4000                        # what came back from the session, kept with the call
+LITE_RESULT_MAX = 4000                        # a message from the session to its voice, kept whole up to this
+LITE_DEEPER = "Deeper side: "                  # how a message the session sends its voice reads to the voice
+# The session's own picture of the call (a quiet note: no turn, the system prompt as it was), at its start
+# and end. Who is who, and how it works; never rules for the model to follow line by line.
+LITE_CALL_NOTE = (
+    "[Standby] The user is on a voice call with you now. Your voice side hears them and talks to them; you are its "
+    "deeper side, doing the work. What the voice hands you arrives as \"From your call: ...\", with what was said "
+    "since the last hand-off attached. While the call is on, the user hears only the voice, never you: what they "
+    "should know, a result, a question for them, something waiting on their OK, goes to it with the tell_voice "
+    "tool (mcp__standby__tell_voice) when you judge they'd want it, and the voice decides whether, when and how to say it. Their answers "
+    "come back from the call. They can still type to you here.")
+LITE_CALL_NOTE_END = "[Standby] The call has ended. Answer the user here, as usual."
+LITE_CONVERSATION = ("The call since %s, as speech-to-text heard the user (Voice is what your voice side said):\n%s")
 LITE_DELIVER_WAIT = 20.0                      # a hand-off the mod hasn't confirmed by then never reached the session
 LITE_NO_WORD = "no word from Claude Code"
 
@@ -3189,7 +3201,8 @@ def lite_busy(sid):
 # record: sent (handed on, no word back yet), queued (the session busy: it starts when that ends), running,
 # stalled (no progress for LITE_STALL), done, failed or stopped. Made only from what happened (handed,
 # received, queued, the session's steps, its turn's end) and a watchdog. The voice is told these facts, in
-# sessions/<sid>/tasks.txt and with its turns, and claims nothing else.
+# sessions/<sid>/tasks.txt and with its turns, and claims nothing else. What came of the work is the
+# session's to tell (its tell_voice tool: lite_progress "tell"), never read off a turn's end.
 LITE_LIVE = ("sent", "queued", "running", "stalled")
 LITE_ENDED = ("done", "failed", "stopped")
 LITE_STALL = 90.0           # running with no step for this long: stalled
@@ -3447,6 +3460,7 @@ def lite_call(b):
     # Bound like a Lite meeting ("lite:<cc>"), as a call: the card (keep or forget) is served as theirs.
     write_json(SESSIONS / sid / "agent.json", {"agent": "lite:" + cc, "kind": "call", "name": "Claude Code",
                                               "copy": True, "meeting_audio": False, "mic": True, "started": started})
+    _lite_out(cc, {"call": "note", "session": sid, "text": LITE_CALL_NOTE})     # the session knows it's on a call
     vs = VOICE.get(sid)
     if vs is not None and hasattr(vs, "open_with"):
         vs.open_with(LITE_OPENING)                 # the voice says hello first
@@ -3550,6 +3564,10 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     if c.pop("rang", False):                       # they're back from a pause where something waited
         notes.append(LITE_RESUMED)
         rang = True
+    # what the session told its voice that wasn't said yet (they were talking): with their turn, after their words
+    carried = [m for m in c.get("inbox", []) if not m["seen"]]
+    for m in carried:
+        m["seen"] = True
     # news the voice worded that they never heard (they spoke first): in its conversation as said, so it's told
     # here, never told again on its own (it called that a repeat; "which notification?" after a Resume)
     unheard = c.pop("unheard", []) + (vs.take_told() if hasattr(vs, "take_told") else [])
@@ -3559,7 +3577,7 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     typed = _lite_typed_words(sid, c)              # what they typed or pasted in the chat: their words too
     if typed:
         question = "%s\n%s" % (typed, question)
-    told = "\n".join(notes + [question])
+    told = "\n".join(notes + [question] + (["[RESULT message] %s\n[END RESULT]" % _lite_messages(carried)] if carried else []))
     refused = _begin_ask(sid, question, voice=True)
     if refused:
         return "I'm still on your last question." if "previous" in refused["error"] else refused["error"]
@@ -3572,6 +3590,8 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
         if rang:
             c["rang"] = True
         c["typed"] = typed_rows + (c.get("typed") or [])
+        for m in carried:                          # theirs, after all: the turn that is theirs carries it
+            m["seen"] = False
         return ""
     for tid in CANCEL_RE.findall(str(answer or "")):    # the voice stops a task: [CANCEL #n]
         _lite_cancel(sid, c, tid)
@@ -3597,13 +3617,40 @@ def _lite_hand(sid, c, work):
     t = _lite_task(c, "handoff", work, "sent")
     _lite_set(sid, c, t, "sent", result="")
     c.update(doing="", said="")
-    _lite_out(c["cc"], {"call": "handoff", "session": sid, "id": "%s-%s" % (sid, t["id"]), "text": LITE_FROM_CALL + work})
+    event = {"call": "handoff", "session": sid, "id": "%s-%s" % (sid, t["id"]), "text": LITE_FROM_CALL + work}
+    said = _lite_conversation(sid, c)
+    if said:                                       # what was said around it: the session reads it, the user doesn't see it
+        event["context"] = said
+    _lite_out(c["cc"], event)
     log("lite: %s: handed to the session (#%s)" % (sid, t["id"]))
     trace(sid, "handoff", id=t["id"], step="handed", work=work, session_busy=busy)
     late = threading.Timer(LITE_DELIVER_WAIT, _lite_lost, args=(sid, t["id"], LITE_NO_WORD))
     late.daemon = True
     late.start()
     return t
+
+
+def _lite_conversation(sid, c):
+    """What was said on the call since the last hand-off (the whole call, the first time): the user's words as
+    speech-to-text heard them, and the voice's as they were heard (a reply they cut off, as far as it got),
+    for the session to read with the hand-off. "" when nothing new was said."""
+    since = c.get("conv_at") or 0.0
+    rows, last = [], since
+    for r in read_jsonl(SESSIONS / sid / "chat.jsonl"):
+        at = r.get("at") or 0
+        if at <= since or not r.get("voice") or r.get("unsaid"):
+            continue
+        text = " ".join(str(r.get("heard") if r.get("cut") and r.get("heard") else r.get("text") or "").split())
+        text = text.replace(LITE_OPENING, "").strip()
+        if not text:
+            continue
+        who = "User" if r.get("role") == "me" else "Voice"
+        rows.append("%s %s: %s" % (who, time.strftime("%H:%M:%S", time.localtime(at)), text))
+        last = max(last, at)
+    c["conv_at"] = last
+    if not rows:
+        return ""
+    return LITE_CONVERSATION % ("the last hand-off" if since else "it started", "\n".join(rows))
 
 
 def _lite_cancel(sid, c, tid):
@@ -3707,22 +3754,20 @@ def lite_progress(b):
     elif kind == "text" and text:
         c["said"] = text
     elif kind == "done":
-        # The session's turn ended: what it was on ended with it, in what it said last (it may have done one
-        # step of it and stopped: that's what the record says). Queued work starts next.
-        final = text or c.get("said") or ""
+        # The session's turn ended: what it was on ended with it (TASKS says so, by the clock). What came of it
+        # is the session's to tell, with its tell_voice tool: nothing is read off the turn's end, or said for it.
         c.update(doing="", said="")
         reason = b.get("reason")
         for x in working:
-            _lite_set(sid, c, x, "stopped" if reason == "aborted" else "failed" if reason == "error" else "done",
-                      result=final or ("stopped" if reason == "aborted" else ""))
-        if not working and final and final not in [x["result"] for x in c.get("tasks", {}).values()]:
-            # a turn of the session's own (a teammate's answer came in, say) with news: told as news, never
-            # dropped, nor read as the last tasks again (a call's "repeats", 2026-10-30)
-            x = _lite_task(c, "news", "news from the session, on its own", "running", source="session")
-            _lite_set(sid, c, x, "done", result=final)
-            working = [x]
-        if working:
-            _lite_announce(sid)
+            x["seen"] = True                       # a state, in TASKS: nothing to tell on its own
+            _lite_set(sid, c, x, "stopped" if reason == "aborted" else "failed" if reason == "error" else "done")
+    elif kind == "tell" and text:
+        # The session tells its voice something (its tell_voice tool, or the mod: it waits on the user's OK).
+        # The voice judges whether, when and how the user hears it: said in a quiet moment, else with their turn.
+        c.setdefault("inbox", []).append({"text": text[:LITE_RESULT_MAX], "at": now, "seen": False,
+                                          "source": str(b.get("source") or "session")})
+        log("lite: %s: the session tells its voice (%d characters, %s)" % (sid, len(text), b.get("source") or "session"))
+        _lite_announce(sid)
     return {"ok": True}
 
 
@@ -3731,6 +3776,7 @@ LITE_UNHEARD = ("[UNHEARD] What you were about to tell them on your own never re
                 "[END UNHEARD]")
 # What the voice says when its own model can't be asked: never the session's words.
 LITE_FALLBACK = {"done": "That's done. It's all in the chat.", "aborted": "I stopped that.",
+                 "message": "There's an update from the session in the chat.",
                  "error": "I ran into a problem with that. The details are in the chat.",
                  "undelivered": "That didn't reach the session, so it wasn't done.",
                  "queued": "That starts once the session finishes what it's on."}
@@ -3748,8 +3794,9 @@ def _lite_announce(sid):
 
 
 def _lite_untold(c, sid=None):
-    """Ended tasks the voice hasn't had: told on its own, or carried by a turn ([TASKS] in the call's record)."""
-    out = []
+    """What the voice hasn't had: the session's messages to it, and a hand-off that never reached the session
+    (Standby's own fact). Told on its own, or carried by a turn (theirs, or [TASKS] in the call's record)."""
+    out = [m for m in c.get("inbox", []) if not m["seen"]]
     for t in c.get("tasks", {}).values():
         if t["state"] in LITE_ENDED and not t["seen"]:
             if sid and t.get("line") and sbledger.carried(sid, t["line"]):
@@ -3757,6 +3804,11 @@ def _lite_untold(c, sid=None):
                 continue
             out.append(t)
     return out
+
+
+def _lite_messages(items):
+    """The session's messages, as the voice reads them."""
+    return "\n".join(LITE_DEEPER + m["text"] for m in items)
 
 
 def _lite_tell(sid):
@@ -3782,6 +3834,8 @@ def _lite_tell(sid):
         news = _lite_untold(c, sid) if sid in LITE_CALLS else []
         if not news:
             return                                 # a turn of theirs carried it
+        messages = [m for m in news if "id" not in m]
+        news = messages or news                    # the session's messages first; a lost hand-off in a turn of its own
         for t in news:
             t["seen"] = True
         if c.get("hanging_up"):                    # the voice said goodbye: kept in the call's log, not said
@@ -3791,11 +3845,11 @@ def _lite_tell(sid):
         resumed = c.pop("rang", False)
         typed = _lite_typed_words(sid, c)
         now = time.time()
-        facts = "\n".join(_lite_task_line(t, now, full=True) for t in news)
-        how = "error" if any(t["state"] == "failed" for t in news) else "aborted" if all(
+        facts = _lite_messages(news) if messages else "\n".join(_lite_task_line(t, now, full=True) for t in news)
+        how = "message" if messages else "error" if any(t["state"] == "failed" for t in news) else "aborted" if all(
             t["state"] == "stopped" for t in news) else "done"
         t0 = time.time()
-        trace(sid, "told", how=how, alone=True, after_pause=bool(resumed), tasks=[t["id"] for t in news])
+        trace(sid, "told", how=how, alone=True, after_pause=bool(resumed), tasks=[t["id"] for t in news if "id" in t], messages=len(messages))
         body = "[RESULT %s] %s%s" % (how, ("%s\n" % typed) if typed else "", facts)
         asked = "%s\n%s\n[END RESULT]" % (LITE_RESUMED, body) if resumed else body
         try:
@@ -3843,8 +3897,11 @@ def _lite_tell(sid):
 
 def _lite_came_back(sid, tasks):
     """What came back, in the call's log as Claude Code's (a hand-off that never got there by its work, so the
-    call's summary says so)."""
+    call's summary says so; a message of the session's to its voice, as it sent it)."""
     for t in tasks:
+        if "id" not in t:
+            append_chat(sid, "ai", "", voice=True, more={"result": t["text"][:LITE_RESULT_MAX], "reason": "message"})
+            continue
         lost = bool(t.get("lost"))
         append_chat(sid, "ai", "", voice=True, more={
             "result": (t["what"] if lost else (t["result"] or t["state"]))[:LITE_RESULT_MAX],
@@ -3974,6 +4031,7 @@ def lite_ended(sid):
     c = LITE_CALLS.pop(sid, None) if sid else None
     if c is None:
         return
+    _lite_out(c["cc"], {"call": "note", "session": sid, "text": LITE_CALL_NOTE_END})
     _lite_out(c["cc"], {"call": "state", "session": sid, "phase": "ended"})
     log("lite: call %s ended" % sid)
 
