@@ -321,8 +321,17 @@ check("  and what it says is said, in its words: no path, no follow-up chips",
 came = [k for _a, k in chat if k.get("more", {}).get("result", "").startswith("I created an empty file")]
 check("  in the call's log: what came back, in full", came and came[-1]["more"]["reason"] == "done", came[-1:])
 answers.append("Yes.")
+vs.ledger = True                               # as every call's voice session is (its turns kept in the record)
 ui.ask_spoken(sid, "anything else?", None, None)
 check("  told: the next turn's tasks show it ended, not as news again", "done" in asked[-1] and len(told_model) == n_model + 1, asked[-1])
+check("  the voice gets the tasks on a call, its record path off as by default (they never reached it)",
+      "[TASKS]" in asked[-1] and "#" in asked[-1], asked[-1][-300:])
+os.environ["STANDBY_VOICE_LEDGER"] = "1"
+answers.append("Yes.")
+ui.ask_spoken(sid, "anything else?", None, None)
+check("    and not when the agent builds turns from the record (it places them)", "[TASKS]" not in asked[-1], asked[-1][-300:])
+del os.environ["STANDBY_VOICE_LEDGER"]
+vs.ledger = False
 
 # One step, then the session stops (talk-20261024-061950: the stars never built): its turn's end ends the task,
 # with what it said; nothing claims it's still running.
@@ -697,7 +706,9 @@ ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Tag
 tline = [t for t in ui.LITE_CALLS[sid]["tasks"].values() if t["what"] == "tag the release"][0]["line"]
 sbledger.append(sid, "tasks", tasks_txt())                      # as the agent does, building that turn
 answers.append("It's tagged.")
+os.environ["STANDBY_VOICE_LEDGER"] = "1"                         # the agent builds turns from the record
 ui.ask_spoken(sid, "is it tagged?", None, None)
+del os.environ["STANDBY_VOICE_LEDGER"]
 vs.st = {"state": "listening", "you": "", "claude": ""}
 check("on the record: lite_ask adds no [TASKS] of its own (the agent places them)", "[TASKS]" not in asked[-1] and asked[-1].endswith("is it tagged?"), asked[-1])
 time.sleep(ui.LITE_QUIET_GAP + 0.4)

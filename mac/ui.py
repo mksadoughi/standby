@@ -3477,6 +3477,15 @@ def _lite_watch(sid):
         time.sleep(0.15)
 
 
+def _agent_ledger():
+    """The agent builds calls' turns from their record (standby-agent's _ledger_on: STANDBY_VOICE_LEDGER, else
+    config.json "voice": {"ledger"}, off by default)."""
+    env = os.environ.get("STANDBY_VOICE_LEDGER")
+    if env in ("0", "1"):
+        return env == "1"
+    return bool((transport.load_config().get("voice") or {}).get("ledger", False))
+
+
 def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     """A turn in a Claude Code session's call. "Stop" while the session works stops the
     session; work the voice hands on goes to the session; anything else is today's voice."""
@@ -3517,7 +3526,9 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
         notes.append("[SUMMARY] What this session has been working on, now:\n%s\n[END SUMMARY]" % gist)
         c["gist"] = None
     vs = VOICE.get(sid)
-    tasks = "" if getattr(vs, "ledger", False) else _lite_tasks_note(sid, c)    # on the record: the agent places it
+    # on the record: the agent places it, when it builds calls from their record; else they're here (they never
+    # reached the voice at all with that off, its default)
+    tasks = "" if getattr(vs, "ledger", False) and _agent_ledger() else _lite_tasks_note(sid, c)
     if tasks:                                      # the call's work as facts (what ended, the voice has now)
         notes.append(tasks)
     if c.pop("rang", False):                       # they're back from a pause where something waited
