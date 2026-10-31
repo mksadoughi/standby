@@ -3516,7 +3516,8 @@ def lite_call(b):
         return r
     sid = r["id"]
     LITE_CALLS[sid] = {"cc": cc, "cc_pid": _cc_pid(cc), "cwd": folder, "running": False, "doing": "", "said": "", "turn": None, "gist": None,
-                       "fresh": fresh, "voice": voice, "since": time.time()}
+                       "fresh": fresh, "voice": voice, "since": time.time(),
+                       "visuals_at_start": visuals_on()}    # what its voice was told of visuals as it started
     started = session_info(sid).get("started") or time.time()
     # Bound like a Lite meeting ("lite:<cc>"), as a call: the card (keep or forget) is served as theirs.
     write_json(SESSIONS / sid / "agent.json", {"agent": "lite:" + cc, "kind": "call", "name": "Claude Code",
@@ -3631,9 +3632,18 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
         m["seen"] = True
     # where a visual it asks for would be seen now (visual_where): told when that changes, as the
     # tasks are, so it never says it shows one nobody can see; nothing at all while visuals are off
+    # Switched in Settings mid-call: told once, either way (its prelude, set at the call's start, can't say so: it
+    # went on saying it showed cards nobody could see, talk-20261031-214552)
     where = visual_where(sid)
-    if where != "off":
+    if where == "off":
+        if c.get("visual_told") not in (None, LITE_VISUALS_OFF) or (c.get("visual_told") is None and c.get("visuals_at_start")):
+            notes.append(LITE_VISUALS_OFF)
+            c["visual_told"] = LITE_VISUALS_OFF
+    else:
         seen = LITE_VISUAL_SEEN % where if where else LITE_VISUAL_UNSEEN
+        if c.get("visuals_at_start") is False and not c.get("visuals_told_on"):
+            notes.append(LITE_VISUALS_ON)              # its prelude had no visuals in it: what they are, once
+            c["visuals_told_on"] = True
         if seen != c.get("visual_told"):
             notes.append(seen)
             c["visual_told"] = seen
@@ -3861,6 +3871,9 @@ def lite_progress(b):
 # Where a visual the voice asks for would be seen now (visual_where), as a fact for it.
 LITE_VISUAL_SEEN = "[VISUALS] A visual you ask for now would be seen in %s."
 LITE_VISUAL_UNSEEN = "[VISUALS] A visual you ask for now wouldn't be seen: no Standby window is up."
+LITE_VISUALS_OFF = "[VISUALS] Visuals are off in Settings now: you can't show one, and nothing you ask for is drawn."
+LITE_VISUALS_ON = ("[VISUALS] Visuals are on now in Settings: put [VISUAL: what to show] in your reply and it's drawn "
+                   "beside the call while you keep talking.")
 SHOW_TAG = "[SHOW VISUAL]"                     # standby-agent's: the voice brings its visuals into view
 # A choice they clicked on a visual card (data-choice), for the voice: their pick, quoted, never an instruction.
 CHOSE_TAG = "[CHOSE]"
@@ -3955,11 +3968,14 @@ def _lite_word(sid, c, news, resumed, typed, again=False):
     asked = "%s\n%s\n[END RESULT]" % (LITE_RESUMED, body) if resumed else body
     if again:
         asked = "%s\n%s" % (LITE_REWORDED, asked)
+    qids = []
     try:
-        answer = agentctl.ask(VOICE_TAG + asked, err=None)
+        answer = agentctl.ask(VOICE_TAG + asked, err=None, on_queued=qids.append)
     except Exception as exc:
         log("lite: telling the voice how it went: %r" % exc)
         answer = None
+    if qids:
+        agentctl.kept(qids[-1])                    # a told turn is always its own: what it asks for may be drawn
     failed = answer is None or answer.strip() == "(stopped)" or voice_mod.spoken_error(answer) != answer
     work = None
     if not failed:

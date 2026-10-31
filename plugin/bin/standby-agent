@@ -3174,6 +3174,39 @@ def _visual_write(path, row):
     os.replace(tmp, path)
 
 
+# A visual asked for in an answer is drawn only once that answer is the turn's (agentctl.kept's .k): one from an
+# early answer they went on from (.x) never is (cards came up for half-finished words, talk-20261031-214552).
+_FATE, _FATE_LOCK = {}, threading.Lock()      # {question id: "kept" | "dropped"}, as the marks were seen
+VISUAL_DECIDE = 120.0                         # an answer neither kept nor dropped this long: never drawn
+VISUAL_NOT_DRAWN = ("Not shown: you asked for a visual on only part of their words, and they went on, so it wasn't "
+                    "drawn: %s. If it still helps, ask for it again.")
+
+
+def note_fate(ident, fate):
+    with _FATE_LOCK:
+        _FATE[ident] = fate
+        while len(_FATE) > 500:
+            _FATE.pop(next(iter(_FATE)))
+
+
+def answer_fate(ident, wait=None):
+    """"kept" once the answer to question `ident` is the turn's, "dropped" if they went on from it (or it was
+    never decided within VISUAL_DECIDE)."""
+    end = time.time() + (VISUAL_DECIDE if wait is None else wait)
+    while True:
+        with _FATE_LOCK:
+            fate = _FATE.get(ident)
+        if fate:
+            return fate
+        if os.path.exists(os.path.join(SPOOL, ident + ".k")):
+            return "kept"
+        if os.path.exists(os.path.join(SPOOL, ident + ".x")):
+            return "dropped"
+        if time.time() >= end:
+            return "dropped"
+        time.sleep(0.05)
+
+
 def draw_visual(session, ident, k, what, parent, model):
     """One visual: its file says drawing now, then what the side copy made (a fork of the voice's conversation
     `parent`, tool-less and never kept), or why not. Counted in Usage as its own kind."""
@@ -3637,6 +3670,7 @@ class Voice(object):
             ident = getattr(note, "ident", None)
             gone = os.path.join(SPOOL, "%s.x" % ident) if ident else None
             if gone and os.path.exists(gone):
+                note_fate(ident, "dropped")
                 try:
                     os.remove(gone)
                 except OSError:
@@ -3757,6 +3791,16 @@ class Voice(object):
         return "\n".join(lines[:-1] + ["They went on before hearing your answer; this goes on from their words "
                                         "in your last message: %s" % rest])
 
+    def _visuals_when_kept(self, session, ident, asks, parent, model):
+        """The visuals an answer asked for, drawn once it's the turn's; from an early answer they went on from,
+        never, and its next turn is told so (it may have said one was coming)."""
+        if answer_fate(ident) != "kept":
+            self.remember(session, VISUAL_NOT_DRAWN % "; ".join(asks))
+            return
+        for k, what in enumerate(asks, 1):
+            threading.Thread(target=draw_visual, name="visual", args=(session, ident, k, what, parent, model),
+                             daemon=True).start()
+
     def _committed(self, session):
         """An answer the turn's asks were shown the held hand-offs in was committed (agentctl.kept's .k):
         the turn is over, and what it held with it."""
@@ -3769,6 +3813,7 @@ class Voice(object):
                 os.remove(os.path.join(SPOOL, ident + ".k"))
             except OSError:
                 pass
+            note_fate(ident, "kept")
             if ident in self.shown.get(session, {}):
                 self.held.pop(session, None)
                 self.shown.pop(session, None)
@@ -3958,12 +4003,14 @@ class Voice(object):
         if VISUAL_RE.search(text or ""):     # never said, nor in a task; drawn beside the call when it's on
             asks = [w.strip() for w in VISUAL_RE.findall(text) if w.strip()]
             text = VISUAL_RE.sub("", text).strip()
+            if rc == 0 and asks and call and not visuals_on():    # never drawn: it mustn't think it showed one
+                self.remember(session, "Not shown: visuals are off in Settings, so nothing was drawn for: %s"
+                              % "; ".join(asks))
             if rc == 0 and asks and call and visuals_on():
                 engine = _LIVE_SESSION.get((session, "voice"))
-                for k, what in enumerate(asks, 1):
-                    threading.Thread(target=draw_visual, name="visual",
-                                     args=(session, ident, k, what, getattr(engine, "sid", None),
-                                           live_voice_model(self.model)), daemon=True).start()
+                threading.Thread(target=self._visuals_when_kept, name="visual",
+                                 args=(session, ident, asks, getattr(engine, "sid", None),
+                                       live_voice_model(self.model)), daemon=True).start()
         (commit if rc in (0, ClaudeSession.INTERRUPTED) else restore)()
         went = runs(session, "voice", self.model)
         # Cut off as it spoke (not "they went on", whose next turn has it all): a hand-off its reply made in

@@ -83,6 +83,7 @@ def fake_talk(sid=None, wait=90, workspace=None, attach=None, copy=False, where=
 
 ui.start_talk = fake_talk
 ui.visual_where = lambda sid: "off"           # no visuals here, but where they're asked about
+ui.visuals_on = lambda: False
 real_begin_ask, real_run_ask = ui._begin_ask, ui._run_ask
 begun = []
 ui._begin_ask = lambda sid, q, voice=False, own=False: begun.append((q, own))
@@ -290,6 +291,7 @@ check("  their whole turn is asked, with what the dropped one carried", ui.LITE_
 # Where a visual would be seen (visual_where): told when it changes, as the tasks are; nothing while visuals are
 # off. And "[SHOW VISUAL]", on their yes: the call's visuals brought into view, never said.
 where_was, show_was, where_now, shown = ui.visual_where, ui.visual_show, ["the main window"], []
+ui.LITE_CALLS[sid]["visuals_at_start"] = True    # this block: a call that started with visuals on
 ui.visual_where = lambda s: where_now[0]
 ui.visual_show = lambda b: (shown.append(b.get("session")), {"ok": True, "where": "the mini window"})[1]
 answers.append("Sure.")
@@ -309,7 +311,24 @@ check("  their yes: [SHOW VISUAL] brings it into view, and is never said", shown
 where_now[0] = "off"
 answers.append("Sure.")
 ui.ask_spoken(sid, "anything", None, None)
-check("  visuals off: nothing about them", "[VISUALS]" not in asked[-1])
+check("  switched off in Settings mid-call: told once that it can't show one (it said it had, talk-20261031-214552)",
+      ui.LITE_VISUALS_OFF in asked[-1], asked[-1][:300])
+answers.append("Sure.")
+ui.ask_spoken(sid, "anything else", None, None)
+check("    once", "[VISUALS]" not in asked[-1], asked[-1][:300])
+was_start, ui.LITE_CALLS[sid]["visuals_at_start"] = ui.LITE_CALLS[sid].get("visuals_at_start"), False
+ui.LITE_CALLS[sid].pop("visual_told", None)
+where_now[0] = "the mini window"
+answers.append("Sure.")
+ui.ask_spoken(sid, "draw it", None, None)
+check("  switched on mid-call (off as it started): told what visuals are, once, and where it'd be seen",
+      ui.LITE_VISUALS_ON in asked[-1] and ui.LITE_VISUAL_SEEN % "the mini window" in asked[-1], asked[-1][:400])
+answers.append("Sure.")
+ui.ask_spoken(sid, "and again", None, None)
+check("    once", ui.LITE_VISUALS_ON not in asked[-1], asked[-1][:300])
+ui.LITE_CALLS[sid]["visuals_at_start"] = was_start
+where_now[0] = "off"
+ui.LITE_CALLS[sid]["visual_told"] = ui.LITE_VISUALS_OFF
 ui.visual_where, ui.visual_show = where_was, show_was
 for t in ui.LITE_CALLS[sid]["tasks"].values():
     t["seen"] = True

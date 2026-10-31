@@ -565,6 +565,13 @@ try:
     ids = []
     got = ask("[VOICE] show me how the release goes", ident=ids)
     vfile = os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".v1.json")
+    time.sleep(0.6)
+    check("a visual asked for: nothing drawn until its answer is the turn's (cards came up for half-finished words)",
+          not os.path.exists(vfile))
+    open(os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".k"), "w").close()   # committed
+    deadline = time.time() + 5
+    while time.time() < deadline and not os.path.exists(vfile):
+        time.sleep(0.02)
     t_answer = time.time()
     first = json.load(open(vfile)) if os.path.exists(vfile) else {}
     deadline = time.time() + 20
@@ -589,8 +596,17 @@ try:
           and 'sb.steps("#r")' in v.get("html", ""), v.get("html"))
     usage = os.path.join(root, "agent", "usage.jsonl")
     check("  counted in Usage as its own kind", os.path.exists(usage) and any(json.loads(l).get("kind") == "visual" for l in open(usage)))
-    check("  the voice never waits: its answer came while the visual was still drawing (2 s), which said so at once",
+    check("  the voice never waits: its answer came before the visual was drawn (2 s), which said so at once",
           first.get("state") == "drawing" and v.get("ms", 0) >= 1900, (first, v.get("ms")))
+    ids = []
+    ask("[VOICE] show me how the release goes", ident=ids)
+    open(os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".x"), "w").close()   # they went on
+    time.sleep(0.6)
+    ask("[VOICE] what time is it there")
+    check("  an early answer they went on from: its visual never drawn, and the next turn is told so",
+          not os.path.exists(os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".v1.json"))
+          and "Not shown: you asked for a visual on only part of their words" in texts("voice", TALK)[-1],
+          texts("voice", TALK)[-1][-300:])
     json.dump({"call_visuals": False}, open(os.path.join(root, "config.json"), "w"))
     ids, n = [], len([l for l in open(seen) if '"kind": "visual"' in l])
     got = ask("[VOICE] show me how the release goes", ident=ids)
@@ -598,6 +614,9 @@ try:
     check("  visuals off: nothing drawn, no file, and the signal still never said",
           not os.path.exists(os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".v1.json"))
           and len([l for l in open(seen) if '"kind": "visual"' in l]) == n and "[VISUAL" not in got, got)
+    ask("[VOICE] what time is it there")
+    check("    and its next turn is told nothing was drawn, so it never says it showed one",
+          "Not shown: visuals are off in Settings" in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
     os.remove(os.path.join(root, "config.json"))
     # An early question the user went on from: answered with a hand-off, then dropped (agentctl.cancel's
     # .x). The hand-off never went, so the voice's next turn has no note that it's working on it; it's held
