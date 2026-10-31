@@ -685,25 +685,44 @@ n, n_model = len(vs.told), len(told_model)
 ui.LITE_POST["/api/lite/progress"]({"session": sid, "turnId": "t7", "kind": "tool", "text": "Reading the film script"})
 time.sleep(0.3)
 check("paused, with background progress: no bell, nothing said", not ui.voice_status(sid).get("waiting") and len(told_model) == n_model)
+replies.append("While you were away: the film and the cards are done.")
 back("The film and the cards are done.")
-check("  paused when work comes back: nothing said, the voice not asked, and the bell shows",
-      wait(lambda: ui.voice_status(sid).get("waiting")) and (time.sleep(0.4) or True) and len(told_model) == n_model and len(vs.told) == n
-      and ui.LITE_GET["/api/lite/state"]({"cc": CC})["live"].get("waiting") is True, ui.voice_status(sid))
+check("  paused when work comes back: nothing said, the bell shows, and it's worded ahead, for Resume (after it, 7 to 10 s silent)",
+      wait(lambda: ui.voice_status(sid).get("waiting")) and wait(lambda: len(told_model) == n_model + 1) and len(vs.told) == n
+      and told_model[-1].startswith(ui.VOICE_TAG + ui.LITE_RESUMED + "\n[RESULT message] Deeper side: ")
+      and ui.LITE_GET["/api/lite/state"]({"cc": CC})["live"].get("waiting") is True, (ui.voice_status(sid), told_model[n_model:]))
 check("  and the band hears it on the stream", wait(lambda: any(e.get("call") == "state" and e.get("waiting") for _c, e in out)))
 call_live = ui.LITE_GET["/api/lite/state"]({"cc": CC})["live"]
 check("a call's state: what macOS says of the mic, for the band, and never the meeting's sound",
       call_live.get("mic") == "allowed" and "meeting_audio" not in call_live, call_live)
-replies.append("While you were away: the film and the cards are done.")
+t_resume = time.time()
 ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": False})
-check("  Resume: one [RESUMED] turn with both, said once; the bell clears",
-      wait(lambda: len(vs.told) > n) and told_model[-1].startswith(ui.VOICE_TAG + ui.LITE_RESUMED + "\n[RESULT message] Deeper side: ")
+check("  Resume: what was worded ahead is said, once, the voice not asked again; the bell clears",
+      wait(lambda: len(vs.told) > n) and vs.told[-1] == "While you were away: the film and the cards are done."
       and "The film and the cards are done." in told_model[-1] and len(told_model) == n_model + 1
-      and not ui.voice_status(sid).get("waiting"), told_model[n_model:])
+      and time.time() - t_resume < ui.LITE_QUIET_GAP + 1.0 and not ui.voice_status(sid).get("waiting"), (told_model[n_model:], vs.told[n:]))
+hand("wait twenty seconds")
+ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": True})
+n, n_model = len(vs.told), len(told_model)
+replies.append("The first is done.")
+back("The first one is done.")
+wait(lambda: len(told_model) == n_model + 1)
+replies.append("Both are done now.")
+back("And the second one too.")
+check("  more comes while still paused: worded again, with all of it, saying the last was never said",
+      wait(lambda: len(told_model) == n_model + 2) and told_model[-1].startswith(ui.VOICE_TAG + ui.LITE_REWORDED)
+      and "The first one is done." in told_model[-1] and "And the second one too." in told_model[-1] and len(vs.told) == n, told_model[n_model:])
+ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": False})
+check("    Resume says the newest, once", wait(lambda: len(vs.told) > n) and vs.told[-1] == "Both are done now."
+      and len(told_model) == n_model + 2 and (time.sleep(ui.LITE_QUIET_GAP + 0.3) or True) and len(vs.told) == n + 1, vs.told[n:])
 wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
 hand("wait fifteen seconds")
 ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": True})
+n_model = len(told_model)
+replies.append("The wait is over.")
 back("The wait is over.")
 wait(lambda: ui.voice_status(sid).get("waiting"))
+wait(lambda: len(told_model) == n_model + 1)
 time.sleep(0.3)
 vs.st = {"state": "listening", "you": "so", "claude": ""}
 ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": False})
@@ -714,6 +733,8 @@ vs.st = {"state": "listening", "you": "", "claude": ""}
 check("  they speak first on Resume: their turn carries the task and the [RESUMED] line, once; the bell is gone",
       ui.LITE_RESUMED + "\nso is it done?\n[RESULT message] Deeper side: The wait is over." in asked[-1]
       and not ui.voice_status(sid).get("waiting"), asked[-1])
+check("    and tells the voice what it worded ahead was never said", "[UNHEARD]" in asked[-1] and "The wait is over." in
+      asked[-1].split("[UNHEARD]")[1], asked[-1])
 answers.append("Yes.")
 ui.ask_spoken(sid, "great", None, None)
 check("    once", ui.LITE_RESUMED not in asked[-1], asked[-1])
@@ -764,14 +785,14 @@ check("  a click on the mini window pauses the call", ui.call_muted(sid) is True
 check("  and the log says so, and where it came from", ("lite: %s: paused (mini window)" % sid) in logged, logged[-5:])
 hand("make the slides")
 n, asked_model = len(ui.VOICE[sid].told), len(told_model)
+replies.append("The slides are done.")
 back("The slides are done.")
-check("  a result that comes back while paused is held: nothing said, and the call says something waits",
-      wait(lambda: ui.voice_status(sid).get("waiting")) and (time.sleep(0.3) or True) and len(told_model) == asked_model
+check("  a result that comes back while paused is held: nothing said (worded ahead, for Resume), and the call says something waits",
+      wait(lambda: ui.voice_status(sid).get("waiting")) and wait(lambda: len(told_model) == asked_model + 1)
       and len(ui.VOICE[sid].told) == n, ui.voice_status(sid))
 seen = mini()
 check("  the mini window shows the bell (waiting)", "waiting" in seen["cls"].split() and seen["voice"].get("waiting") is True, seen)
-replies.append("While you were away: the slides are done.")
-seen = mini("click")
+seen = mini("click")                            # what waited was worded while paused: said, the voice not asked again
 check("  a click again resumes, logged, and the voice says what waited",
       ui.call_muted(sid) is False and ("lite: %s: resumed (mini window)" % sid) in logged
       and wait(lambda: len(ui.VOICE[sid].told) > n) and "The slides are done." in told_model[-1], (seen, logged[-5:], told_model[asked_model:]))

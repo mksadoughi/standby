@@ -3625,9 +3625,6 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
         c["tasks_sent"] = tasks
     if tasks:                                      # the call's work as facts (what ended, the voice has now)
         notes.append(tasks)
-    if c.pop("rang", False):                       # they're back from a pause where something waited
-        notes.append(LITE_RESUMED)
-        rang = True
     # what the session told its voice that wasn't said yet (they were talking): with their turn, after their words
     carried = [m for m in c.get("inbox", []) if not m["seen"]]
     for m in carried:
@@ -3642,9 +3639,14 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
             c["visual_told"] = seen
     # news the voice worded that they never heard (they spoke first): in its conversation as said, so it's told
     # here, never told again on its own (it called that a repeat; "which notification?" after a Resume)
-    unheard = c.pop("unheard", []) + (vs.take_told() if hasattr(vs, "take_told") else [])
+    ahead = c.pop("preword", None)                # worded while paused, never said: they spoke first
+    unheard = c.pop("unheard", []) + ([ahead["line"]] if ahead and ahead.get("line") else []) + (
+        vs.take_told() if hasattr(vs, "take_told") else [])
     if unheard:
         notes.append(LITE_UNHEARD % "\n".join(unheard))
+    if c.pop("rang", False):                       # they're back from a pause where something waited
+        notes.append(LITE_RESUMED)
+        rang = True
     typed_rows = list(c.get("typed") or [])
     typed = _lite_typed_words(sid, c)              # what they typed or pasted in the chat: their words too
     if typed:
@@ -3750,6 +3752,8 @@ def _lite_cancel(sid, c, tid):
 
 # Back from a pause where something waited (the red dot showed): one line, a fact for the voice's own judgement
 LITE_RESUMED = "[RESUMED] They're back. While paused, they saw something was waiting."
+# Worded again while they're still away: more came back since the line it worded ahead, which was never said.
+LITE_REWORDED = "[NOT SAID YET] They're still away, and more came back: this replaces what you were going to tell them."
 
 
 def _lite_of(c, hid):
@@ -3897,19 +3901,72 @@ def _lite_messages(items):
     return "\n".join(LITE_DEEPER + m["text"] for m in items)
 
 
-def _lite_tell(sid):
-    """The voice's own turn for what came back: while they talk, or a turn is answered or said, it waits (a
-    turn of theirs then carries it); paused, it waits in silence and the pause shows something is waiting
-    (voice_status's "waiting"); quiet a while, the voice is asked, then, still quiet, what it says is said.
-    The session's own text stays in Claude Code's chat and the call's log."""
+def _lite_pick(news):
+    """What a telling is of: the session's messages first; a lost hand-off in a turn of its own. (news, messages?)"""
+    messages = [m for m in news if "id" not in m]
+    return (messages or news), bool(messages)
+
+
+def _lite_news_key(news):
+    """What a worded telling was of, to tell whether the news changed since."""
+    return tuple((t.get("id"), t.get("state"), t.get("text") or t.get("result")) for t in news)
+
+
+def _lite_word(sid, c, news, resumed, typed, again=False):
+    """The voice asked to word `news` (its told turn): what it was asked, its line, and work it takes deeper
+    from it (handed on only once the line is said). again: a line worded ahead, while paused, that the news
+    outgrew before they were back."""
     import agentctl
     import voice as voice_mod
+    news, messages = _lite_pick(news)
+    now = time.time()
+    facts = _lite_messages(news) if messages else "\n".join(_lite_task_line(t, now, full=True) for t in news)
+    how = "message" if messages else "error" if any(t["state"] == "failed" for t in news) else "aborted" if all(
+        t["state"] == "stopped" for t in news) else "done"
+    body = "[RESULT %s] %s%s" % (how, ("%s\n" % typed) if typed else "", facts)
+    asked = "%s\n%s\n[END RESULT]" % (LITE_RESUMED, body) if resumed else body
+    if again:
+        asked = "%s\n%s" % (LITE_REWORDED, asked)
+    try:
+        answer = agentctl.ask(VOICE_TAG + asked, err=None)
+    except Exception as exc:
+        log("lite: telling the voice how it went: %r" % exc)
+        answer = None
+    failed = answer is None or answer.strip() == "(stopped)" or voice_mod.spoken_error(answer) != answer
+    work = None
+    if not failed:
+        answer = answer.replace(END_TAG, "")       # news isn't the user asking to hang up
+        answer = answer.replace(SHOW_TAG, "")      # brought into view only on their yes, in a turn of theirs
+        if HANDOFF_TAG in answer:                  # it takes something deeper from the news: its words, then the work
+            answer, work = answer.split(HANDOFF_TAG, 1)
+            work = work.strip() or None
+    line = LITE_FALLBACK.get(how, LITE_FALLBACK["done"]) if failed else _lite_spoken("" if answer.strip() == QUIET_TAG else answer)
+    return {"news": news, "key": _lite_news_key(news), "how": how, "messages": messages, "asked": asked,
+            "failed": failed, "line": line, "work": work, "typed": typed}
+
+
+def _lite_tell(sid):
+    """The voice's own turn for what came back: while they talk, or a turn is answered or said, it waits (a
+    turn of theirs then carries it); quiet a while, the voice is asked, then, still quiet, what it says is said.
+    Paused, the pause shows something is waiting (voice_status's "waiting"), and it's worded then, ahead (again if
+    more comes), so Resume says it at once: worded after Resume, it took a silent 7 to 10 s (talk-20261031-004108).
+    The session's own text stays in Claude Code's chat and the call's log."""
     c = LITE_CALLS.get(sid)
     try:
         quiet = None
         while sid in LITE_CALLS and _lite_untold(c, sid):
             if call_muted(sid):
                 c["rang"], quiet = True, None      # the red dot shows: they'll know it's there
+                waiting, _m = _lite_pick(_lite_untold(c, sid))
+                ahead = c.get("preword")
+                if not c.get("hanging_up") and (ahead is None or ahead["key"] != _lite_news_key(waiting)):
+                    typed = "\n".join(x for x in ((ahead or {}).get("typed"), _lite_typed_words(sid, c)) if x)
+                    trace(sid, "told", how="ahead", alone=True, after_pause=True, tasks=[t["id"] for t in waiting if "id" in t])
+                    t0 = time.time()
+                    c["preword"] = _lite_word(sid, c, waiting, True, typed, again=ahead is not None)
+                    trace(sid, "told_done", how="ahead", ms=int((time.time() - t0) * 1000), said=c["preword"]["line"] or None,
+                          failed=bool(c["preword"]["failed"]))
+                    continue                       # what came meanwhile is looked at again at once
             elif _lite_user_busy(sid):
                 quiet = None
             else:
@@ -3918,40 +3975,31 @@ def _lite_tell(sid):
                     break
             time.sleep(LITE_QUIET_STEP)
         news = _lite_untold(c, sid) if sid in LITE_CALLS else []
+        ahead = c.pop("preword", None) if c is not None else None
         if not news:
-            return                                 # a turn of theirs carried it
-        messages = [m for m in news if "id" not in m]
-        news = messages or news                    # the session's messages first; a lost hand-off in a turn of its own
-        for t in news:
+            return                                 # a turn of theirs carried it (and was told what wasn't said: lite_ask)
+        picked, _m = _lite_pick(news)
+        for t in picked:
             t["seen"] = True
         if c.get("hanging_up"):                    # the voice said goodbye: kept in the call's log, not said
-            _lite_came_back(sid, news)
+            _lite_came_back(sid, picked)
             log("lite: %s: what came back after the goodbye: kept, not said" % sid)
             return
         resumed = c.pop("rang", False)
-        typed = _lite_typed_words(sid, c)
-        now = time.time()
-        facts = _lite_messages(news) if messages else "\n".join(_lite_task_line(t, now, full=True) for t in news)
-        how = "message" if messages else "error" if any(t["state"] == "failed" for t in news) else "aborted" if all(
-            t["state"] == "stopped" for t in news) else "done"
         t0 = time.time()
-        trace(sid, "told", how=how, alone=True, after_pause=bool(resumed), tasks=[t["id"] for t in news if "id" in t], messages=len(messages))
-        body = "[RESULT %s] %s%s" % (how, ("%s\n" % typed) if typed else "", facts)
-        asked = "%s\n%s\n[END RESULT]" % (LITE_RESUMED, body) if resumed else body
-        try:
-            answer = agentctl.ask(VOICE_TAG + asked, err=None)
-        except Exception as exc:
-            log("lite: telling the voice how it went: %r" % exc)
-            answer = None
-        failed = answer is None or answer.strip() == "(stopped)" or voice_mod.spoken_error(answer) != answer
-        if not failed:
-            answer = answer.replace(END_TAG, "")   # news isn't the user asking to hang up
-            answer = answer.replace(SHOW_TAG, "")  # brought into view only on their yes, in a turn of theirs
-            if HANDOFF_TAG in answer:              # it takes something deeper from the news: its words, then the work
-                answer, work = answer.split(HANDOFF_TAG, 1)
-                if work.strip() and sid in LITE_CALLS:
-                    _lite_hand(sid, c, work.strip())
-        line = LITE_FALLBACK.get(how, LITE_FALLBACK["done"]) if failed else _lite_spoken("" if answer.strip() == QUIET_TAG else answer)
+        if ahead is not None and ahead["key"] == _lite_news_key(picked):
+            w = ahead                              # worded while they were away: said at once
+            trace(sid, "told", how=w["how"], alone=True, after_pause=True, ahead=True,
+                  tasks=[t["id"] for t in picked if "id" in t], messages=len(picked) if w["messages"] else 0)
+        else:
+            if ahead is not None and ahead["line"]:
+                c.setdefault("unheard", []).append(ahead["line"])    # its own turn had it; never said
+            typed = _lite_typed_words(sid, c)
+            w0 = _lite_pick(picked)
+            trace(sid, "told", how="message" if w0[1] else "done", alone=True, after_pause=bool(resumed),
+                  tasks=[t["id"] for t in picked if "id" in t], messages=len(picked) if w0[1] else 0)
+            w = _lite_word(sid, c, picked, resumed, typed)
+        news, how, failed, line, asked = picked, w["how"], w["failed"], w["line"], w["asked"]
         trace(sid, "told_done", how=how, ms=int((time.time() - t0) * 1000), said=line or None, failed=bool(failed))
         if sid not in LITE_CALLS or c.get("hanging_up"):
             return                                 # the call ended, or it said goodbye, while this was worded
@@ -3965,7 +4013,10 @@ def _lite_tell(sid):
             log("lite: %s: what came back: not said yet, they spoke while it was worded: their turn has it" % sid)
             c.setdefault("unheard", []).append(line)
             line = ""
-        log("lite: %s: what came back (%s, %.1fs): the voice %s" % (sid, how, time.time() - t0,
+        if w["work"] and sid in LITE_CALLS:
+            _lite_hand(sid, c, w["work"])          # work it takes deeper from the news, as it says so
+        log("lite: %s: what came back (%s, %.1fs%s): the voice %s" % (sid, how, time.time() - t0,
+            ", worded while paused" if w is ahead else "",
             "says it (%d words)" % len(line.split()) if line else "says nothing now"))
         if not failed:                             # the call's record: told, and what of it the voice said
             sbledger.append(sid, "asked", asked)
