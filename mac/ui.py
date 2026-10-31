@@ -3212,8 +3212,10 @@ LITE_CALL_NOTE = (
     "deeper side, doing the work. What the voice hands you arrives as \"From your call: ...\", with what was said "
     "since the last hand-off attached. While the call is on, the user hears only the voice, never you: what they "
     "should know, a result, a question for them, something waiting on their OK, goes to it with the tell_voice "
-    "tool (mcp__standby__tell_voice) when you judge they'd want it, and the voice decides whether, when and how to say it. Their answers "
-    "come back from the call. They can still type to you here.")
+    "tool (mcp__standby__tell_voice) when you judge they'd want it, and the voice decides whether, when and how to say it. "
+    "It sees nothing of your work unless you tell it: a brief word when something it handed you is done, or when the "
+    "conversation shows it needs to know, not a running commentary. Their answers come back from the call. They can "
+    "still type to you here.")
 LITE_CALL_NOTE_END = "[Standby] The call has ended. Answer the user here, as usual."
 LITE_CONVERSATION = ("The call since %s, as speech-to-text heard the user (Voice is what your voice side said):\n%s")
 LITE_DELIVER_WAIT = 20.0                      # a hand-off the mod hasn't confirmed by then never reached the session

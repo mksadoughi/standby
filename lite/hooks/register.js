@@ -868,7 +868,8 @@ async function band($, e, next) {
 const TELL_VOICE = 'On a voice call with the user, tell your voice side something. The voice hears the user and speaks for you; '
   + 'while the call is on they hear only it, never you. Use this when you judge they\u2019d want to know something: what came of '
   + 'their work, a question for them, something waiting on their OK, something you found. Write it for the voice, plainly and '
-  + 'whole; it decides whether, when and how to say it, and their answer comes back from the call.'
+  + 'whole; it decides whether, when and how to say it, and their answer comes back from the call. It sees nothing of your work '
+  + 'unless you tell it: a brief word when something it handed you is done, or when the conversation shows it needs to know, not a running commentary.'
 
 // The call this session is on, if any: the one it started, or one Standby says is live for it
 function callSession() {
