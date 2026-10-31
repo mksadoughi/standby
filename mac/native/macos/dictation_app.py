@@ -1781,8 +1781,11 @@ class Controller(NSObject):
 
     @python_method
     def setup_heard(self, text=None, failed=None):
-        """Step 4's try: its words (setup is done), or what it said instead."""
+        """Step 4's try: its words (setup is done), or what it said instead. Its "Transcribing…" goes now,
+        as a pasted dictation's does: it stayed on screen once the window closed (the user's screenshot)."""
         self.setup_tried, self.setup_failed = (text, None) if text else (self.setup_tried, failed)
+        if not self.listening and not self.pending:
+            self.hud.hide()
         self.after_permissions()
         self.write_status()
 

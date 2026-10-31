@@ -1837,8 +1837,12 @@ else:
     c.setupAction_(Tag(4))
     check("    Try again: the box waits again", c.setup.model["steps"][3]["box"] == d.SETUP_TRY_EMPTY)
     c.pending = 1
+    c.listening = False
+    c.hud.show("Transcribing…", spin=True)
     c._deliver("testing one two", None, None)
     m = c.setup.model
+    check("  its \"Transcribing…\" goes once the words are in (it stayed on screen after the window closed)",
+          c.hud.shown[-1] is None, c.hud.shown[-3:])
     check("  words: in the box, never pasted into an app, and it's done",
           m["title"] == d.SETUP_DONE and m["count"] == "All done" and m["steps"][3]["box"] == "testing one two" and m["steps"][3]["button"] == "Done"
           and m["steps"][3]["note"] == "Dictation is on. Use Right Command twice in any app." and len(c.inserter.got) == pasted, m["steps"][3])
