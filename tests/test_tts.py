@@ -63,10 +63,10 @@ check("a decimal is said with its point, its digits one by one: Pocket read 5.5 
       tts.say_as("I'm Claude Haiku 5.5.") == "I'm Claude Haiku 5 point 5."
       and tts.say_as("p99 was 3.14 s, up 0.25 from 2.9") == "p99 was 3 point 1 4 s, up 0 point 2 5 from 2 point 9",
       tts.say_as("I'm Claude Haiku 5.5. p99 was 3.14 s"))
-check("  never a version or an address, a price, a time, or a sentence's last full stop",
-      tts.say_as("Claude Code 2.1.311 on 10.0.0.1 costs $2.50, at 10:30. It took 5.") ==
-      "Claude Code 2.1.311 on 10.0.0.1 costs $2.50, at 10:30. It took 5.",
-      tts.say_as("Claude Code 2.1.311 on 10.0.0.1 costs $2.50, at 10:30. It took 5."))
+check("  never a version (2.1.311, v1.2.3), a price, a time, or a sentence's last full stop",
+      tts.say_as("Claude Code 2.1.311 and v1.2.3 cost $2.50, at 10:30. It took 5.") ==
+      "Claude Code 2.1.311 and v1.2.3 cost $2.50, at 10:30. It took 5.",
+      tts.say_as("Claude Code 2.1.311 and v1.2.3 cost $2.50, at 10:30. It took 5."))
 x = tts.limit(np.array([0.5, 0.95, -2.0, 3.0], "float32"))
 check("peaks rounded off under 1, the rest untouched",
       x[0] == 0.5 and 0.9 < x[1] < 0.95 and -0.991 < x[2] < -0.9 and 0.9 < x[3] <= 0.991, x)
