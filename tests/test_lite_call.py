@@ -312,6 +312,8 @@ answers.append("Sure.")
 ui.ask_spoken(sid, "anything", None, None)
 check("  switched off in Settings mid-call: told once that it can't show one (it said it had, talk-20261031-214552)",
       ui.LITE_VISUALS_OFF in asked[-1], asked[-1][:300])
+check("    and what it'd have shown, it says, never as a card to look for (it said \"here's the card\", talk-20261101-002412)",
+      "never as a card or picture they could look for" in asked[-1], asked[-1][:300])
 answers.append("Sure.")
 ui.ask_spoken(sid, "anything else", None, None)
 check("    once", "[VISUALS]" not in asked[-1], asked[-1][:300])

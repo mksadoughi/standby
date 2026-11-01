@@ -3878,7 +3878,8 @@ def lite_progress(b):
 # Where a visual the voice asks for would be seen now (visual_where), as a fact for it.
 LITE_VISUAL_SEEN = "[VISUALS] A visual you ask for now would be seen in %s."
 LITE_VISUAL_UNSEEN = "[VISUALS] A visual you ask for now wouldn't be seen: no Standby window is up."
-LITE_VISUALS_OFF = "[VISUALS] Visuals are off in Settings now: you can't show one, and nothing you ask for is drawn."
+LITE_VISUALS_OFF = ("[VISUALS] Visuals are off in Settings now: you can't show one, and nothing you ask for is drawn, so "
+                    "whatever you'd have shown, you say, never as a card or picture they could look for.")
 LITE_VISUALS_ON = ("[VISUALS] Visuals are on now in Settings: put [VISUAL: what to show] in your reply and it's drawn "
                    "beside the call while you keep talking.")
 SHOW_TAG = "[SHOW VISUAL]"                     # standby-agent's: the voice brings its visuals into view
