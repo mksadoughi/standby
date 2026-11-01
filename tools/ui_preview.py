@@ -409,7 +409,6 @@ SCENES = r"""
   if (SCENE === "settings") { await openSettings() }
   if (SCENE === "settings-call" || SCENE === "settings-talkover") { await openSettings(); setPane("call") }
   // Thinking: not picked (as Claude Code is set, here high), then each choice
-  if (SCENE === "settings-call") { EFFINH = "high"; setEffort("auto", true) }
   if (SCENE.startsWith("settings-call-")) { await openSettings(); setPane("call"); setEffort(SCENE.slice(14), true) }
   if (SCENE === "settings-permissions") { await openSettings(); setPane("permissions"); await wait(300) }
   if (SCENE === "dictation" || SCENE === "dictation-words") { await openSettings(); setPane("dictation") }

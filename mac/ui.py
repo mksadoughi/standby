@@ -591,6 +591,7 @@ DEFAULTS = {"push_lines": 10, "speakers": True, "capture": "auto",
             "remember_voices": True, "lite_transcript": "ask",
             "auto_stop_min": 15, "auto_accept": False, "call_visuals": True}
 VOICE_EFFORTS = ("auto", "low", "medium", "high")   # the voice's thinking (Settings > Call); auto: Claude Code's own
+VOICE_EFFORT_DEFAULT = "low"   # Haiku's pick, explicit: never silently Claude Code's own (the user, 2026-10-31)
 LITE_PASSES = ("ask", "live")     # a meeting from Claude Code: its transcript with each prompt, or pushed as it goes
 VOICES = ROOT / "voices.json"
 # the speech model being downloaded, if one is: {"key", "state", "done", "total", "error"}.
@@ -678,7 +679,7 @@ def get_settings():
     cfg = transport.load_config()
     a = transport.agent_settings(cfg)
     return {"model": a["model"], "voice_model": a["voice_model"],
-            "voice_effort": a.get("voice_effort") if a.get("voice_effort") in VOICE_EFFORTS else "auto",
+            "voice_effort": a.get("voice_effort") if a.get("voice_effort") in VOICE_EFFORTS else VOICE_EFFORT_DEFAULT,
             "voice_effort_inherit": claude_effort(),        # what "auto" is: Claude Code's own effortLevel, if it has one
             "push_lines": int(cfg.get("push_lines", DEFAULTS["push_lines"])),
             "speakers": bool(cfg.get("speakers", DEFAULTS["speakers"])),
@@ -841,11 +842,8 @@ def set_settings(b):
         a["model"] = b["model"]
     if b.get("voice_model") in ("sonnet", "opus", "haiku"):
         a["voice_model"] = b["voice_model"]
-    if b.get("voice_effort") in VOICE_EFFORTS:           # "auto": Claude Code's own, as before
-        if b["voice_effort"] == "auto":
-            a.pop("voice_effort", None)
-        else:
-            a["voice_effort"] = b["voice_effort"]
+    if b.get("voice_effort") in VOICE_EFFORTS:           # "auto": Claude Code's own; unset: low
+        a["voice_effort"] = b["voice_effort"]
     cfg["agent"] = a
     for legacy in ("host", "remote_dir", "workspace", "claude_on_start"):
         cfg.pop(legacy, None)
@@ -921,7 +919,7 @@ def _named_settings():
         ("voice", "the voice Standby speaks in", voice_now,
          ["automatic"] + [v["name"] for v in vs.get("standby", []) + vs.get("voices", [])], "voice"),
         ("voice_model", "the model the voice talks with", st["voice_model"], list(MODEL_NAMES), "voice_model"),
-        ("voice_thinking", "how hard the voice thinks before it answers, from the next call (auto: as Claude Code is set)",
+        ("voice_thinking", "how hard the voice thinks before it answers, from the next call (low unless set; auto: as Claude Code is set)",
          st["voice_effort"], list(VOICE_EFFORTS), "voice_effort"),
         ("model", "the model of Standby's meeting agent", st["model"], list(MODEL_NAMES), "model"),
         ("talk_over", "talk over the voice to interrupt it", onoff(st["talk_over"]), list(ON_OFF), "talk_over"),
@@ -7633,7 +7631,7 @@ async function openSettings(pane){if(!SETWIN&&window.pywebview&&pywebview.api&&p
     try{const r=await pywebview.api.open_settings(typeof pane==="string"?pane:null);if(r&&r.ok)return}catch(e){}}
   return showSettings(pane)}
 async function showSettings(pane){const r=await api("/api/settings"),s=r.settings;
-  $("s_vmodel").value=s.voice_model||"haiku";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"auto",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
+  $("s_vmodel").value=s.voice_model||"haiku";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"low",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
   $("s_remember").checked=!!s.remember_voices;
   // Talking over Claude (the duplex engine): from the next voice mode; a quiet line when the mic chosen can't
   $("s_autoaccept").checked=!!s.auto_accept;$("s_visuals").checked=s.call_visuals!==false;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}
