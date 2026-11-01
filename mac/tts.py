@@ -93,7 +93,12 @@ def voices():
 # Only what is heard changes; the sentence shown, and kept, is the one Claude wrote. Measured
 # by the recorder's own speech model on Pocket's sound: "Standby" came out "Stanby", "Stabby",
 # "Stan B" (20 of 20 sentences, Jean and Alba); "Stand by" right in 20 of 20.
-SAY_AS = [(re.compile(r"\bstandby\b", re.I), "Stand by")]
+# A decimal is said with its point, its digits after it one by one, as people say it: Pocket read
+# "Claude Haiku 5.5" as "five five". Not a version or an address (a second point: 2.1.311), nor a
+# price (after $, £ or €); a time is written with a colon and never matches.
+DECIMAL = re.compile(r"(?<![\d.$£€])(\d+)\.(\d+)(?!\.?\d)")
+SAY_AS = [(re.compile(r"\bstandby\b", re.I), "Stand by"),
+          (DECIMAL, lambda m: "%s point %s" % (m.group(1), " ".join(m.group(2))))]
 
 
 def say_as(text):
