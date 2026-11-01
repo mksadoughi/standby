@@ -325,6 +325,19 @@ MAX_UTT = UtteranceTranscriber.MAX_UTT    # the longest an utterance runs with n
 import devices  # noqa: E402  (the Mac's mics, and which input to open: dictation's too)
 from calltrace import trace  # noqa: E402  (a call's trace.jsonl: sbtrace)
 TRACE = {"sid": None}     # the call this recorder traces (a talk), else None: nothing written
+# Voice mode: the pauses Claude starts on early (config voice_mode.early_asks): "likely", where the turn verdict
+# says it's likely over; "every", any with an early decode; "chunk", the likely ones, and others once
+# EARLY_CHUNK_WORDS more words have come since the last asked on, at most EARLY_CHUNK_MOST of those a turn
+EARLY_ASKS, EARLY_CHUNK_WORDS, EARLY_CHUNK_MOST = "likely", 5, 2
+
+
+def early_ask_at(mode, text, asked, chunks):
+    """At a pause the turn verdict thinks they go on from: does Claude start on `text` all the same? asked: the
+    turn's words last asked on early (None: none yet); chunks: its "chunk" asks so far."""
+    if text == asked or mode not in ("every", "chunk"):
+        return False
+    grown = len(text.split()) - len((asked or "").split())
+    return mode == "every" or (grown >= EARLY_CHUNK_WORDS and chunks < EARLY_CHUNK_MOST)
 
 MIC_ROLES = devices.MIC_ROLES
 VIRTUAL_INPUTS = devices.VIRTUAL_INPUTS
@@ -3244,7 +3257,8 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
     # floor: the hold is Claude speaking (the app's "floor"), not a mute or a dictation elsewhere
     dictation = {"ctl": None, "seq": None, "stop_at": None, "mode": None, "turn": 0, "floor": False}
     voice = {"turns": None, "io": None, "half": False, "why": None, "rebuilt": False,    # half: this voice mode, no engine (why)
-             "early_no": [], "early_lost": 0}    # this turn's early decodes that asked nothing, and why
+             "early_no": [], "early_lost": 0,    # this turn's early decodes that asked nothing, and why
+             "asked": None, "chunks": 0}         # its words last asked on early, and its "chunk" asks so far
     make_room = room_only()
     room = {"ref": None}                # the Mac's sound, while dictating or in voice mode
 
@@ -3264,10 +3278,19 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
     ident = VoiceIdentity(sdir, cfg, kind, mics=lambda: mics(), speakers=lambda: _speakers,
                           seq=lambda: dictation["seq"], talking=lambda: getattr(voice["io"], "talking", False))
 
+    # Early asks beyond the likely pauses (the user, 2026-10-31): the voice starts on the words at other pauses
+    # too, whatever the turn verdict; its answer is still held until the turn is over, and dropped if they go
+    # on. The verdict missed the user's last pause in every slow turn measured (talk-20261031-173859 turn 11:
+    # 31 of 44 judged unlikely there). tools/early_asks_replay.py weighs the ways against the user's calls.
+    early_asks = (cfg.get("voice_mode") or {}).get("early_asks", EARLY_ASKS)
+    early_asks = early_asks if early_asks in ("likely", "every", "chunk") else EARLY_ASKS
+
     def likely_turn():
         """Voice mode: words at a short pause, before their utterance closes,
         that would end the turn if they are the last: Claude may start on them. The
-        end_turn that follows says whether they were."""
+        end_turn that follows says whether they were. With early_asks "every" or "chunk", words
+        the verdict thinks go on are written too (early_ask): the voice asks on them, and nothing
+        else reads them as a turn or an interruption."""
         for c in mics():
             early = c.take_early()
             if early is None or not c.speaking:
@@ -3279,14 +3302,21 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
                 row = {"turn": dictation["turn"], "likely_turn": True, "text": t.heard_with(early[2]),
                        "why": getattr(t, "last_why", None)}
                 dictation_row(row)
+                voice["asked"] = row["text"]
                 log("voice: turn %d likely over (%s)" % (dictation["turn"], getattr(t, "last_why", None)))
                 trace(TRACE["sid"], "turn_likely", dictation["turn"], likely=True, why=getattr(t, "last_why", None),
                       p=getattr(t, "last_p", None), text=row["text"])
             else:
-                why = getattr(t, "last_why", None) or "no"
-                voice["early_no"].append(why)
-                log("voice: turn %d not likely over yet (%s)" % (dictation["turn"], why))
+                why, text = getattr(t, "last_why", None) or "no", t.heard_with(early[2])
+                ask = early_ask_at(early_asks, text, voice["asked"], voice["chunks"])
+                log("voice: turn %d not likely over yet (%s)%s" % (dictation["turn"], why, ": asked early all the same"
+                                                                     if ask else ""))
                 trace(TRACE["sid"], "turn_likely", dictation["turn"], likely=False, why=why, p=getattr(t, "last_p", None))
+                if ask:
+                    dictation_row({"turn": dictation["turn"], "early_ask": True, "text": text, "why": why})
+                    voice["asked"], voice["chunks"] = text, voice["chunks"] + (early_asks == "chunk")
+                else:
+                    voice["early_no"].append(why)       # an early decode that asked nothing, and why
 
     def end_turn(text):
         t = voice["turns"]
@@ -3299,7 +3329,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
                "p": None if t.last_p is None else round(t.last_p, 3),
                # about when the user stopped speaking, for voice mode's timing
                "spoke_until": round(t.last_closed - quiet, 3) if t.last_closed else None}
-        voice["early_no"], voice["early_lost"] = [], lost
+        voice["early_no"], voice["early_lost"], voice["asked"], voice["chunks"] = [], lost, None, 0
         dictation_row(row)
         log("voice: turn %d over%s" % (dictation["turn"], "" if t.last_p is None
                                        else " (finished %.2f)" % t.last_p))

@@ -959,7 +959,7 @@ class VoiceSession(object):
                 if row.get("done"):
                     self.stop("recording stopped")
                     return
-                if row.get("likely_turn"):
+                if row.get("likely_turn") or row.get("early_ask"):
                     if interrupt.is_words(row.get("text", "")):      # "mm-hm" asks nothing
                         self._ask_early(row)
                 elif row.get("end_turn"):
@@ -980,7 +980,7 @@ class VoiceSession(object):
                     self._converse(question, row.get("spoke_until"), ask=self._take_early(question))
                     if self._stop.is_set():
                         return
-                elif row.get("text") and not row.get("likely_turn"):
+                elif row.get("text") and not row.get("likely_turn") and not row.get("early_ask"):
                     if row.get("turn") in self._skip and interrupt.is_words(row["text"]):
                         self._skip.discard(row.get("turn"))   # they went on to say something
                     heard.append(row["text"])
@@ -1049,10 +1049,10 @@ class VoiceSession(object):
 
     # -- asking on likely-final words ------------------------------------
     def _ask_early(self, row):
-        """The recorder heard words that would end the turn if they are the last:
-        ask now, ~0.25 s before the turn is surely over, and keep the answer until
-        it is (held). Only while listening, once per words: the same words again
-        change nothing, other words replace the early question."""
+        """The recorder heard words that would end the turn if they are the last (likely_turn), or, with
+        early asks at every pause, words at any pause (early_ask): ask now, before the turn is surely
+        over, and keep the answer until it is (held). Only while listening, once per words: the same
+        words again change nothing, other words replace the early question."""
         text = self._joined(row.get("text", ""))
         if not text or self.state != "listening":
             return
@@ -1064,7 +1064,8 @@ class VoiceSession(object):
         trace(self.sid, "early", row.get("turn"), step="asked", words=text)
         self.early_asks += 1
         self._early_turn["asked"] += 1
-        self.log("voice %d: asked early, on likely-final words" % self.seq)
+        self.log("voice %d: asked early, on %s" % (self.seq, "likely-final words" if row.get("likely_turn")
+                                                   else "words at a pause (%s)" % (row.get("why") or "not likely")))
 
     def _take_early(self, question):
         """The turn is over: the early question if it was for exactly this one (its
@@ -1397,7 +1398,9 @@ class VoiceSession(object):
         if row.get("end_turn"):
             self._skip.discard(row.get("turn"))      # a turn judged here, word by word: no question
             return None
-        if not row.get("text"):
+        if not row.get("text") or row.get("early_ask"):
+            # early_ask: words at a pause the verdict thinks they go on from, for asking early only; during an
+            # answer, as before there were such rows, their words' own row decides
             return None
         if row.get("likely_turn"):
             # Likely-final words, before their utterance closes: more to the question,

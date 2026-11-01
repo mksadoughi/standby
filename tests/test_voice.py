@@ -980,6 +980,53 @@ f.mute(False)
 f.stop()
 recorder["on"] = False
 
+# Early asks at every pause (voice_mode.early_every_pause, the user's yes 2026-10-31): the recorder writes an
+# early_ask row at a pause the verdict thinks they go on from. The voice asks on it, held, as on likely-final
+# words; during an answer it is no turn and no interruption (the words' own row decides, as ever).
+recorder["on"] = True
+threading.Thread(target=fake_recorder, daemon=True).start()
+asked.clear(); cancelled.clear()
+spk5, said5 = FakeSpeaker(), []
+h = voice.VoiceSession("m1", sdir, ask=fake_ask, cancel=cancelled.append, speaker=spk5, log=said5.append)
+h.GUARD = 0.1
+h.start()
+
+
+def hrow(**kw):
+    with open(rows_path, "a") as fh:
+        fh.write(json.dumps(dict(kw, seq=h.seq)) + "\n")
+
+
+hrow(turn=0, early_ask=True, text="So what is Orion and", why="no punctuation")
+check("words at a pause judged to go on: asked early all the same, and nothing said",
+      wait(lambda: asked == ["So what is Orion and"], 2) and (time.sleep(0.4) or True) and spk5.said == []
+      and h.status()["state"] == "listening", (asked, spk5.said, h.status()))
+check("  the log says why it was asked", any("asked early, on words at a pause (no punctuation)" in m for m in said5), said5[-3:])
+hrow(turn=0, early_ask=True, text="So what is Orion and who owns it?", why="low p")
+check("  more words at the next pause: the first is dropped, its answer never said, the new words asked",
+      wait(lambda: asked == ["So what is Orion and", "So what is Orion and who owns it?"] and h.early_dropped == 1
+           and h._early is not None and h._early.text == "So what is Orion and who owns it?", 2)
+      and spk5.said == [], (asked, h.early_dropped, spk5.said))
+hrow(turn=0, end_turn=True, text="So what is Orion and who owns it?", spoke_until=time.time() - 0.5)
+check("  the turn ends on those words: the early answer is taken and said, nothing asked again",
+      wait(lambda: spk5.said == ["Orion is the routing cache.", "It replaced Redis in Q2."], 3) and len(asked) == 2,
+      (asked, spk5.said))
+check("  (listening again)", wait(lambda: h.status()["state"] == "listening", 10), h.status())
+hrow(turn=1, early_ask=True, text="Mm-hm.", why="no")
+time.sleep(0.3)        # on purpose: an early ask would have gone in this time
+check("  an \"mm-hm\" at a pause asks nothing", len(asked) == 2, asked)
+mode["think"] = 6.0
+hrow(turn=1, end_turn=True, text="What changed in Q2?")
+check("  (Claude is thinking on the next turn)", wait(lambda: len(asked) == 3 and h.status()["state"] == "thinking", 5),
+      (asked, h.status()))
+hrow(turn=2, early_ask=True, text="Wait, and the budget", why="no punctuation")
+time.sleep(0.4)        # on purpose: a cut, more to the question or an ask would have come in this time
+check("while it thinks, words at a pause judged to go on change nothing: no cut, no more, nothing asked",
+      len(asked) == 3 and "q3" not in cancelled and h.status()["state"] == "thinking", (asked, cancelled, h.status()))
+mode["think"] = 0
+h.stop()
+recorder["on"] = False
+
 # No cap (10/25): early questions go however many were dropped; each turn's line says what came of them.
 c = voice.VoiceSession.__new__(voice.VoiceSession)
 c._early_turn = {"asked": 0, "dropped": []}

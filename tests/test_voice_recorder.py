@@ -167,6 +167,18 @@ check("  the turn then ends as ever, with the same words", wait(lambda: len(turn
 Script.talking, Script.early = "so what I mean is", (1.0, 2.0, "so what I mean is", None)
 time.sleep(0.5)        # on purpose: a likely row would have been written in this time
 check("  words that go on (no closing punctuation) are not likely", len(likely()) == 1, likely())
+at_pause = lambda: [r for r in rows() if r.get("seq") == 7 and r.get("early_ask")]
+check("  and, with early asks at the likely pauses only (the default), asked nothing early",
+      sb.EARLY_ASKS == "likely" and at_pause() == [], at_pause())
+# The other ways (voice_mode.early_asks), at a pause the verdict thinks they go on from
+check("early asks \"every\": any new words at a pause; the same words again, no",
+      sb.early_ask_at("every", "so what I mean is", None, 0) and not sb.early_ask_at("every", "so", "so", 0)
+      and not sb.early_ask_at("likely", "so what I mean is the plan", None, 0))
+check("  \"chunk\": once 5 more words have come since the last asked on, at most 2 such a turn",
+      sb.early_ask_at("chunk", "one two three four five", None, 0) and not sb.early_ask_at("chunk", "one two three four", None, 0)
+      and sb.early_ask_at("chunk", "a b c d e f g h i j", "a b c d e", 1)
+      and not sb.early_ask_at("chunk", "a b c d e f g h i", "a b c d e", 1)
+      and not sb.early_ask_at("chunk", "a b c d e f g h i j", "a b c d e", 2))
 Script.talking = None
 say("so what I mean is the plan.")
 check("  and closes as one turn, before Claude speaks", wait(lambda: len(turns_over()) == 4)
