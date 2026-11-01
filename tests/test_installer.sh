@@ -184,8 +184,8 @@ HOME="$H" SHELL=/bin/bash STANDBY_UI_PORT=$UIPORT SB_WIN_OUT="$T/win" PYTHONPATH
 check "entry point boots the app window and its server" \
   "[[ $rc -eq 0 && \"\$(cat $T/win 2>/dev/null)\" == 'Standby|http://127.0.0.1:$UIPORT/?token='*'|state-ok' ]]" || tail -5 "$H/.standby/ui.log"
 check "  and logs to ~/.standby/ui.log" "grep -q 'serving http://127.0.0.1:$UIPORT' $H/.standby/ui.log"
-check "an old config's SSH host: moved to this Mac (local mode), the host gone, the voice on Haiku" \
-  "$REALPY -c \"import json,sys; c=json.load(open('$H/.standby/config.json')); sys.exit(not (c['agent']=={'mode':'local','voice_model':'haiku'} and 'host' not in c and 'mic_device' not in c and c['loopback_device']=='BlackHole 2ch'))\""
+check "an old config's SSH host: moved to this Mac (local mode), the host gone" \
+  "$REALPY -c \"import json,sys; c=json.load(open('$H/.standby/config.json')); sys.exit(not (c['agent']=={'mode':'local'} and 'host' not in c and 'mic_device' not in c and c['loopback_device']=='BlackHole 2ch'))\""
 check "PATH line added to ~/.zshrc" "[[ \$(grep -c '.local/bin' $H/.zshrc) -eq 1 ]]"
 check "private dirs are owner-only" "[[ \$(mode_of $H/.standby) == 700 && \$(mode_of $H/.standby/sessions) == 700 ]]"
 DR_APP="$(codesign -d -r- "$H/Applications/Standby.app" 2>&1 | sed -n 's/^designated => //p')"

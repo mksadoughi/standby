@@ -72,22 +72,6 @@ def migrate_capture(cfg):
     return True
 
 
-def migrate_voice_model(cfg):
-    """Once: voice mode's model becomes Haiku (it answers fast; an agent's own model does the
-    work). Sonnet was the default before, and the installer wrote it into every config, so a saved
-    Sonnet is the old default, not a choice. A Haiku or Opus that was saved stays. True when cfg
-    changed."""
-    if cfg.get("voice_model_haiku"):
-        return False
-    cfg["voice_model_haiku"] = True
-    a = cfg.get("agent")
-    if isinstance(a, dict) and a.get("voice_model") == "sonnet":
-        a["voice_model"] = "haiku"
-    if cfg.get("voice_model") == "sonnet":            # an old flat config (agent_settings reads it too)
-        cfg["voice_model"] = "haiku"
-    return True
-
-
 def agent_settings(cfg=None):
     """Normalised agent settings. Claude Code runs on this Mac only: an SSH host saved
     by an older Standby is ignored."""
@@ -95,7 +79,7 @@ def agent_settings(cfg=None):
     a = dict(cfg.get("agent") or {})
     a["mode"] = "local"
     a.setdefault("model", "opus")             # what an agent with no model of its own, or a meeting with no agent, runs on
-    a.setdefault("voice_model", "haiku")       # voice mode answers fast; the agent's own model does the work
+    a.setdefault("voice_model", "sonnet")      # the voice, at high thinking: Haiku answered too little (2026-11-01)
     return a
 
 

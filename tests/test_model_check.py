@@ -148,18 +148,9 @@ check("Sonnet replaced too: it stays (nothing better), no loop", ag.model_for("s
 # The app's side: Settings marks it not available, through the transport.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mac"))
 import transport  # noqa: E402                      (STANDBY_ROOT is the temp root, above)
-# Once: voice mode's model becomes Haiku, the new default. A saved Sonnet was the old default.
-c = {"agent": {"mode": "local", "model": "opus", "voice_model": "sonnet"}}
-check("migrate: a saved Sonnet (the old default) becomes Haiku, once", transport.migrate_voice_model(c) is True
-      and c["agent"]["voice_model"] == "haiku" and c["voice_model_haiku"] is True, c)
-c["agent"]["voice_model"] = "sonnet"
-check("  never again: a Sonnet chosen after that stays", transport.migrate_voice_model(c) is False
-      and c["agent"]["voice_model"] == "sonnet", c)
-c = {"agent": {"voice_model": "opus"}}
-check("  a model that wasn't the old default stays", transport.migrate_voice_model(c) and c["agent"]["voice_model"] == "opus", c)
-c = {"voice_model": "sonnet", "host": "devbox"}
-check("  an old flat config too", transport.migrate_voice_model(c) and c["voice_model"] == "haiku", c)
-check("  and a new config's default is Haiku", transport.agent_settings({})["voice_model"] == "haiku")
+# Voice mode's model: Sonnet unless one was saved, and a saved one stays as it is.
+check("a new config's voice model is Sonnet", transport.agent_settings({})["voice_model"] == "sonnet")
+check("  a saved Haiku stays Haiku", transport.agent_settings({"agent": {"voice_model": "haiku"}})["voice_model"] == "haiku")
 json.dump({"agent": {"mode": "local", "model": "opus", "voice_model": "haiku"}}, open(transport.CONFIG, "w"))
 json.dump({"haiku": {"runs": "claude-opus-5-5[1m]", "blocked": True, "at": int(time.time())},
            "sonnet": {"runs": "claude-sonnet-5-5", "blocked": False, "at": int(time.time())}},

@@ -591,7 +591,7 @@ DEFAULTS = {"push_lines": 10, "speakers": True, "capture": "auto",
             "remember_voices": True, "lite_transcript": "ask",
             "auto_stop_min": 15, "auto_accept": False, "call_visuals": True}
 VOICE_EFFORTS = ("auto", "low", "medium", "high")   # the voice's thinking (Settings > Call); auto: Claude Code's own
-VOICE_EFFORT_DEFAULT = "low"   # Haiku's pick, explicit: never silently Claude Code's own (the user, 2026-10-31)
+VOICE_EFFORT_DEFAULT = "high"   # Sonnet's best, explicit: never silently Claude Code's own (the user, 2026-11-01)
 LITE_PASSES = ("ask", "live")     # a meeting from Claude Code: its transcript with each prompt, or pushed as it goes
 VOICES = ROOT / "voices.json"
 # the speech model being downloaded, if one is: {"key", "state", "done", "total", "error"}.
@@ -842,7 +842,7 @@ def set_settings(b):
         a["model"] = b["model"]
     if b.get("voice_model") in ("sonnet", "opus", "haiku"):
         a["voice_model"] = b["voice_model"]
-    if b.get("voice_effort") in VOICE_EFFORTS:           # "auto": Claude Code's own; unset: low
+    if b.get("voice_effort") in VOICE_EFFORTS:           # "auto": Claude Code's own; unset: high
         a["voice_effort"] = b["voice_effort"]
     cfg["agent"] = a
     for legacy in ("host", "remote_dir", "workspace", "claude_on_start"):
@@ -919,7 +919,7 @@ def _named_settings():
         ("voice", "the voice Standby speaks in", voice_now,
          ["automatic"] + [v["name"] for v in vs.get("standby", []) + vs.get("voices", [])], "voice"),
         ("voice_model", "the model the voice talks with", st["voice_model"], list(MODEL_NAMES), "voice_model"),
-        ("voice_thinking", "how hard the voice thinks before it answers, from the next call (low unless set; auto: as Claude Code is set)",
+        ("voice_thinking", "how hard the voice thinks before it answers, from the next call (high unless set; auto: as Claude Code is set)",
          st["voice_effort"], list(VOICE_EFFORTS), "voice_effort"),
         ("model", "the model of Standby's meeting agent", st["model"], list(MODEL_NAMES), "model"),
         ("talk_over", "talk over the voice to interrupt it", onoff(st["talk_over"]), list(ON_OFF), "talk_over"),
@@ -6723,8 +6723,7 @@ def main():
     window_mode = "--window" in sys.argv
     cfg = transport.load_config()
     pinned, was = cfg.get("mic_device"), cfg.get("mode")
-    if cfg and (transport.migrate_mic(cfg) | transport.migrate_capture(cfg)   # once: Automatic from the start
-                | transport.migrate_voice_model(cfg)):                            # once: voice mode on Haiku
+    if cfg and (transport.migrate_mic(cfg) | transport.migrate_capture(cfg)):  # once: Automatic from the start
         transport.save_config(cfg)
         if pinned:
             log("mic: %r was pinned; Automatic now, following the Mac's mic (once)" % pinned)
@@ -7271,8 +7270,8 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
   </nav>
   <div class="setmain" id="setmain">
     <div class="pane on" data-p="call"><div class="sec">
-      <div class="field"><label>Voice mode model</label><select id="s_vmodel" data-save><option value="haiku">Haiku · Recommended</option>
-        <option value="sonnet">Sonnet</option><option value="opus">Opus</option></select>
+      <div class="field"><label>Voice mode model</label><select id="s_vmodel" data-save><option value="haiku">Haiku</option>
+        <option value="sonnet">Sonnet · Recommended</option><option value="opus">Opus</option></select>
         <div class="hint" id="s_vmodelnote" hidden></div></div>
       <div class="field"><label>Thinking<span class="mx-help" tabindex="0" title="How much the call's voice thinks before it answers. Low answers fastest; High is more careful but takes longer to start speaking. From the next call." aria-label="About thinking" onclick="event.preventDefault()"></span></label><input type="hidden" id="s_veffort">
         <div class="seg" id="effseg"><button type="button" data-e="low" onclick="setEffort('low')">Low</button><button type="button" data-e="medium" onclick="setEffort('medium')">Medium</button><button type="button" data-e="high" onclick="setEffort('high')">High</button></div>
@@ -7664,7 +7663,7 @@ async function openSettings(pane){if(!SETWIN&&window.pywebview&&pywebview.api&&p
     try{const r=await pywebview.api.open_settings(typeof pane==="string"?pane:null);if(r&&r.ok)return}catch(e){}}
   return showSettings(pane)}
 async function showSettings(pane){const r=await api("/api/settings"),s=r.settings;
-  $("s_vmodel").value=s.voice_model||"haiku";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"low",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
+  $("s_vmodel").value=s.voice_model||"sonnet";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"high",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
   $("s_remember").checked=!!s.remember_voices;
   // Talking over Claude (the duplex engine): from the next voice mode; a quiet line when the mic chosen can't
   $("s_autoaccept").checked=!!s.auto_accept;$("s_visuals").checked=s.call_visuals!==false;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}

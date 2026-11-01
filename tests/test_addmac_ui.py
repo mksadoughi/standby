@@ -133,8 +133,8 @@ check("  one that doesn't exit in time: still named", ui.mac_with(wait=0.3) == "
 ui.addmac.save(ui.SESSIONS / sid, kept)
 check("  a meeting that's recording: refused at once, no wait", (lambda t: ui.mac_with() == "Planner" and time.time() - t < 1)(time.time()))
 
-check("Settings has no meeting model any more (an agent's model is its own), and voice mode defaults to Haiku",
-      'id="s_model"' not in ui.PAGE and '<option value="haiku">Haiku · Recommended</option>' in ui.PAGE
+check("Settings has no meeting model any more (an agent's model is its own), and voice mode defaults to Sonnet",
+      'id="s_model"' not in ui.PAGE and '<option value="sonnet">Sonnet · Recommended</option>' in ui.PAGE
       and ui.get_settings()["voice_model"] in ("haiku", "sonnet", "opus"))
 
 # -- the recorder's mode, per start (the CLI's argv), and Claude on for an agent's meeting

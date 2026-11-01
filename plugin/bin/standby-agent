@@ -1786,11 +1786,11 @@ def live_voice_model(started_with):
 
 
 # The voice's thinking effort (Settings > Call, "Thinking": config.json agent.voice_effort, low, medium or high;
-# unset, low, Haiku's own pick (the user, 2026-10-31), passed as such so the voice never silently follows Claude
-# Code's setting; "auto", Claude Code's own). Read once a call and kept for it, its turns and its forks alike: a change mid-call would
-# miss the prompt cache, so it takes effect from the next call.
+# unset, high, Sonnet's best on the replays and no slower there (the user, 2026-11-01), passed as such so the voice
+# never silently follows Claude Code's setting; "auto", Claude Code's own). Read once a call and kept for it, its turns
+# and its forks alike: a change mid-call would miss the prompt cache, so it takes effect from the next call.
 VOICE_EFFORTS = ("low", "medium", "high")
-VOICE_EFFORT_DEFAULT = "low"
+VOICE_EFFORT_DEFAULT = "high"
 _VOICE_EFFORT = {}
 
 
@@ -5268,8 +5268,8 @@ def main():
     ap = argparse.ArgumentParser(prog="standby-agent")
     ap.add_argument("--engine", choices=sorted(ENGINES), default="claude")
     ap.add_argument("--model", default="sonnet")
-    ap.add_argument("--voice-model", default="haiku",
-                    help="voice mode's quick model (default: haiku, as Settings has it); it hands real "
+    ap.add_argument("--voice-model", default="sonnet",
+                    help="voice mode's quick model (default: sonnet, as Settings has it); it hands real "
                          "work to the meeting agent, which runs on --model")
     ap.add_argument("--timeout", type=int, default=300,
                     help="give up on a question after this many seconds of NO "

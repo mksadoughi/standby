@@ -12,7 +12,7 @@ Repository: https://github.com/mksadoughi/standby · License: MIT · Free, with 
 Standby is a Claude Code plugin with a small Mac app behind it. It gives the user's own Claude Code session ears and
 a voice:
 
-- **Calls.** The user talks with their Claude Code session by voice. A fast voice model (Haiku by default) answers in
+- **Calls.** The user talks with their Claude Code session by voice. A voice model (Sonnet by default) answers in
   speech and hands real work to the same session, which does it in the chat while they keep talking.
 - **Meetings.** Standby hears the user's meetings from the Mac (any meeting app, a call in a browser, or people in the
   room) with no bot in the call, and passes the transcript to the session so the user can ask about it.
@@ -190,7 +190,8 @@ List them with `mcp__standby__settings` or `/standby settings`; change one only 
 | `speech_model` | `small`, `standard` | `small` on 8 GB Macs, else `standard` |
 | `english_only` | `on`, `off` | from the Mac's language |
 | `voice` | `automatic` or one of Standby's voices | `automatic` |
-| `voice_model` | `haiku`, `sonnet`, `opus` | `haiku` |
+| `voice_model` | `haiku`, `sonnet`, `opus` | `sonnet` |
+| `voice_thinking` | `auto` (as Claude Code is set), `low`, `medium`, `high` | `high` |
 | `model` | `haiku`, `sonnet`, `opus` (Standby's own meeting agent) | `opus` |
 | `talk_over` | `on`, `off` (interrupt the voice on laptop speakers) | `off` |
 | `speakers` | `on`, `off` (label speakers) | `on` |

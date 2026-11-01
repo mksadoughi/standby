@@ -349,7 +349,6 @@ agent = cfg.get("agent") or {}
 agent["mode"] = "local"                      # Claude Code runs on this Mac: an SSH host saved before goes
 for k in ("host", "remote_dir"):
     agent.pop(k, None)
-agent.setdefault("voice_model", "haiku")     # the voice's default (its thinking: low unless set)
 cfg["agent"] = agent
 for k in ("host", "remote_dir"):
     cfg.pop(k, None)
