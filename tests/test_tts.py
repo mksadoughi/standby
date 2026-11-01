@@ -303,6 +303,7 @@ fp.on_end(2)
 out.play_all()
 check("  then done", not sp.busy and not sp.speaking and sp.current == "")
 
+
 sp.say("A long one.")
 fp.on_audio(3, piece)
 sp.say("And more.")
@@ -322,6 +323,31 @@ check("the process dies: what started plays out, the rest is lost (for macOS to 
       sp.lost == ["Never made.", "Nor this."] and sp.busy and sp.speaking)
 out.play_all()
 check("  and then it is done", not sp.busy and sp.take_lost() == ["Never made.", "Nor this."] and sp.lost == [])
+
+# What was heard at a cut is counted from its sound as played, not guessed from the time (2.6 words a second
+# missed by 2 words or more at 26 of 62 recorded cuts: its voice says 2.4 to 4.5)
+fp, out = FakeProcess(), FakeOut()
+sp = tts.Speech(fp, out, log=logs.append)
+sp.say("Counted as it plays.")
+check("heard: nothing before a sentence starts", sp.heard() is None)
+for _ in range(4):
+    fp.on_audio(sp._sid, piece)
+fp.on_end(sp._sid)
+out.play_one()
+sec = len(piece) / float(tts.RATE)
+got = sp.heard()
+check("  its sound played so far, of all of it made, and that all of it is made",
+      got and got["text"] == "Counted as it plays." and abs(got["played"] - sec) < 1e-3
+      and abs(got["made"] - 4 * sec) < 1e-3 and got["ended"] is True, got)
+sp.stop()
+check("  a stop's drops never count as played: nothing playing after it", sp.heard() is None)
+import interrupt  # noqa: E402
+line = "Then we move the cache to the new region next week."
+check("heard_played: the words within the share of its sound played, cut marked",
+      interrupt.heard_played(line, 1.0, 4.0) == "Then we move..." , interrupt.heard_played(line, 1.0, 4.0))
+check("  all of it played: the whole sentence; none: nothing",
+      interrupt.heard_played(line, 4.0, 4.0) == line and interrupt.heard_played(line, 0.0, 4.0) == ""
+      and interrupt.heard_played(line, 1.0, 0.0) == "")
 
 # Made slower than real time (the GPU busy), it is held until it won't run dry.
 fp, out = FakeProcess(), FakeOut()

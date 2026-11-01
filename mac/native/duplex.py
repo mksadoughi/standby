@@ -20,5 +20,6 @@ def engine(voice=None, neural=None, log=print):
     one of Standby's own (tts.VOICES), which it opens with the mic. What VoiceIO asks of it:
     start_mic(device, feed) (aec says whether echo cancellation took), start_output(),
     stop_mic(); begin(), say(text), halt(), duck(), unduck(); playing, loading, failed,
-    tts_status(); idle(seconds) for the recorder's main loop."""
+    tts_status(); heard(), the sentence playing and its seconds of sound played, made and whether all
+    made (or None); idle(seconds) for the recorder's main loop."""
     return _os.engine(voice=voice, neural=neural, log=log)

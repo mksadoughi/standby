@@ -154,5 +154,31 @@ check("  unpaused: listening", wait(lambda: vs.status()["state"] == "listening",
 on["rec"] = False
 vs.stop()
 vio.stop()
+
+# What they'd heard at a cut: from the sound the engine played of the sentence (heard()), taken when the voice
+# ducks or stops for them, before anything is dropped; the app uses it for that sentence, else the old guess.
+class Counted(Engine):
+    def heard(self):
+        return {"text": "Then we move the cache to the new region next week.", "played": 1.0, "made": 4.0,
+                "ended": True}
+
+vio2 = sb.VoiceIO(sdir, Counted(), log=lambda m: None, leaks=lambda: True, talk_over=False)
+vio2.duck()
+cut = vio2.status().get("cut") or {}
+check("ducked for them: what they'd heard, from its sound played (a quarter of it)",
+      cut.get("heard") == "Then we move..." and cut.get("played_ms") == 1000 and cut.get("made_ms") == 4000, cut)
+vio2.unduck()
+check("  it went on: no cut", vio2.status().get("cut") is None, vio2.status().get("cut"))
+vio2.halt()
+check("  stopped for them: taken then", (vio2.status().get("cut") or {}).get("heard") == "Then we move...")
+q = voice.Question("go on", False)
+line = "Then we move the cache to the new region next week."
+q.spoken, q.playing, q.play_since = [line], 0, 100.0
+mine = {"text": line, "heard": "Then we move...", "at": 101.0}
+check("the app: what was heard of the sentence playing is the recorder's, from its sound",
+      q.heard(103.0, mine) == "Then we move...", q.heard(103.0, mine))
+check("  another sentence's, or one from before it started: the time's guess, as before",
+      q.heard(103.0, dict(mine, text="Other words.")) == voice.interrupt.heard_of(line, 3.0)
+      and q.heard(103.0, dict(mine, at=99.0)) == voice.interrupt.heard_of(line, 3.0))
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
 sys.exit(1 if fails else 0)

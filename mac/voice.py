@@ -351,6 +351,13 @@ class RecorderSpeaker(object):
         r = self._recorder()
         return r.get("since") if r is not None else None
 
+    @property
+    def cut(self):
+        """What they'd heard of the sentence it ducked or stopped in for them, from its sound played
+        (the recorder's VoiceIO cut), or None."""
+        r = self._recorder()
+        return r.get("cut") if r is not None else None
+
 
 _ERRORS = ("engine error:", "Engine exited", "engine write failed", "No activity from the agent",
            "Could not reach the agent")
@@ -534,12 +541,17 @@ class Question(object):
         self.decided.wait(timeout)
         return self.go is True
 
-    def heard(self, at):
+    def heard(self, at, cut=None):
         """What the user has heard of the answer by `at`: the sentences played,
-        the last one cut where it was (interrupt.heard_of)."""
+        the last one cut where it was: by its sound played (cut, the recorder's, for
+        this sentence as it played), else by the time since it started (interrupt.heard_of)."""
         if self.playing < 0 or self.playing >= len(self.spoken):
             return ""
-        last = interrupt.heard_of(self.spoken[self.playing], at - (self.play_since or at))
+        now = self.spoken[self.playing]
+        if cut and cut.get("text") == now and (cut.get("at") or 0) >= (self.play_since or 0):
+            last = cut.get("heard") or ""
+        else:
+            last = interrupt.heard_of(now, at - (self.play_since or at))
         return " ".join(self.spoken[:self.playing] + ([last] if last else []))
 
 
@@ -914,7 +926,7 @@ class VoiceSession(object):
             return
         # Answered: every sentence it got to (a voice that stopped early: up to there); else where it was cut
         heard = (" ".join(q.spoken[:max(q.playing, 0) + 1]) if end == "answered" and q.playing >= 0
-                 else q.heard(time.time())).strip()
+                 else self._heard(q)).strip()
         if end == "more" and not heard:
             return
         cut = end != "answered" and bool(heard)
@@ -1292,12 +1304,16 @@ class VoiceSession(object):
         self._line = (self._line + 1) % len(HANDOFF_LINES)
         self._say(q, [HANDOFF_LINES[self._line]])
 
+    def _heard(self, q):
+        """What they heard of q's answer, now: by its sound where the recorder counted it."""
+        return q.heard(time.time(), getattr(self.speaker, "cut", None))
+
     def _cancel_ask(self, q, quiet=False):
         """Stop q: nothing more of it is said, and the agent drops it if it is still on it.
         quiet: the user went on (more to the question, or an early question that was not
         their turn after all): the next question has all of it, so the chat keeps none of
         it but what the voice had said of the answer (said=), which the user heard."""
-        said = q.heard(time.time())
+        said = self._heard(q)
         with q.lock:
             q.cancelled, q.held = True, []
             q.quiet = q.quiet or quiet
@@ -1597,7 +1613,7 @@ class VoiceSession(object):
                      " %.2fs for the voice)" % (len(gaps), sum(worst), worst[0], worst[1]))
         self._q, self.holding = None, False
         self._trace("turn_done", outcome=end, q=got.get("qid"), question=question, sentences=len(q.spoken),
-                    played=q.playing + 1, heard=q.heard(time.time()) if end != "answered" else None)
+                    played=q.playing + 1, heard=self._heard(q) if end != "answered" else None)
         self._record(q, end)
         held_mic = q.floor and phase in ("thinking", "speaking")
         if end == "answered":
@@ -1607,7 +1623,7 @@ class VoiceSession(object):
                 self._cut = ""                       # paused before they heard any of it
                 self.log("voice %d: paused while it thought: its reply is kept unsaid" % self.seq)
         else:
-            heard = q.heard(time.time())
+            heard = self._heard(q)
             self._cancel_ask(q, quiet=end == "more")
             self.speaker.stop()
             # Claude's history has the answer as written: the next turn says what was heard of it.

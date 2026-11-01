@@ -698,7 +698,8 @@ class Speech(object):
             self._sid += 1
             sid = self._sid
             self._items[sid] = {"text": text, "pending": 0, "ended": False, "started": None,
-                                "sent": time.time(), "heard": False, "held": [], "made": 0.0, "first": None}
+                                "sent": time.time(), "heard": False, "held": [], "made": 0.0, "first": None,
+                                "played": 0.0}
             self._order.append(sid)
         if not self.process.say(sid, text):
             with self._lock:
@@ -754,6 +755,16 @@ class Speech(object):
         with self._lock:
             head = self._items[self._order[0]] if self._order else None
             return head["text"] if head and head["started"] else ""
+
+    def heard(self):
+        """The sentence playing and its sound so far, in seconds: played, made, and whether all of it is
+        made (ended); None before one starts. Read before a stop, whose drops count as done."""
+        with self._lock:
+            head = self._items[self._order[0]] if self._order else None
+            if not head or not head["started"]:
+                return None
+            return {"text": head["text"], "played": round(head["played"], 3), "made": round(head["made"], 3),
+                    "ended": head["ended"]}
 
     @property
     def started_at(self):
@@ -817,6 +828,8 @@ class Speech(object):
             it = self._items.get(sid)
             if it is not None:
                 it["pending"] -= 1
+                if gen == self._gen:
+                    it["played"] += secs               # its sound as played: what was heard at a cut (heard)
                 self._settle()
 
     def _end(self, sid):

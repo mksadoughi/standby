@@ -298,6 +298,10 @@ class LoopbackBackend(object):
         st = self.speech.status() if self.speech is not None else None
         return dict(st or {}, failed=self.failed) if self.failed else st
 
+    def heard(self):
+        speech = self.speech
+        return speech.heard() if speech is not None and not self.failed else None
+
     def say(self, text):
         self.said_at, self.first_sound = time.time(), None
         self.events.write("say", text=text)

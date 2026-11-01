@@ -2136,6 +2136,7 @@ class VoiceIO(object):
         self.failed = None    # why the engine stopped working: the app's own voice speaks then
         self._warm = False    # a sentence has played in full: Standby's voice is warm
         self.ducked = None    # since when it is paused under the user's voice (duck), or None
+        self.cut = None       # what they'd heard of the sentence playing when it ducked or stopped for them
         self.played = 0.0         # seconds of its voice played in this voice mode (learning)
         self._echoes = deque()    # when (in voice played) its own voice was heard back (echo_heard)
         self.echo_hold = False    # this answer: the mic held while it speaks (echo_heard)
@@ -2238,6 +2239,7 @@ class VoiceIO(object):
                 return
             self.ducked = time.time()
         trace(TRACE["sid"], "duck", self._turn_of.get(self.current[0]) if self.current else None)
+        self._heard_at_cut()                     # what they'd heard when they started talking
         try:
             self.backend.duck()
         except Exception as exc:
@@ -2247,7 +2249,7 @@ class VoiceIO(object):
         """On from where it paused. The time paused is not the sentence's time: a
         sentence is stuck only after its own playing time (_step)."""
         with self._lock:
-            at, self.ducked = self.ducked, None
+            at, self.ducked, self.cut = self.ducked, None, None     # it goes on: no cut
             if at is not None and self.since is not None:
                 self.since += time.time() - at
         if at is None:
@@ -2258,14 +2260,33 @@ class VoiceIO(object):
         except Exception as exc:
             self.log("voice: unduck: %r" % exc)
 
+    def _heard_at_cut(self):
+        """What of the sentence playing they had heard, from its sound played (backend.heard), kept for the
+        app (status's cut) when the voice ducks or stops for them, before anything is dropped. None when
+        the engine doesn't count it: the app guesses from the time, as before."""
+        try:
+            got = self.backend.heard() if hasattr(self.backend, "heard") else None
+        except Exception:
+            got = None
+        if not got or not got.get("text"):
+            return None
+        import interrupt
+        heard = (interrupt.heard_played(got["text"], got["played"], got["made"]) if got.get("ended")
+                 else interrupt.heard_of(got["text"], got["played"]))      # not all made: its seconds, at a rate
+        self.cut = {"text": got["text"], "heard": heard, "at": time.time(),
+                    "played_ms": int(got["played"] * 1000), "made_ms": int(got["made"] * 1000)}
+        return self.cut
+
     def halt(self):
         """Stop speaking now, and drop what was still to be said."""
+        cut = self.cut if self.ducked is not None else self._heard_at_cut()     # ducked: heard up to the duck
         with self._lock:
             if self.current is not None or self._queue:
                 cur = self.current
                 trace(TRACE["sid"], "say_cut", self._turn_of.get(cur[0]) if cur else None,
                       id=cur[0] if cur else None, at_ms=int((time.time() - self.since) * 1000) if cur and self.since else None,
-                      dropped=len(self._queue))
+                      dropped=len(self._queue), played_ms=cut["played_ms"] if cut else None,
+                      made_ms=cut["made_ms"] if cut else None, heard=cut["heard"] if cut else None)
             self.ducked = None
             self.echo_hold = False
             for item in list(self._queue) + ([self.current] if self.current else []):
@@ -2377,7 +2398,7 @@ class VoiceIO(object):
                 stuck = time.time() - self.since
             nxt = self._queue.popleft() if self.current is None and self._queue else None
             if nxt is not None:
-                self.current, self.since = nxt, time.time()
+                self.current, self.since, self.cut = nxt, time.time(), None
                 if self.echo_hold and self._turn_of.get(nxt[0]) != self._hold_turn:
                     self.echo_hold = False           # another answer: talked over as ever
         if stuck is not None:
@@ -2444,7 +2465,7 @@ class VoiceIO(object):
             st = {"speaks": True, "aec": self.aec, "duplex": self.duplex, "played": round(self.played, 1),
                   "echo_hold": self.echo_hold,
                   "saying": self.current[1] if self.current else "",
-                  "since": self.since if self.current else None, "done": self.done,
+                  "since": self.since if self.current else None, "done": self.done, "cut": self.cut,
                   "ducked": self.ducked is not None}
         tts = getattr(self.backend, "tts_status", None)
         if tts is not None and tts() is not None:

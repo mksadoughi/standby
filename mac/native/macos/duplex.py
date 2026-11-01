@@ -311,6 +311,12 @@ class AVFBackend(object):
         """A new answer: its voice is logged at its first sentence."""
         self._logged = False
 
+    def heard(self):
+        """Standby's voice: the sentence playing and how much of its sound has played (tts.Speech.heard), or
+        None (a Mac voice: not counted)."""
+        speech = self.speech
+        return speech.heard() if speech is not None and not self.failed else None
+
     def tts_status(self):
         st = self.speech.status() if self.speech is not None else None
         if self.failed:                          # Standby's voice can't speak, and why: the orb says so
