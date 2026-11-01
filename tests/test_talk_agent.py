@@ -55,6 +55,14 @@ while True:
         if kind == "voice" and "Held, not sent" in text and "name it notes" in text.split("They said:")[-1]:
             emit({"type": "result", "is_error": False,     # the held hand-off, updated with what they said since
                   "result": "Got it. [DEEP] Create a sample text file named notes.txt in the project folder."}); continue
+        if kind == "voice" and "make the snake faster" in text.split("They said:")[-1]:   # dropped while it writes
+            reply = "Sure, I'll make the snake faster. [DEEP] Make the snake move faster in the game."
+            for i in range(0, len(reply), 2):     # streamed for 1.5 s with no gap, as a real voice writes
+                emit({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
+                                                        "delta": {"type": "text_delta", "text": reply[i:i + 2]}}})
+                time.sleep(0.035)
+            emit({"type": "result", "is_error": False,
+                  "result": "Sure, I'll make the snake faster. [DEEP] Make the snake move faster in the game."}); continue
         if kind == "voice" and "check the free disk space" in text.split("They said:")[-1]:   # a hand-off and nothing said
             emit({"type": "result", "is_error": False, "result": "[DEEP] Check how much disk space is left."}); continue
         if kind == "voice" and "yes, put it up" in text.split("They said:")[-1]:     # their yes, and work handed on
@@ -709,6 +717,28 @@ try:
     mark(ids2, ".k")
     ask("[VOICE] what time is it there")
     check("    and after it, nothing is held", "Held, not sent" not in texts("voice", TALK)[-1])
+    # They went on while its answer was being written, a hand-off in it: dropped before its end (.c, .x), it never
+    # goes, but its conversation has it, so it said "I've asked" for work that never went (talk-20261031-233531).
+    before = set(os.listdir(spool))
+    box = {}
+    th2 = threading.Thread(target=lambda: box.update(got=ask("[VOICE] can you make the snake faster?")), daemon=True)
+    th2.start()
+    deadline, mine = time.time() + 10, []
+    while time.time() < deadline and not mine:     # its question file, there until the voice takes it
+        mine = [n.split(".")[0] for n in set(os.listdir(spool)) - before if n.endswith((".vq", ".p"))]
+        time.sleep(0.002)
+    deadline = time.time() + 10                    # the voice is writing its answer (the stand-in has it)
+    while time.time() < deadline and "make the snake faster" not in open(seen).read():
+        time.sleep(0.02)
+    time.sleep(0.3)
+    for ext in (".c", ".x"):                       # agentctl.cancel, dropped: they went on, mid-answer
+        if mine:
+            open(os.path.join(spool, mine[0] + ext), "w").close()
+    th2.join(15)
+    ask("[VOICE] what do you think?")
+    check("a hand-off in an answer dropped while it was written: held for the turn, never a note it's working on it",
+          mine and not (box.get("got") or "").startswith("[HANDOFF]") and held("Make the snake move faster in the game.")
+          and "You took this deeper" not in texts("voice", TALK)[-1], (mine, box, texts("voice", TALK)[-1][-400:]))
     # They went on from an early question: only what they said since goes to the voice's conversation, which has
     # the rest (the whole turn each time filled it within an hour, compacted mid-call).
     ids = []

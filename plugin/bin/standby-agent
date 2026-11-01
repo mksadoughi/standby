@@ -4522,6 +4522,14 @@ class Voice(object):
                                           words,
                                           spoken_part(parse_suggestions(text)[0])))
         else:
+            # A call's early answer they went on from while it was being written (agentctl.cancel's .x before
+            # its end): its hand-off never goes, yet its conversation has it, [DEEP] and all. Noted as the
+            # handed one's is, so the next ask holds it (HELD): it told them "I've asked" for work that never
+            # went, and went on saying so (talk-20261031-233531, "make the snake faster").
+            task = deep_task(text) if call and rc in (0, ClaudeSession.INTERRUPTED) else ""
+            if task and os.path.exists(os.path.join(SPOOL, ident + ".x")):
+                self.remember(session, "You took this deeper, and are working on it now: %s" % task, ident=ident,
+                              task=task)
             text = strip_deep(text)
         if rc == 0 and text != HELD_VOICE and not handed and not result:
             text = answer_suggestions(session, text, os.path.join(SPOOL, ident + ".p"), t0)
