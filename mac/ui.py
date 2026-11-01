@@ -751,7 +751,8 @@ def default_mic():
 def models_info():
     """The models this Claude Code runs another in place of (the agent finds out,
     agent/models.json where it runs): Settings marks them not available, and
-    the agent asks for Sonnet instead. A saved one is kept, should that change."""
+    the agent asks for Sonnet instead. A saved one is kept, should that change. runs: what Claude Code ran in
+    each one's place, for the line under the voice's model when it's the one chosen."""
     raw = transport.for_config().read("agent/models.json")
     try:
         data = json.loads(raw) if raw else {}
@@ -759,6 +760,8 @@ def models_info():
         data = {}
     data = data if isinstance(data, dict) else {}
     out = {"unavailable": sorted(m for m, v in data.items() if isinstance(v, dict) and v.get("blocked"))}
+    if out["unavailable"]:
+        out["runs"] = {m: str(data[m].get("runs") or "") for m in out["unavailable"]}
     note = model_switch_note()
     if note:
         out["switch"] = note
@@ -7679,8 +7682,13 @@ async function showSettings(pane){const r=await api("/api/settings"),s=r.setting
   $("serr").style.display="none";$("ssaved").classList.remove("on");setHome();if(typeof pane==="string")setPane(pane);await Promise.all([loadDict(),loadVoices()]);if(!settings.open)settings.showModal()}
 // The voice's model in a call going on: it switches at the call's next reply, and this says how that went.
 let MODELT=null;
+// The voice's model not available to this Claude Code (it ran another when asked): said under it, never silent.
+const MODELNAME=x=>(/haiku|sonnet|opus/i.exec(x||"")||[""])[0].replace(/^./,c=>c.toUpperCase());
+function modelOffNote(m,v){const off=m.unavailable||[];if(!off.includes(v))return "";const name=MODELNAME(v);
+  if(v!=="sonnet"&&!off.includes("sonnet"))return name+" isn\u2019t available to your Claude Code, so calls use Sonnet.";
+  const ran=MODELNAME((m.runs||{})[v]);return name+" isn\u2019t available to your Claude Code"+(ran?": it runs "+ran+" in its place.":".")}
 function loadModels(){return api("/api/models").then(m=>{if(m.error)return;markModels(m.unavailable||[]);
-  const n=$("s_vmodelnote"),w=m.switch&&m.switch.wanted===$("s_vmodel").value;n.textContent=w?m.switch.text:"";n.hidden=!w}).catch(()=>{})}
+  const n=$("s_vmodelnote"),v=$("s_vmodel").value,w=m.switch&&m.switch.wanted===v,t=w?m.switch.text:modelOffNote(m,v);n.textContent=t;n.hidden=!t}).catch(()=>{})}
 function watchModel(){loadModels();
   clearInterval(MODELT);let k=0;MODELT=setInterval(()=>{if(++k>40)clearInterval(MODELT);loadModels()},3000)}
 function markModels(off){["s_vmodel"].forEach(id=>{for(const o of $(id).options){o.dataset.label=o.dataset.label||o.textContent;

@@ -141,6 +141,18 @@ check("a week on, haiku is asked for again (checked again)", ag.model_for("haiku
 check("  never in place of Sonnet itself, or a model it runs as asked",
       ag.model_for("sonnet") == "sonnet" and ag.model_for("opus") == "opus")
 
+# What ran, from a run's modelUsage: Claude Code adds side calls of its own, so the asked model counts when it's
+# there at all (2026-11-01: Sonnet's 36 words beside a Haiku side call's 216 marked Sonnet replaced).
+src = open(agentpath.AGENT, encoding="utf-8").read()
+side = {"claude-haiku-5-5": {"outputTokens": 216}, "claude-sonnet-5-5": {"outputTokens": 36}}
+check("a Haiku side call beside Sonnet's answer: Sonnet ran", ag.ran_model("sonnet", side) == "claude-sonnet-5-5")
+check("  Haiku asked, Sonnet's side words fewer: Haiku ran", ag.ran_model("haiku", side) == "claude-haiku-5-5")
+check("  Opus asked, only others there: replaced, by the one that wrote most",
+      ag.ran_model("opus", side) == "claude-haiku-5-5")
+check("  every run's usage read this way, never the most words alone",
+      src.count("note_model(asks, ran_model(asks, used))") == 3 and "max(used, key" not in src.replace(
+          'return same[0] if same else max(used, key', ""))
+
 # Should Sonnet itself be replaced, there is nothing better to ask for: no loop.
 ag.note_model("sonnet", "claude-opus-5-5[1m]")
 check("Sonnet replaced too: it stays (nothing better), no loop", ag.model_for("sonnet") == "sonnet")
@@ -156,12 +168,25 @@ json.dump({"haiku": {"runs": "claude-opus-5-5[1m]", "blocked": True, "at": int(t
            "sonnet": {"runs": "claude-sonnet-5-5", "blocked": False, "at": int(time.time())}},
           open(os.path.join(root, "agent", "models.json"), "w"))
 ui = SourceFileLoader("ui", os.path.join(os.path.dirname(transport.__file__), "ui.py")).load_module()
-check("the app: haiku not available, from the agent's models.json", ui.models_info() == {"unavailable": ["haiku"]},
-      ui.models_info())
+check("the app: haiku not available, from the agent's models.json, with what ran instead",
+      ui.models_info() == {"unavailable": ["haiku"], "runs": {"haiku": "claude-opus-5-5[1m]"}}, ui.models_info())
 check("  the saved choice is kept (Sonnet runs in its place, the user sees why)",
       ui.get_settings()["voice_model"] == "haiku")
 os.remove(os.path.join(root, "agent", "models.json"))
 check("  none found yet: all available", ui.models_info() == {"unavailable": []})
+# Settings > Call says it under the voice's model when the chosen one isn't available, never silent.
+import re, shutil, subprocess  # noqa: E402
+NODE = shutil.which("node") or os.path.expanduser("~/.local/share/mise/installs/node/22.21.1/bin/node")
+fns = ui.PAGE[ui.PAGE.index("const MODELNAME="):ui.PAGE.index("function loadModels(")]
+notes = json.loads(subprocess.run([NODE, "-e", fns + """
+console.log(JSON.stringify([modelOffNote({unavailable: ["sonnet"], runs: {sonnet: "claude-haiku-5-5"}}, "sonnet"),
+  modelOffNote({unavailable: ["haiku"], runs: {haiku: "claude-opus-5-5[1m]"}}, "haiku"),
+  modelOffNote({unavailable: ["haiku"]}, "sonnet")]))"""], capture_output=True, text=True).stdout or "null")
+check("Settings: the chosen Sonnet not available says what runs in its place",
+      notes and notes[0] == "Sonnet isn\u2019t available to your Claude Code: it runs Haiku in its place.", notes)
+check("  Haiku not available: calls use Sonnet; another model chosen: nothing",
+      notes and notes[1] == "Haiku isn\u2019t available to your Claude Code, so calls use Sonnet." and notes[2] == "", notes)
+check("  the line is the voice model's note, a call's switch first", "t=w?m.switch.text:modelOffNote(m,v)" in ui.PAGE)
 # A call going on, its voice's model changed in Settings: how the switch went, plainly, for that call only.
 real_live = ui.live_session
 ui.live_session = lambda: "talk-1"

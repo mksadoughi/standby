@@ -1753,6 +1753,14 @@ def model_for(asked):
     return IN_ITS_PLACE if replaced and model_family(asked) != IN_ITS_PLACE else asked
 
 
+def ran_model(asked, used):
+    """The model a run's modelUsage says ran for `asked`. Claude Code adds side calls of its own (a Haiku one beside
+    Sonnet, with more words than Sonnet's answer, marked Sonnet replaced, 2026-11-01): the asked model when it is
+    there at all, else the one that wrote the most."""
+    same = [m for m in used if model_family(m) == model_family(asked)]
+    return same[0] if same else max(used, key=lambda m: (used[m] or {}).get("outputTokens") or 0)
+
+
 def note_model(asked, runs):
     """Claude Code said it runs `runs` for `asked`: kept in models.json (the
     app reads it to mark a model not available). True when it is another."""
@@ -4943,7 +4951,7 @@ def cmd_decisions(args):
         out = res.get("result") if isinstance(res.get("result"), str) else ""
         used = res.get("modelUsage") if isinstance(res.get("modelUsage"), dict) else {}
         if used:
-            note_model(asks, max(used, key=lambda m: (used[m] or {}).get("outputTokens") or 0))
+            note_model(asks, ran_model(asks, used))
             record_usage(args.session or current_session(), "decisions", "decisions",
                          (res.get("duration_ms") or 0) / 1000.0, usage_share(used, {}))
     points, gist = decision_lines(out)
@@ -4981,7 +4989,7 @@ def cmd_call_summary(args):
         return 1
     used = res.get("modelUsage") if isinstance(res.get("modelUsage"), dict) else {}
     if used:
-        note_model(asks, max(used, key=lambda m: (used[m] or {}).get("outputTokens") or 0))
+        note_model(asks, ran_model(asks, used))
         record_usage(args.session or current_session(), "call-summary", "call-summary",
                      (res.get("duration_ms") or 0) / 1000.0, usage_share(used, {}))
     out = res["result"].strip()
@@ -5140,7 +5148,7 @@ def cmd_title(args):
         out = res.get("result") if isinstance(res.get("result"), str) else ""
         used = res.get("modelUsage") if isinstance(res.get("modelUsage"), dict) else {}
         if used:                                     # one call, no conversation: all of it is this call's
-            note_model(asks, max(used, key=lambda m: (used[m] or {}).get("outputTokens") or 0))
+            note_model(asks, ran_model(asks, used))
             record_usage(args.session or current_session(), "title", "title",
                          (res.get("duration_ms") or 0) / 1000.0, usage_share(used, {}))
     title = out.strip().splitlines()
