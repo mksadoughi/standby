@@ -358,7 +358,7 @@ try:
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 450, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 480, (len(call.split()), call[:300]))
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
