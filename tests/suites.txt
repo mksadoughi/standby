@@ -82,6 +82,7 @@ test_crash_watch           py    par
 test_usage                 py    par  
 test_orphan_session        py    par  
 test_voice_bare            py    par  
+test_voice_tools           py    par
 test_sound_why             py    par  
 test_chat_joined           py    par  
 test_mic_denied            py    par  

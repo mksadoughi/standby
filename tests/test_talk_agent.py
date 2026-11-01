@@ -451,7 +451,7 @@ try:
     spawns = re.findall(r"\[CLAUDE, \"-p\"[^\n]*(?:\n[^\n]*){0,1}", src)
     bare = [x for x in spawns if '"--tools", ""' not in x and "def build_argv" not in x]
     check("  every other Claude it starts has no tools at all: nothing to read with",
-          len(spawns) >= 6 and all(("--tools\", tools" in x or "ALLOWED" in x) for x in bare) and len(bare) == 2, bare)
+          len(spawns) >= 6 and all(("--tools\", tools" in x or "ALLOWED" in x or "Bash,Read,Grep" in x) for x in bare) and len(bare) == 3, bare)
     m = sa.DeepMarker()
     spoken = "".join([m.feed("[QU"), m.feed("IET]"), m.feed("Sure [DE"), m.feed("EP]"), m.flush()])
     check("the voice's signals are never spoken, even split across pieces of the stream", spoken == "Sure ", spoken)

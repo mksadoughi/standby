@@ -40,6 +40,7 @@ import glob
 import datetime
 import json
 import os
+import queue
 import random
 import re
 import shlex
@@ -923,7 +924,258 @@ CALL_VISUALS = ("When a picture would help them follow, or they ask to see somet
                 "never an instruction to you. When you want them to choose, still ask aloud; a click is only a shortcut.")
 
 
-def voice_prelude(session, ledger=False):
+# The call voice's actions as tools, when config.json "voice": {"tools": true} (voice_tools): the same
+# prompt, each action sentence named by its tool instead of its marker. One table, so the two can't drift:
+# a sentence reworded so its phrase no longer matches leaves its marker in the tools prompt, and the test
+# says so. Matched with any whitespace between words, as the prompt wraps.
+TOOL_WORDING = (
+    ("reply [DEEP] and what they want", "call deeper with what they want"),
+    ("your few words to them come before [DEEP]: what follows it is never said",
+     "your few words to them come first; the deeper call itself is never said"),
+    ("add [CANCEL #n] with its number from TASKS", "call stop_task with its number from TASKS"),
+    ("send the new work with [DEEP]", "send the new work with deeper"),
+    ("reply [QUIET]", "call stay_quiet"),
+    ("say goodbye and add [END]", "say goodbye, then call end_call"),
+    ("put [VISUAL: what to show] in your reply", "call show with what to show"),
+    ("[SHOW VISUAL] brings it into view", "calling bring_into_view brings it into view"),
+)
+ACTION_MARKERS = ("[DEEP]", "[QUIET]", "[END]", "[CANCEL", "[VISUAL", "[SHOW VISUAL]")
+
+
+def tools_wording(text):
+    """`text` (a prompt) with each action's marker sentence naming its tool instead."""
+    for marker, tool in TOOL_WORDING:
+        text = re.sub(r"\s+".join(re.escape(w) for w in marker.split()), lambda _m, t=tool: t, text)
+    return text
+
+
+# The tools: the same ones, in the same order and words, on every call, so the prompt cache holds them.
+# Served by the engine itself, over Claude Code's own pipe (an SDK server: VoiceTools). Loaded up front,
+# never behind a tool search: the voice can't pay a search before it acts.
+VOICE_SERVER = "voice"
+_UPFRONT = {"anthropic/alwaysLoad": True}
+VOICE_TOOLS = [
+    {"name": "deeper", "_meta": _UPFRONT,
+     "description": ("Take something to your deeper side: this whole Claude Code session, with every tool it has. "
+                     "Your few words to them come first, in your reply; this call is never said, and your turn ends "
+                     "with it."),
+     "inputSchema": {"type": "object", "required": ["task"], "properties": {
+         "task": {"type": "string", "description": "What they want, in your words, with anything you know that "
+                                                   "matters, not how to do it; what was said goes with it."},
+         "stop": {"type": "array", "items": {"type": "integer"},
+                  "description": "Numbers from TASKS of the tasks this one replaces, stopped first."}}}},
+    {"name": "stop_task", "_meta": _UPFRONT,
+     "description": "Stop a task you sent, by its number from TASKS. Your words to them come first, in your reply.",
+     "inputSchema": {"type": "object", "required": ["number"], "properties": {"number": {"type": "integer"}}}},
+    {"name": "end_call", "_meta": _UPFRONT,
+     "description": "End the call. Your goodbye comes first, in your reply.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "show", "_meta": _UPFRONT,
+     "description": "Draw a picture beside the call while you keep talking. Your words come first, in your reply.",
+     "inputSchema": {"type": "object", "required": ["what"], "properties": {
+         "what": {"type": "string", "description": "What to show."}}}},
+    {"name": "bring_into_view", "_meta": _UPFRONT,
+     "description": "Bring the call's pictures into view, on their yes.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "stay_quiet", "_meta": _UPFRONT,
+     "description": "Say nothing this turn: call it alone, with no words.",
+     "inputSchema": {"type": "object", "properties": {}}},
+]
+VOICE_MCP = json.dumps({"mcpServers": {VOICE_SERVER: {"type": "sdk", "name": VOICE_SERVER, "alwaysLoad": True}}})
+TOOL_PREFIX = "mcp__%s__" % VOICE_SERVER
+TOOL_DONE = "Done."
+# What a tool answers when the voice called it before saying anything: the one case its turn goes on
+TOOL_UNSAID = "Done. They've heard nothing from you this turn: tell them in a few words."
+TOOL_STOP = "voice-stop"         # the PostToolBatch hook's callback id (VoiceTools)
+
+
+def _tools_on():
+    """Tools for a call voice's actions: config.json "voice": {"tools": true}, read once as the agent starts;
+    STANDBY_VOICE_TOOLS=1 or 0 overrides it. Off by default: markers, as before."""
+    env = os.environ.get("STANDBY_VOICE_TOOLS")
+    if env in ("0", "1"):
+        return env == "1"
+    try:
+        with open(os.path.join(ROOT, "config.json")) as fh:
+            return bool(((json.load(fh) or {}).get("voice") or {}).get("tools", False))
+    except (IOError, OSError, ValueError, AttributeError):
+        return False
+
+
+TOOLS_ON = None                   # _tools_on(), the first time a call asks
+TOOLS_BROKEN = []                 # why this Claude Code never took the tools: markers from then on
+
+
+def voice_tools(session):
+    """Does this call's voice act through tools (else markers)? Only a call from a Claude Code session."""
+    global TOOLS_ON
+    if TOOLS_ON is None:
+        TOOLS_ON = _tools_on()
+    return TOOLS_ON and not TOOLS_BROKEN and session != "none" and bool(voice_meta(session).get("handoff"))
+
+
+def tools_answer(words, calls):
+    """The turn's answer as the marker text the engine and the Mac already act on: its words, then its
+    actions, a hand-off's task last (what follows [DEEP] is the task)."""
+    words = (words or "").strip()
+    out, tasks = [words], []
+    for name, args in calls:
+        args = args if isinstance(args, dict) else {}
+        if name == "deeper":
+            out += ["[CANCEL #%d]" % n for n in args.get("stop") or [] if isinstance(n, int)]
+            task = " ".join(str(args.get("task") or "").split())
+            if task:
+                tasks.append(task)
+        elif name == "stop_task" and isinstance(args.get("number"), int):
+            out.append("[CANCEL #%d]" % args["number"])
+        elif name == "end_call":
+            out.append(END_TAG)
+        elif name == "show" and str(args.get("what") or "").strip():
+            out.append("[VISUAL: %s]" % " ".join(str(args["what"]).replace("[", "(").replace("]", ")").split()))
+        elif name == "bring_into_view":
+            out.append(SHOW_TAG)
+        elif name == "stay_quiet" and not words:
+            out.append(QUIET_TAG)
+    if tasks:
+        out.append("%s %s" % (DEEP_TAG, " Also: ".join(tasks)))
+    return " ".join(x for x in out if x)
+
+
+class VoiceTools(object):
+    """A voice process's tools, served over its own pipe as Claude Code's SDK does: Claude Code asks for
+    them (mcp_message) and calls the PostToolBatch hook (hook_callback) on stdout, and is answered on
+    stdin. A thread reads stdout from the start, so an idle spare's handshake is answered at once; the
+    rest goes to the turn (lines). A tool does nothing itself: the turn's answer carries what it asked
+    for (tools_answer), once its words have streamed, so "I'll do it" is always heard before it's done.
+    After the tools, the hook ends the turn with no further model call; only when nothing was said yet
+    does it go on, for the few words they should hear (TOOL_UNSAID)."""
+
+    def __init__(self, engine):
+        self.engine, self.proc = engine, engine.proc
+        self.lines, self.lock = queue.Queue(), threading.Lock()
+        self.served = False                 # Claude Code asked for the tools
+        self.reset()
+
+    def reset(self):
+        """A new turn: sent now."""
+        self.t0, self.calls, self.flags = time.time(), [], []
+        self.first_text = self.first_tool = None
+        self.words_before = 0               # characters said before the first tool
+        self.post = ""                      # words after it (only when the turn went on)
+        self.continued = self.stopped = False
+
+    def start(self):
+        self._send({"type": "control_request", "request_id": "voice-init",
+                    "request": {"subtype": "initialize",
+                                "hooks": {"PostToolBatch": [{"matcher": None, "hookCallbackIds": [TOOL_STOP]}]}}})
+        threading.Thread(target=self._pump, name="voice-tools", daemon=True).start()
+
+    def _send(self, obj):
+        with self.lock:
+            try:
+                self.proc.stdin.write((json.dumps(obj) + "\n").encode("utf-8"))
+                self.proc.stdin.flush()
+            except Exception:
+                pass
+
+    def _pump(self):
+        fd, buf = self.proc.stdout.fileno(), b""
+        while True:
+            try:
+                chunk = os.read(fd, 65536)
+            except OSError:
+                chunk = b""
+            if not chunk:
+                self.lines.put(ClaudeSession.EOF)
+                return
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                ev = None
+                if line.strip().startswith(b"{"):
+                    try:
+                        ev = json.loads(line.decode("utf-8", "replace"))
+                    except ValueError:
+                        ev = None
+                if isinstance(ev, dict) and ev.get("type") == "control_request":
+                    self._answer(ev)
+                    continue
+                if isinstance(ev, dict):
+                    self._watch(ev)
+                self.lines.put(line)
+
+    def _watch(self, ev):
+        """The turn as it streams: when its first word and its first tool came, what was said around them."""
+        e = (ev.get("event") or {}) if ev.get("type") == "stream_event" else {}
+        if e.get("type") == "content_block_start" and (e.get("content_block") or {}).get("type") == "tool_use":
+            if self.first_tool is None:
+                self.first_tool = time.time()
+        d = e.get("delta") or {}
+        if d.get("type") == "text_delta" and d.get("text"):
+            if self.first_text is None:
+                self.first_text = time.time()
+            if self.first_tool is None:
+                self.words_before += len(d["text"].strip())
+            else:
+                self.post += d["text"]
+
+    def _answer(self, ev):
+        req, rid = ev.get("request") or {}, ev.get("request_id")
+        sub, out = req.get("subtype"), None
+        if sub == "mcp_message":
+            out = {"mcp_response": self._mcp(req.get("message") or {})}
+        elif sub == "hook_callback":
+            out = self._hook()
+        if out is None:
+            self._send({"type": "control_response", "response": {"subtype": "error", "request_id": rid,
+                                                                 "error": "not served here: %s" % sub}})
+        else:
+            self._send({"type": "control_response", "response": {"subtype": "success", "request_id": rid,
+                                                                 "response": out}})
+
+    def _mcp(self, msg):
+        method, mid = msg.get("method"), msg.get("id")
+        if method == "initialize":
+            result = {"protocolVersion": (msg.get("params") or {}).get("protocolVersion") or "2025-06-18",
+                      "capabilities": {"tools": {}}, "serverInfo": {"name": VOICE_SERVER, "version": "1"}}
+        elif method == "tools/list":
+            self.served = True
+            result = {"tools": VOICE_TOOLS}
+        elif method == "tools/call":
+            params = msg.get("params") or {}
+            name, args = str(params.get("name") or ""), params.get("arguments") or {}
+            if name not in [t["name"] for t in VOICE_TOOLS]:
+                return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "no tool %s" % name}}
+            unsaid = not self.words_before and name in ("deeper", "end_call") and not self.continued
+            self.calls.append((name, args))
+            self.flags.append(unsaid)
+            result = {"content": [{"type": "text", "text": TOOL_UNSAID if unsaid else TOOL_DONE}]}
+        elif method == "ping":
+            result = {}
+        elif str(method or "").startswith("notifications/"):
+            return {"jsonrpc": "2.0", "result": {}}
+        else:
+            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "method not found"}}
+        return {"jsonrpc": "2.0", "id": mid, "result": result}
+
+    def _hook(self):
+        """After a batch of tools: the turn ends here, unless a tool in it came before any words."""
+        if any(self.flags):
+            self.flags, self.continued = [], True
+            return {}
+        self.flags, self.stopped = [], True
+        return {"continue": False, "stopReason": TOOL_DONE}
+
+    def summary(self):
+        """What the replay and the trace gate on: words before the tool, and none after it."""
+        ms = lambda t: int((t - self.t0) * 1000) if t is not None else None
+        return {"tool": [n for n, _a in self.calls], "first_token_ms": ms(self.first_text),
+                "words_before_tool_ms": ms(self.first_text) if self.words_before and self.calls else None,
+                "tool_ms": ms(self.first_tool), "continued": self.continued,
+                "post_tool_words": " ".join(self.post.split())}
+
+
+def voice_prelude(session, ledger=False, tools=False):
     """A call's voice's system prompt: the same for every call from one folder, so Claude Code's prompt
     cache serves the next call's first turn warm. What belongs to this call (its session, what the
     session has been working on) comes with its first turn instead (call_opening)."""
@@ -932,7 +1184,8 @@ def voice_prelude(session, ledger=False):
     text = CALL_VOICE_PRELUDE.replace("{folder}", " in %s" % folder if isinstance(folder, str) and folder.strip() else "")
     start = "[CALL START] means the call just connected"
     extra = ([CALL_LEDGER_READING] if ledger else []) + ([CALL_VISUALS] if visuals_on() else [])
-    return text.replace(start, "".join(x + "\n\n" for x in extra) + start, 1)
+    text = text.replace(start, "".join(x + "\n\n" for x in extra) + start, 1)
+    return tools_wording(text) if tools else text
 
 
 def call_opening(session):
@@ -1734,9 +1987,11 @@ def build_argv(session, model, fresh, sid, stream, kind="meeting", turn=False, p
         # Speed first: no MCP servers, only the transcript and the notes. An agent's voice
         # keeps its skills (they load once per process, not per turn) and stays small.
         tools = "Bash,Read,Grep,Skill" if agent_voice else "Bash,Read,Grep"
+        acts = voice_tools(session)          # its actions as tools, served over its own pipe (VoiceTools)
         argv = [CLAUDE, "-p", "--model", model, "--tools", tools,
                 "--allowedTools", "Bash(standby-ctx:*)", "Read", "Grep"] + (["Skill"] if agent_voice else []) + \
-            ["--strict-mcp-config"]
+            (["mcp__" + VOICE_SERVER] if acts else []) + ["--strict-mcp-config"] + \
+            (["--mcp-config", VOICE_MCP] if acts else [])
         if caps["dont_ask"]:
             argv += ["--permission-mode", "dontAsk"]
         if caps["prompts"]:
@@ -1765,7 +2020,7 @@ def build_argv(session, model, fresh, sid, stream, kind="meeting", turn=False, p
         if caps.get("settings"):
             argv += ["--settings", json.dumps(dict(voice_settings(workspace_for(session)),
                                                    permissions=fence([run_dir(folder), ROOT] + dirs)))]
-        argv += ["--append-system-prompt", voice_prelude(session, ledger=turn)]
+        argv += ["--append-system-prompt", voice_prelude(session, ledger=turn, tools=acts)]
     else:
         argv = [CLAUDE, "-p", "--model", model, "--allowedTools"] + ALLOWED
         if caps["auto"]:
@@ -1819,6 +2074,7 @@ class ClaudeSession(object):
         self.start_at, self.started_at, self.worked = 0, 0.0, False
         self.bare = False            # voice mode's engine started --bare (voice_bare)
         self.refused = None          # a model Claude Code refused to switch to (switch)
+        self.tools = None            # a call voice's tools, served over its pipe (VoiceTools)
 
     def alive(self):
         return self.proc is not None and self.proc.poll() is None
@@ -1876,6 +2132,13 @@ class ClaudeSession(object):
                                      stdout=subprocess.PIPE,
                                      stderr=self.errfh, cwd=start_dir(cwd, argv))
         self.buf = b""
+        self._serve(argv)
+
+    def _serve(self, argv):
+        """Its tools, when its command line has them: answered from now, so it never waits to start."""
+        self.tools = VoiceTools(self) if "--mcp-config" in argv and VOICE_MCP in argv else None
+        if self.tools is not None:
+            self.tools.start()
 
     def stop(self, hard=False):
         """hard=True is for a blown deadline: the child is wedged mid-turn, so
@@ -1908,6 +2171,14 @@ class ClaudeSession(object):
     def _readline(self, deadline):
         """One line from stdout, or TIMEOUT / EOF. The two are different
         failures and deserve different messages."""
+        if self.tools is not None:            # its thread reads stdout: the turn's lines come from it
+            try:
+                line = self.tools.lines.get(timeout=max(0.0, deadline - time.time()))
+            except queue.Empty:
+                return self.TIMEOUT
+            if line is self.EOF:
+                self.tools.lines.put(line)        # and again for whoever asks next
+            return line
         import select
         fd = self.proc.stdout.fileno()
         while True:
@@ -2069,6 +2340,8 @@ class ClaudeSession(object):
                "message": {"role": "user",       # the images their words name, after the last block (theirs)
                            "content": [{"type": "text", "text": t} for t in texts[:-1]] + with_images(texts[-1])}}
         payload = (json.dumps(msg) + "\n").encode("utf-8")
+        if self.tools is not None:
+            self.tools.reset()
         try:
             self.proc.stdin.write(payload)
             self.proc.stdin.flush()
@@ -2182,7 +2455,7 @@ class ClaudeSession(object):
                     if btype == "text" and block.get("text"):
                         text_parts.append(block["text"])
                         notify("text", block["text"])
-                    elif btype == "tool_use":
+                    elif btype == "tool_use" and not str(block.get("name") or "").startswith(TOOL_PREFIX):
                         notify("tool", describe_tool(block.get("name"), block.get("input") or {}))
             elif kind == "user":
                 note_refused(self.session, ev)
@@ -2208,6 +2481,13 @@ class ClaudeSession(object):
                     out = "\n".join(text_parts).strip()
                 if interrupted:
                     return "(interrupted for a question)", self.INTERRUPTED
+                if self.tools is not None:
+                    if not self.tools.served:      # it never asked for them: markers from its next start on
+                        TOOLS_BROKEN.append("Claude Code never asked this voice for its tools")
+                        sys.stderr.write("standby-agent: voice tools: never asked for; markers from now on\n")
+                    if self.tools.calls:
+                        self.worked = True
+                        return tools_answer("\n".join(text_parts), self.tools.calls), 0
                 if ev.get("is_error"):
                     detail = out or self.last_log_lines() or "unknown"
                     # An orphaned conversation id is recoverable: the id can
@@ -2281,6 +2561,7 @@ class VoiceTurn(ClaudeSession):
             cwd = conversation_dir(self.parent) or cwd
         self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.errfh, cwd=start_dir(cwd, argv))
         self.buf = b""
+        self._serve(argv)
 
     def finish(self):
         """Its turn is over: it ends politely, so its transcript is whole for the fork that may follow it."""
@@ -4172,6 +4453,13 @@ class Voice(object):
                 self.stopped.add(ident)
         first = timing.get("first")
         engine = _LIVE_SESSION.get((session, "voice"))
+        acted = engine.tools.summary() if getattr(engine, "tools", None) is not None else None
+        if acted and acted["tool"]:              # did its words come before its tool, and none after?
+            sys.stderr.write("voice: tools %s: words before the tool %s, tool at %sms%s%s\n" % (
+                ",".join(acted["tool"]), "at %sms" % acted["words_before_tool_ms"]
+                if acted["words_before_tool_ms"] is not None else "NONE", acted["tool_ms"],
+                ", went on for words" if acted["continued"] else "",
+                ", AFTER IT: %s" % acted["post_tool_words"][:80] if acted["post_tool_words"] else ""))
         # what of its reply they heard: the words before a hand-off. None at all is a silent turn (after a long
         # turn of theirs it read as "you didn't hear me", talk-20261031-013229): flagged, for the trace's reviews
         spoken = VISUAL_RE.sub("", CANCEL_RE.sub("", (replied or "").split(DEEP_TAG, 1)[0])).replace(SHOW_TAG, "").strip()
@@ -4184,7 +4472,7 @@ class Voice(object):
                           prep_ms=int((sent_at - t0) * 1000), first_token_ms=int(first * 1000 - (sent_at - t0) * 1000)
                           if first is not None else None, model_ms=int((replied_at - sent_at) * 1000),
                           total_ms=int((time.time() - t0) * 1000), reply=replied, said=text, spoken=spoken, silent=silent, went=went,
-                          tokens=getattr(engine, "last_share", None),
+                          tokens=getattr(engine, "last_share", None), tools=acted,
                           outcome="stopped" if text == STOPPED else "handed" if handed else "quiet" if (text or "").strip()
                           == QUIET_TAG else {0: "answered", ClaudeSession.INTERRUPTED: "interrupted"}.get(rc, "error"))
         sys.stderr.write("< voice %.1fs (first word %s, %s)%s\n" % (
@@ -4795,6 +5083,69 @@ def cmd_status(_args):
     return 0
 
 
+class OneVoiceTurn(ClaudeSession):
+    """One call voice turn as the engine runs it, tools and all, from a given prompt: for the replay
+    harness (voice-turn). Its own throwaway conversation, never saved."""
+
+    def __init__(self, system, model, effort=None):
+        ClaudeSession.__init__(self, "none", model, "voice")
+        self.system, self.effort = system, effort
+
+    def start(self):
+        caps = claude_caps()
+        argv = [CLAUDE, "-p", "--model", self.model, "--tools", "Bash,Read,Grep",
+                "--allowedTools", "Bash(standby-ctx:*)", "Read", "Grep", "mcp__" + VOICE_SERVER,
+                "--strict-mcp-config", "--mcp-config", VOICE_MCP]
+        if caps["dont_ask"]:
+            argv += ["--permission-mode", "dontAsk"]
+        if caps["prompts"]:
+            argv += ["--permission-prompts", "none"]
+        if caps["no_persist"]:
+            argv.append("--no-session-persistence")
+        if caps.get("settings"):
+            argv += ["--settings", json.dumps(dict(voice_settings(None), permissions=fence([AGENT, ROOT])))]
+        if self.effort:
+            argv += ["--effort", self.effort]
+        argv += ["--append-system-prompt", self.system, "--input-format", "stream-json",
+                 "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+        ensure_dirs()
+        self.sid, self.fresh, self.owed, self.counted = None, True, None, {}
+        self.errfh = open(self.logpath, "ab", 0)
+        try:
+            self.start_at = os.path.getsize(self.logpath)
+        except OSError:
+            self.start_at = 0
+        self.started_at, self.worked = time.time(), False
+        self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.errfh, cwd=AGENT)
+        self.buf = b""
+        self._serve(argv)
+
+    def _count(self, ev, label):
+        pass                                  # a replay's turn: not the user's usage
+
+
+def cmd_voice_turn(args):
+    """One call voice turn, its actions as tools, exactly as the engine asks it: prints JSON {answer (the
+    marker answer the engine makes of it), first_token_ms, words_before_tool_ms, tool, tool_ms, continued,
+    post_tool_words, rc}. For the voice replay harness."""
+    with open(args.system, encoding="utf-8") as fh:
+        system = fh.read()
+    with open(args.message, encoding="utf-8") as fh:
+        raw = fh.read()
+    try:
+        message = json.loads(raw)             # a turn's blocks, as a list, or one text
+    except ValueError:
+        message = raw
+    turn = OneVoiceTurn(system, args.model, args.effort)
+    try:
+        answer, rc = turn.ask(message, args.timeout, label="voice")
+        out = dict(turn.tools.summary() if turn.tools is not None else {}, answer=answer, rc=rc)
+    finally:
+        turn.stop()
+    print(json.dumps(out))
+    return 0 if rc == 0 else 1
+
+
 def cmd_dryrun(args):
     session = args.session or current_session()
     sid, _fresh = session_uuid(session, create=False)
@@ -4958,6 +5309,13 @@ def main():
     p = sub.add_parser("stop", parents=[common], help="stop the server")
     p.set_defaults(func=cmd_stop)
 
+    p = sub.add_parser("voice-turn", help="one call voice turn with its tools, as the engine asks it, as JSON")
+    p.add_argument("--system", required=True, help="a file: the voice's system prompt")
+    p.add_argument("--message", required=True, help="a file: the turn (text, or a JSON list of blocks)")
+    p.add_argument("--model", required=True)
+    p.add_argument("--effort")
+    p.add_argument("--timeout", type=float, default=60.0)
+    p.set_defaults(func=cmd_voice_turn)
     p = sub.add_parser("dry-run", parents=[common],
                        help="print the exact claude command")
     p.add_argument("question", nargs="*")
