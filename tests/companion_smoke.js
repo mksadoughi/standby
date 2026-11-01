@@ -172,6 +172,16 @@ const ORB_CHECKS = `
   ok("claude down: the orb grey with its red dot, the line on hover", els.cmp.className.includes("down") && els.talk.title.includes("Claude can't sign in. Run claude, then /login"), [els.cmp.className, els.talk.title]);
   await orb();
   ok("  a click opens Standby, where the line and its Details are", posts.some(m => m.type === "expand") && !calls.some(c => c[0] === "/api/voice"), [posts, calls]);
+  // the call's work going on deeper while the voice listens: the orb shows the thinking motion (it's at work, still there)
+  STATE = LIVE({ voice: { state: "listening", level: 0, tasks: [{ id: "t1", state: "running", label: "Run the tests" }] } });
+  await new Promise(r => setTimeout(r, 750)); await fresh();               // past any voice heard just before
+  ok("work going on deeper, the voice listening: the orb thinks, its tip says it's working", els.cmp.className.includes("thinking")
+     && els.cmp.className.includes("working") && els.talk.title.startsWith("Working on it"), [els.cmp.className, els.talk.title]);
+  STATE = LIVE({ voice: { state: "listening", level: 0.3, tasks: [{ id: "t1", state: "running" }] } }); await fresh();
+  ok("  the user talking over it: the orb hears them", els.cmp.className.includes("hearing") && !els.cmp.className.includes("working"), els.cmp.className);
+  STATE = LIVE({ voice: { state: "listening", level: 0, tasks: [{ id: "t1", state: "done" }, { id: "t2", state: "queued" }] } });
+  await new Promise(r => setTimeout(r, 750)); await fresh();
+  ok("  nothing running (done, or only waiting its turn): listening as before", els.cmp.className.includes("listening") && !els.cmp.className.includes("working"), els.cmp.className);
   // Visuals: the panel's button is Settings > Call's switch, from here
   STATE = LIVE({ visuals_on: true }); await fresh(); calls = [];
   await visualsOnOff();

@@ -281,12 +281,17 @@ function render() {
     '</span></button><span class="rail"><span class="ctls"></span></span>';
   if (vs === "listening" && (v.level || 0) > HEARD) heardAt = Date.now();
   const hearing = vs === "listening" && Date.now() - heardAt < 700;
-  const cls = "cmp " + state + (vs ? " voice" : "") + (blinking ? " blink" : "") + (hearing ? " hearing" : "") + (v.holding ? " holding" : "") + (down ? " down" : "") +
+  // the call's work going on deeper (a task sent or running) while the voice waits: the thinking motion, so the
+  // user can see it's at work and still there (a hand-off once looked like nothing, the user's call, 2026-10-31);
+  // the user talking, or the voice talking, still show as themselves
+  const working = vs === "listening" && !hearing && !v.holding && (v.tasks || []).some(t => t.state === "sent" || t.state === "running");
+  const tip = working ? "Working on it. Click to pause the call" : orbTip;
+  const cls = "cmp " + (working ? "thinking working" : state) + (vs ? " voice" : "") + (blinking ? " blink" : "") + (hearing ? " hearing" : "") + (v.holding ? " holding" : "") + (down ? " down" : "") +
     ((vs === "muted" || v.muted) && v.waiting ? " waiting" : "") + (C && C.visual_mark ? " vis" : "") +
     (vs && v.preparing ? " prep" + (pp === null ? " unknown" : "") : "");
   if (el.className !== cls) el.className = cls;
   const t = el.querySelector(".talk");
-  if (t && t.title !== orbTip) { t.title = orbTip; t.ariaLabel = orbTip || "Claude" }
+  if (t && t.title !== tip) { t.title = tip; t.ariaLabel = tip || "Claude" }
   el.style.display = "";
   // The orb's size: 52 at rest, pointed at or not, 88 talking.
   const g = vs ? ORB : REST, r_ = document.body.classList.contains("r"), top = document.body.dataset.v === "top";
