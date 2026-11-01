@@ -201,6 +201,37 @@ class LocalTransport(object):
             return None
         return got.get("by") if isinstance(got, dict) and got.get("pid") == pid else None
 
+    def agent_run(self, args, input=None, timeout=150, wait=30.0):
+        """One of standby-agent's one-off asks (title, decisions, cc-gist, call-summary), run by the agent server,
+        never started from here: each starts a Claude Code, and started by Standby, macOS asked Standby for the
+        folders it read as it started (the plugin in ~/Documents). Run by the server your Claude Code started,
+        it's that app's. A subprocess.CompletedProcess; TimeoutExpired past `timeout`."""
+        import random
+        spool = self.root / "agent" / "spool"
+        end = time.time() + wait
+        while not self.agent_alive() and time.time() < end:
+            time.sleep(0.25)                      # its Claude Code is starting it
+        if not self.agent_alive():
+            return subprocess.CompletedProcess(args, 1, "", "the agent isn't running")
+        spool.mkdir(parents=True, exist_ok=True)
+        ident = "%d-%04d" % (int(time.time() * 1000), random.randint(0, 9999))
+        tmp, out = spool / (ident + ".run.tmp"), spool / (ident + ".ran")
+        tmp.write_text(json.dumps({"argv": list(args), "input": input or "", "timeout": timeout}))
+        os.replace(tmp, spool / (ident + ".run"))
+        end = time.time() + timeout + 10
+        while time.time() < end:
+            try:
+                res = json.loads(out.read_text())
+            except (OSError, ValueError):
+                time.sleep(0.1)
+                continue
+            try:
+                out.unlink()
+            except OSError:
+                pass
+            return subprocess.CompletedProcess(args, int(res.get("rc", 1)), res.get("stdout") or "", res.get("stderr") or "")
+        raise subprocess.TimeoutExpired(args, timeout)
+
     def ensure_agent(self, model=None, by=None, start=None):
         """The agent server running: (ok, message). by: who asks (STANDBY_AGENT_BY, else "cli"). The agent and
         every Claude Code it starts count, to macOS, as the app that started it: started by Standby, a project in

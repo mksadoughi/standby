@@ -311,15 +311,23 @@ case ":$PATH:" in
      fi ;;
 esac
 
+# The apps, and Claude Code's plugin, run their own copy of the code, never this checkout (mac/codecopy.py):
+# with it in ~/Documents or ~/Desktop, a rebuild cost the apps that folder (calls failed: "Operation not
+# permitted"), and every Claude Code started, Standby's own included, read the plugin there at startup, so
+# macOS asked Standby for Documents. `standby`, run from this checkout, keeps the copy up to date.
+"$VENV/bin/python" "$REPO/mac/codecopy.py" --install "$ROOT/code" >/dev/null || warn "could not copy Standby's code to $ROOT/code"
+
 say "Claude Code plugin"
-# This repo is a plugin marketplace (.claude-plugin/marketplace.json): the plugin "standby" (lite/),
-# installed for every folder. Added and installed again on a re-run, which changes nothing. It loads
-# in place from lite/: after a git pull, a new Claude Code session (or /reload-plugins) has it.
-PLUGIN_CMDS="claude plugin marketplace add \"$REPO\" && claude plugin install standby@standby --scope user"
+# The copy is a plugin marketplace (.claude-plugin/marketplace.json): the plugin "standby" (lite/),
+# installed for every folder. One added from the checkout before is replaced by the copy. It loads in place
+# from ~/.standby/code/lite: after a git pull, any `standby` command updates the copy, and a new Claude Code
+# session (or /reload-plugins) has it.
+PLUGIN_CMDS="claude plugin marketplace add \"$ROOT/code\" && claude plugin install standby@standby --scope user"
 if [[ -z "$CLAUDE" ]]; then
   warn "Claude Code isn't on this Mac yet: once it is, add Standby to it with"
   echo "     $PLUGIN_CMDS"
-elif "$CLAUDE" plugin marketplace add "$REPO" >/dev/null 2>&1 && "$CLAUDE" plugin install standby@standby --scope user >/dev/null 2>&1; then
+elif { "$CLAUDE" plugin marketplace remove standby >/dev/null 2>&1 || true; } &&
+     "$CLAUDE" plugin marketplace add "$ROOT/code" >/dev/null 2>&1 && "$CLAUDE" plugin install standby@standby --scope user >/dev/null 2>&1; then
   if [[ "$CC_OLD" == yes ]]; then           # added, but this Claude Code can't run it: never "type /standby"
     warn "plugin standby@standby added, but Claude Code $CC_VER can't run it: update it with 'claude update' (needs $CC_MIN or later)"
   else
@@ -411,10 +419,6 @@ fi
 ASK_AGAIN=()
 
 say "Standby.app"
-# Both apps run their own copy of the code, never this checkout (mac/codecopy.py): with it in ~/Documents or
-# ~/Desktop, a rebuild cost them that folder (calls failed: "Operation not permitted"). `standby`, run from
-# this checkout, keeps the copy up to date.
-"$VENV/bin/python" "$REPO/mac/codecopy.py" --install "$ROOT/code" >/dev/null || warn "could not copy Standby's code to $ROOT/code"
 # A real app bundle (py2app, alias mode: runs the files in this folder in place),
 # so macOS shows Standby in the Dock and asks for the microphone as Standby.
 BUILD="$ROOT/app-build"

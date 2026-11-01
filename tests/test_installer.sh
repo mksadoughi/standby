@@ -199,8 +199,10 @@ run 2; rc=$?
 check "re-run succeeds (update in place)" "[[ $rc -eq 0 ]]"
 check "  nothing changed: the apps are kept as they are, the same identity" \
   "[[ \"\$(ls -i \"$H/Applications/Standby.app/Contents/Info.plist\" | awk '{print \$1}')\" == '$APP_INODE' && \"\$(codesign -d -r- \"$H/Applications/Standby Dictation.app\" 2>&1 | sed -n 's/^designated => //p')\" == \"\$DR_DICT\" ]]"
-check "Claude Code plugin: this repo added as its marketplace, standby installed for every folder" \
-  "grep -qx 'plugin marketplace add $REPO' $T/claude.args && grep -qx 'plugin install standby@standby --scope user' $T/claude.args && grep -q 'plugin standby@standby, in every folder' $T/out.1"
+check "Claude Code plugin: the code copy added as its marketplace, standby installed for every folder" \
+  "grep -qx 'plugin marketplace add $H/.standby/code' $T/claude.args && grep -qx 'plugin install standby@standby --scope user' $T/claude.args && grep -q 'plugin standby@standby, in every folder' $T/out.1"
+check "  from the code copy, never the checkout (every Claude Code read the plugin there as it started, Standby's too: macOS asked Standby for Documents); one added from the checkout replaced" \
+  "grep -qx 'plugin marketplace remove standby' $T/claude.args && ! grep -q 'marketplace add $REPO' $T/claude.args && cmp -s $REPO/.claude-plugin/marketplace.json $H/.standby/code/.claude-plugin/marketplace.json && cmp -s $REPO/lite/hooks/register.js $H/.standby/code/lite/hooks/register.js"
 check "  a re-run asks the same again (harmless: Claude Code says it's already there)" \
   "[[ \$(grep -c 'plugin install standby@standby' $T/claude.args) -eq 2 ]] && grep -q 'plugin standby@standby, in every folder' $T/out.2"
 check "  the repo is a marketplace with standby from lite/" \

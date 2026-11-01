@@ -1514,7 +1514,7 @@ def session_place(sid, meta):
 
 def start_session(resume=None, kind="meeting", workspace=None,
                   where=None, no_claude=False, capture=None,
-                  agent=None, model=None, voice_id=None):
+                  agent=None, model=None, voice_id=None, own_agent=False):
     """Start (or resume) recording in the background and return at once; the
     page shows 'Starting…' and switches to the session when it is live. A
     meeting never waits behind a talk: starting one ends a live talk.
@@ -1537,12 +1537,12 @@ def start_session(resume=None, kind="meeting", workspace=None,
             return {"error": "a session is already recording; stop it first"}
         STARTING.update(state="starting", error=None, since=time.time(), resume=resume, kind=kind)
     threading.Thread(target=_do_start, args=(resume, kind, workspace, where, no_claude,
-                                             capture, agent, model, voice_id), daemon=True).start()
+                                             capture, agent, model, voice_id, own_agent), daemon=True).start()
     return {"started": True}
 
 
 def _do_start(resume, kind="meeting", workspace=None, where=None, no_claude=False,
-              capture=None, agent=None, model=None, voice_id=None):
+              capture=None, agent=None, model=None, voice_id=None, own_agent=False):
     s = get_settings()
     try:
         if not wait_for_shutdown():
@@ -1584,6 +1584,10 @@ def _do_start(resume, kind="meeting", workspace=None, where=None, no_claude=Fals
         log("start: live session %s" % sid)
         with _lock:
             STARTING.update(state=None, error=None)
+        if own_agent and not no_claude:
+            # Standby's own meeting (its window): no Claude Code to start the agent, so Standby does (the
+            # recorder's `standby start` only looks); a call's is started by its Claude Code (P.40)
+            _ensure_agent(sid)
     except Exception as exc:
         log("start failed: %s" % exc)
         with _lock:
@@ -1744,7 +1748,7 @@ def mac_resume(sid):
     mode = addmac.capture_mode(data.get("meeting_audio", True), data.get("mic", True)) or "auto"
     lite_owned = str(data.get("agent") or "").startswith("lite:")     # its Claude Code session listens, not ours
     r = start_session(resume=sid, kind="meeting", capture=mode, agent=None if lite_owned else data.get("agent"),
-                      no_claude=lite_owned)
+                      no_claude=lite_owned, own_agent=not lite_owned)
     if not r.get("started"):
         return {"error": r.get("error") or "Your Mac didn't start"}
     live = _wait_live(MAC_WAIT)
@@ -2797,8 +2801,7 @@ def title_talk(sid):
 
     def run():
         try:
-            r = subprocess.run(transport.for_config().agent_cmd(["title", "--stdin"]), input=text,
-                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+            r = transport.for_config().agent_run(["title", "--stdin"], input=text, timeout=120)   # by the agent: never Standby's
             title = (r.stdout or "").strip().splitlines()
             if title and title[0] and not (SESSIONS / sid / "title.txt").exists():
                 (SESSIONS / sid / "title.auto.txt").write_text(title[0][:80] + "\n")
@@ -2970,8 +2973,7 @@ DECISIONS_RETRY_S = 5.0
 def _ask_decisions(first, text):
     """`standby-agent decisions` on `text` once: (its lines, why it gave none, or "")."""
     try:
-        r = subprocess.run(transport.for_config().agent_cmd(["decisions", "--session", first]), input=text,
-                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=150)
+        r = transport.for_config().agent_run(["decisions", "--session", first], input=text, timeout=150)
     except subprocess.TimeoutExpired:
         return [], "timed out after 150 s"
     except Exception as exc:
@@ -4371,8 +4373,7 @@ def lite_gist_refresh(cc, then=None):
         t0 = time.time()
         try:
             mark = path.stat().st_size
-            r = subprocess.run(transport.for_config().agent_cmd(["cc-gist", "--transcript", str(path)]),
-                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=150)
+            r = transport.for_config().agent_run(["cc-gist", "--transcript", str(path)], timeout=150)
             text = (r.stdout or "").strip()
             if text:
                 LITE_GISTS.mkdir(parents=True, exist_ok=True)
@@ -4959,8 +4960,7 @@ def lite_card_add(b):
             return {"error": "That Claude Code session isn't open"}
         words = _card_text(call_sessions(first), "Voice", me="User")
         try:
-            r = subprocess.run(transport.for_config().agent_cmd(["call-summary", "--session", first]), input=words,
-                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=150)
+            r = transport.for_config().agent_run(["call-summary", "--session", first], input=words, timeout=150)
         except Exception as exc:
             log("lite: %s: call summary: %r" % (first, exc))
             r = None
@@ -5660,8 +5660,7 @@ def maybe_title(sid, listener=False):
             if listener:                       # nothing pushed it to the agent's side: the titler reads it there
                 local = SESSIONS / sid / "transcript.jsonl"
                 t.write("live/%s.jsonl" % sid, local.read_bytes() if local.exists() else b"")
-            r = subprocess.run(t.agent_cmd(["title", "--session", sid]), stdin=subprocess.DEVNULL,
-                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+            r = t.agent_run(["title", "--session", sid], timeout=120)
             title = (r.stdout or "").strip().splitlines()
             if title and title[0] and not (SESSIONS / sid / "title.txt").exists():
                 (SESSIONS / sid / "title.auto.txt").write_text(title[0][:80] + "\n")
@@ -6394,7 +6393,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/capture/answer":
             return self._json(capture_answer(b))
         if self.path == "/api/start" and TEST_ROUTES:      # tests only (test_ui): meetings start from Claude Code
-            return self._json(start_session(workspace=b.get("workspace")))
+            return self._json(start_session(workspace=b.get("workspace"), own_agent=True))
         if self.path == "/api/msg/memory":
             return self._json(card_memory(b.get("session"), bool(b.get("keep"))))
         if self.path == "/api/msg/call/end":

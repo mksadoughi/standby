@@ -85,6 +85,13 @@ def fake_talk(sid=None, wait=90, workspace=None, attach=None, copy=False, where=
 ui.start_talk = fake_talk
 ui.visual_where = lambda sid: "off"           # no visuals here, but where they're asked about
 ui.visuals_on = lambda: False
+
+# The agent server runs Standby's one-off asks (transport.agent_run, never a Claude Code started by Standby);
+# here, with no server, the same subcommand runs directly, as the server would run it.
+import subprocess as _sp  # noqa: E402
+ui.transport.LocalTransport.agent_run = lambda self, args, input=None, timeout=150, wait=30.0: _sp.run(
+    self.agent_cmd(list(args)), input=input or "", capture_output=True, text=True, encoding="utf-8",
+    errors="replace", timeout=timeout)
 real_begin_ask, real_run_ask = ui._begin_ask, ui._run_ask
 begun = []
 ui._begin_ask = lambda sid, q, voice=False, own=False: begun.append((q, own))
@@ -1042,6 +1049,10 @@ check("  and says it's a call's (the band offers Add to Claude Code on a call's 
 fed, said = [], {"out": "The user and the PM agreed the cache TTL stays at an hour.", "rc": 0}
 real_cfg = ui.transport.for_config
 class FakeT(object):
+    def agent_run(self, args, input=None, timeout=150, wait=30.0):       # as the agent server runs it
+        import subprocess as sp
+        return sp.run(self.agent_cmd(list(args)), input=input or "", capture_output=True, text=True, timeout=timeout)
+
     def agent_cmd(self, args):
         fed.append(args)
         return [sys.executable, "-c", "import sys; open(%r, 'w').write(sys.stdin.read()); print(%r); sys.exit(%d)"

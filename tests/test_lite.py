@@ -424,6 +424,10 @@ class FakeT(object):
         return True
     def agent_cmd(self, args):
         return ["/bin/echo", "Routing cache review"]
+
+    def agent_run(self, args, input=None, timeout=150, wait=30.0):     # as the agent server runs it
+        import subprocess as sp
+        return sp.run(self.agent_cmd(list(args)), input=input or "", capture_output=True, text=True, timeout=timeout)
 real_for = ui.transport.for_config
 ui.transport.for_config = lambda cfg=None: FakeT()
 T = "meeting-20261019-203430"

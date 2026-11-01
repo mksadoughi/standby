@@ -65,6 +65,7 @@ with contextlib.redirect_stderr(diagnostics):
             mock.patch.object(ui.subprocess, "run", return_value=types.SimpleNamespace(stdout=title)), \
             mock.patch.object(ui.threading, "Thread", side_effect=lambda target, **kw: types.SimpleNamespace(start=target)):
         transport.return_value.agent_cmd.return_value = ["fake-title"]
+        transport.return_value.agent_run.return_value = types.SimpleNamespace(stdout=title, returncode=0, stderr="")
         ui.title_talk(sid)
     assert (sdir / "title.auto.txt").read_text().strip() == title
 

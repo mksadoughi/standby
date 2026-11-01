@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(os.environ.get("STANDBY_ROOT", Path.home() / ".standby"))
 CODE = ROOT / "code"
-PARTS = ("mac", "plugin")
+PARTS = ("mac", "plugin", "lite", ".claude-plugin")    # lite/ and .claude-plugin/: Claude Code's plugin, read from here
 SKIP = ("__pycache__", ".DS_Store")
 SOURCE = ".source"                    # in the copy: the checkout it was installed from
 CHECKOUT = Path(__file__).resolve().parent.parent

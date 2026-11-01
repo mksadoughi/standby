@@ -176,6 +176,13 @@ check("  none made yet: no summary block", "[END SUMMARY]" not in sa.call_openin
 # ---------------------------------------------------------------- the app: cached, made in the background, given once
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mac"))
 import ui  # noqa: E402
+
+# The agent server runs Standby's one-off asks (transport.agent_run, never a Claude Code started by Standby);
+# here, with no server, the same subcommand runs directly, as the server would run it.
+import subprocess as _sp  # noqa: E402
+ui.transport.LocalTransport.agent_run = lambda self, args, input=None, timeout=150, wait=30.0: _sp.run(
+    self.agent_cmd(list(args)), input=input or "", capture_output=True, text=True, encoding="utf-8",
+    errors="replace", timeout=timeout)
 CC = "0f3c2a77-1111-4222-8333-944455556666"
 ui._cc_transcript = lambda cc: __import__("pathlib").Path(TRANSCRIPT) if cc == CC else None
 check("no gist yet: none, not current", ui.lite_gist(CC) == ("", None, False))
@@ -205,6 +212,7 @@ def fake_talk(sid=None, wait=90, workspace=None, attach=None, copy=False, where=
 ui.start_talk, ui.live_session = fake_talk, (lambda *a, **k: live_now[0])
 ui.visual_where = lambda sid: "off"           # no visuals here: off from the call's start, so nothing said of them
 ui.visuals_on = lambda: False
+
 ui.lite_publish = lambda cc, ev: None
 ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None, commit=None: (ui.PENDING.pop(sid, None), asked.append(q), answers.pop(0))[2]
 os.environ["FAKE_REPLY"] = "Gist two: the changelog is next."

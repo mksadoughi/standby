@@ -86,6 +86,11 @@ os.environ["STANDBY_NO_DEVICES"] = "1"
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mac"))
 import time  # noqa: E402
 import ui  # noqa: E402
+# The agent server runs Standby's one-off asks (transport.agent_run, never a Claude Code started by Standby);
+# here, with no server, the same subcommand runs directly, as the server would run it.
+ui.transport.LocalTransport.agent_run = lambda self, args, input=None, timeout=150, wait=30.0: subprocess.run(
+    self.agent_cmd(list(args)), input=input or "", capture_output=True, text=True, encoding="utf-8",
+    errors="replace", timeout=timeout)
 ui.DECISIONS_RETRY_S = 0
 logged = []
 ui.log = lambda line: logged.append(line)

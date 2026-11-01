@@ -3502,6 +3502,52 @@ def strip_deep(text):
     return (text or "").replace(DEEP_TAG, "").strip()
 
 
+# Standby's one-off asks of Claude Code (a title, a call's decisions or summary, a session's gist), run by this
+# server, never by Standby: each starts a Claude Code, which reads its plugins and folders as it starts, and
+# started by Standby, macOS asked Standby for ~/Documents. Started here, by the user's own Claude Code, they're
+# that app's. A request is <id>.run, {"argv": […], "input": "…"}; its result <id>.ran, {"rc", "stdout", "stderr"}.
+RUNNABLE = ("title", "decisions", "cc-gist", "call-summary")
+_RUNNING = set()
+
+
+def serve_runs():
+    try:
+        names = [n for n in os.listdir(SPOOL) if n.endswith(".run")]
+    except OSError:
+        return
+    for name in names:
+        ident = name[:-4]
+        if ident in _RUNNING:
+            continue
+        _RUNNING.add(ident)
+        threading.Thread(target=_run_one, args=(ident,), name="run-" + ident, daemon=True).start()
+
+
+def _run_one(ident):
+    path, out = os.path.join(SPOOL, ident + ".run"), os.path.join(SPOOL, ident + ".ran")
+    try:
+        with open(path) as fh:
+            req = json.load(fh)
+        os.remove(path)
+        argv = req.get("argv") if isinstance(req, dict) else None
+        if not (isinstance(argv, list) and argv and argv[0] in RUNNABLE and all(isinstance(a, str) for a in argv)):
+            res = {"rc": 2, "stdout": "", "stderr": "not something Standby runs here"}
+        else:
+            r = subprocess.run([sys.executable, os.path.realpath(__file__)] + argv, input=req.get("input") or "",
+                               capture_output=True, text=True, timeout=float(req.get("timeout") or 150))
+            res = {"rc": r.returncode, "stdout": r.stdout, "stderr": r.stderr[-4000:]}
+    except subprocess.TimeoutExpired:
+        res = {"rc": 124, "stdout": "", "stderr": "took too long"}
+    except (IOError, OSError, ValueError) as exc:
+        res = {"rc": 1, "stdout": "", "stderr": repr(exc)}
+    finally:
+        _RUNNING.discard(ident)
+    try:
+        _answer(out, json.dumps(res))
+    except OSError:
+        pass
+
+
 def _answer(apath, text):
     with open(apath + ".tmp", "w") as fh:
         fh.write(text)
@@ -4222,6 +4268,7 @@ def cmd_serve(args):
                     prewarm(session, backend.model)
                 if not (is_talk(session) and not voice_meta(session)):
                     voice.submit(("spawn", session))   # a call's voice waits for its voice.json: the app's warm-up comes after it
+            serve_runs()                      # Standby's own one-off asks (titles, summaries, gists): run here
             # Voice questions (.vq) and warm-ups (.w) are the voice thread's.
             pending_q = sorted(n for n in os.listdir(SPOOL) if n.endswith(".q"))
             if held:

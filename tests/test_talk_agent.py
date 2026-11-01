@@ -535,6 +535,23 @@ try:
     check("projects listed for Standby Dictation: none in a guarded folder, and nothing there even looked at",
           real(guarded_proj) in everything and unguarded == [real(open_proj)]
           and not any(t.startswith(os.path.join(fake_home, "Documents")) for t in touched), (everything, unguarded, touched))
+    # Standby's one-off asks (a title, a summary, a gist) run by this server, never started by Standby (each starts a
+    # Claude Code, which reads its plugins as it starts: Standby was asked for ~/Documents): <id>.run, <id>.ran.
+    spool_dir = os.path.join(root, "agent", "spool")
+
+    def run_req(ident, req):
+        with open(os.path.join(spool_dir, ident + ".run.tmp"), "w") as fh:
+            json.dump(req, fh)
+        os.replace(os.path.join(spool_dir, ident + ".run.tmp"), os.path.join(spool_dir, ident + ".run"))
+        out, deadline = os.path.join(spool_dir, ident + ".ran"), time.time() + 30
+        while time.time() < deadline and not os.path.exists(out):
+            time.sleep(0.05)
+        return json.load(open(out)) if os.path.exists(out) else None
+    got = run_req("1-0001", {"argv": ["title", "--stdin"], "input": "We talked about caching the map page."})
+    check("Standby's one-off ask, run by the agent server: a title, from its Claude Code", got and got["rc"] == 0
+          and got["stdout"].strip() == "Caching The Map Page", got)
+    got = run_req("1-0002", {"argv": ["serve"]})
+    check("  only those asks: anything else is refused", got and got["rc"] == 2 and not got["stdout"], got)
     # A call's voice reads where its session works: the Mac hands it names only, and the agent (started by the
     # user's Claude Code) works out each one's project top and reads the project's own settings.
     proj = tempfile.mkdtemp(prefix="sbproj-", dir=os.path.expanduser("~")) if False else tempfile.mkdtemp(prefix="sbproj-")
@@ -728,7 +745,7 @@ try:
 
     r = subprocess.run([PY, agent, "title", "--stdin"], input="You: how do we cache the map page?\n"
                        "Claude: Put the route in the session.", env=env, capture_output=True, text=True)
-    prompt = next((x["prompt"] for x in records() if x.get("kind") == "title"), "")
+    prompt = ([x["prompt"] for x in records() if x.get("kind") == "title"] or [""])[-1]     # this one: the newest
     check("a talk's title comes from its chat", r.stdout.strip() == "Caching The Map Page"
           and "conversation" in prompt and "cache the map page" in prompt, (r.stdout, prompt[:200]))
     r = subprocess.run([PY, agent, "title", "--stdin"], input="hi", env=env, capture_output=True, text=True)
