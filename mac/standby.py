@@ -3007,9 +3007,12 @@ class EchoGate(object):
                 return
             self.pending.popleft()
             near = list(self.others)
-            for ch in live:                               # an app's utterance still being spoken
-                if ch.partial:
+            for ch in live:
+                if ch.partial:                            # an app's utterance still being spoken
                     near.append((max(0.0, ch.heard_until() - 10.0), ch.heard_until(), ch.partial))
+                # and its lines decoded but not out yet (held for their speakers' names): the mic's copy
+                # was decided before the app's own line came, and kept (a meeting, 2026-11-01)
+                near += [(item[0], item[1], item[2]) for _at, item in getattr(ch, "held", ())]
             drop, match, overlap = _echo.judge((start, end, text), near)
             if drop or match >= _echo.NEAR:
                 log("echo: %s (match %.2f, overlap %.2f)" % (
@@ -3561,7 +3564,21 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         """The meeting apps' channels now: one per app recorded (Others)."""
         return [c for c in channels if c.capture is not None]
 
-    gate = EchoGate(devs, meeting_chs, lambda *a, **k: emit(*a, **k), lambda: dictation["seq"] is not None)
+    # The apps switched off for this meeting, still playing on open speakers: each heard on a channel of its
+    # own, in memory only, its words never kept, shown, sent or logged, only for the echo check to compare
+    # the mic's lines with (once off, the mic's copies of it went through: a meeting, 2026-11-01).
+    shadows = {}
+
+    def shadow_emit(speaker, start, end, text, spk=None, audio=None, ctx=None, src=None):
+        gate.others.append((start, end, text))
+        while gate.others and gate.others[0][1] < start - 60:
+            gate.others.popleft()
+
+    def echo_chs():
+        """What the echo check compares the mic with: the apps recorded, and those switched off still heard."""
+        return meeting_chs() + list(shadows.values())
+
+    gate = EchoGate(devs, echo_chs, lambda *a, **k: emit(*a, **k), lambda: dictation["seq"] is not None)
     if mode in MEETING_MODES and kind != "talk":
         cap = meeting_audio()
         if cap is not None:
@@ -3713,6 +3730,26 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
     # (roomonly), and off holds in the room too. On headphones there is none to take out.
     off_echo = {"mixed": None, "refs": {}, "mics": set(), "at": {}, "names": {}}    # at: when each was started
 
+    def sync_shadows(want):
+        """A channel in memory for each app switched off that still plays on open speakers (shadows); gone
+        when it's on again, stops playing or the sound can't reach the mic."""
+        seen = dict((_dv_key(a), a) for a in (meeting["follow"].seen if meeting["follow"] is not None else [])
+                    if a.get("playing"))
+        for key in [k for k in shadows if k not in want or k not in seen]:
+            shadows.pop(key).close()
+            log("meeting: %s no longer heard for the echo check" % off_echo["names"].get(key, key))
+        for key in sorted(k for k in want if k in seen and k not in shadows):
+            cap = meeting_audio()
+            if cap is None:
+                continue
+            at = time.time() - clock_zero
+            ch = Channel("Others", None, model, shadow_emit, None, rotate, speakers=None)    # no file: nothing kept
+            ch.capture, ch.app, ch.offset, ch.refresh = cap, seen[key], at, refresh_portaudio
+            ch.zero, ch.base, ch.shadow = clock_zero, t_offset, True
+            ch.open()
+            shadows[key] = ch
+            log("meeting: %s off, heard in memory for the echo check only (no words kept)" % events.off.get(key, key))
+
     def sync_off_echo():
         import roomonly
         refs = off_echo["refs"]
@@ -3734,6 +3771,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
             off_echo["at"][key], off_echo["names"][key] = time.time(), events.off[key]
             if cap is not None:
                 log("meeting: %s off, its sound taken out of the mic (heard, never kept)" % events.off[key])
+        sync_shadows(want)
         if off_echo["mixed"] is None:
             off_echo["mixed"] = roomonly.Mixed()
         off_echo["mixed"].refs = dict((k, r) for k, r in refs.items() if r is not None)
@@ -4120,6 +4158,8 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         while not _stop.is_set():
             for ch in channels:
                 ch.pump()
+            for ch in list(shadows.values()):
+                ch.pump()
             now = time.time()
             if watch is not None and watch.due(now):         # the Mac's mics changed, or a look anyway
                 for ch in mics():
@@ -4142,7 +4182,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
             if meeting_chs() or events.pause_rows:
                 events.watch_pause(meeting_chs())
             if gate.pending:
-                gate.check(force=not meeting_chs())     # the call gone: decide with what there is
+                gate.check(force=not echo_chs())        # the call gone: decide with what there is
             asks.update()
             events.poll_mic(mics())
             sync_off_echo()
@@ -4208,12 +4248,16 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
             for ref in off_echo["refs"].values():
                 if ref is not None:
                     ref.stop()
+            for ch in list(shadows.values()):
+                ch.pump()
             for ch in channels:                       # the last words in, then the held mic lines decided
                 ch.pump()
             gate.check(force=True)
         except Exception:
             pass
         for ch in channels:
+            ch.close()
+        for ch in shadows.values():
             ch.close()
         if dictation["seq"] is not None:
             end_dictation()

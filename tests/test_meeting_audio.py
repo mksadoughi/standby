@@ -372,7 +372,9 @@ check("  a span opens for the transcript's \"Music was off\"",
 time.sleep(1.5)                      # real time: proving it isn't taken again needs looks to pass
 check("  still playing, it is not recorded again", sum("Music joins as Others" in m for m in logged) == 1
       and [c["name"] for c in sources() if c["kind"] == "meeting"] == ["Zoom"], sources())
-Script.say["meeting"].append("still the call")
+# the switched-off music, still playing, is heard in memory for the echo check too, and this stand-in hands a
+# meeting line to whichever app's stream asks first: said twice, so the call surely gets one
+Script.say["meeting"] += ["still the call", "still the call"]
 check("  the call's words still come", wait(lambda: any(r["text"] == "still the call" for r in rows()[said:])), rows()[said:])
 check("  on open speakers its sound is still heard, only to take it out of the mic (never a channel, nothing kept)",
       wait(lambda: any("Music off, its sound taken out of the mic" in m for m in logged))

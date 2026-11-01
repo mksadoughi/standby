@@ -286,6 +286,32 @@ made[-1].quiet = False
 sb.STALL = 2.0
 wait(lambda: any("audio back after" in m for m in logged))
 
+# Switched off for the meeting, still playing on open speakers: heard in memory only, its words never kept or
+# logged, so the mic's copy of it is still dropped (a meeting, 2026-11-01: once off, the mic's copies came through).
+n_drop = sum("DROPPED" in m for m in logged)
+(sdir / "sources.off").write_text(json.dumps({"us.zoom.xos": "Zoom"}))
+check("switched off: its channel closes", wait(lambda: any("Zoom's audio stops (off for this meeting)" in m for m in logged)),
+      [m for m in logged if "Zoom" in m][-3:])
+check("  and it's heard in memory for the echo check only",
+      wait(lambda: any("Zoom off, heard in memory for the echo check only" in m for m in logged)), [m for m in logged if "Zoom" in m][-3:])
+time.sleep(2.2)        # real time, as above
+n_rows = len(rows())
+Script.say["meeting"].append("The budget review moves to Thursday afternoon")
+Script.say["mic"].append("the budget review moves to thursday afternoon")
+check("  the mic's copy of it is dropped as the laptop's sound",
+      wait(lambda: sum("DROPPED" in m for m in logged) > n_drop), [m for m in logged if "echo" in m][-3:])
+time.sleep(1.0)
+check("  and its own words are never in the transcript, nor in the log",
+      not any("budget review" in r["text"].lower() for r in rows()[n_rows:])
+      and not any("budget review" in m.lower() for m in logged), rows()[n_rows:])
+Script.say["mic"].append("I will book the room for that review")
+check("  the user's own words still come", wait(lambda: any("book the room" in r["text"] for r in rows())), rows()[-2:])
+(sdir / "sources.off").write_text("{}")
+check("  on again: no longer heard on the side, recorded as before",
+      wait(lambda: any("Zoom no longer heard for the echo check" in m for m in logged))
+      and wait(lambda: sum("Zoom joins as Others" in m for m in logged) >= 2), [m for m in logged if "Zoom" in m][-3:])
+time.sleep(2.2)
+
 # Headphones: the laptop's sound cannot reach the mic, so nothing is checked or held.
 looks = System.looks
 System.leaks = False
@@ -301,5 +327,21 @@ check("  and it says when the sound stopped being able to reach the mic",
       any("cannot reach the mic now (headphones)" in m for m in logged))
 end_session(th)
 check("the session ends cleanly", not th.is_alive())
+
+# The app's line decoded but still held for its speakers' names when the mic's copy is decided: it counts
+# (a meeting, 2026-11-01: the copy was kept because the app's own line came out a moment after).
+class HeldCh(object):
+    state, cause, partial = "live", None, ""
+    held = [(time.time(), (10.0, 14.0, "When I read that quote I did not know he had died", None))]
+    def heard_until(self): return 30.0
+kept = []
+g = sb.EchoGate(None, lambda: [HeldCh()], lambda *a, **k: kept.append(a), lambda: False)
+g.pending.append((time.time() - 5, "Me", 10.2, 14.1, "when I read that quote I did not know he had died", None, None, (None, None, 0), "s1"))
+g.check()
+check("an app's line still held for its speakers counts: the mic's copy is dropped", kept == [], kept)
+HeldCh.held = []
+g.pending.append((time.time() - 5, "Me", 10.2, 14.1, "when I read that quote I did not know he had died", None, None, (None, None, 0), "s1"))
+g.check()
+check("  with nothing of the app's near it, the mic's line is kept", len(kept) == 1, kept)
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
 sys.exit(1 if fails else 0)
