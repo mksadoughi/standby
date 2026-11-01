@@ -886,6 +886,19 @@ t0 = time.time()
 check("an early question that was their turn: taken, and its hand-off goes at once",
       g._take_early("Run the tests.") is early_q and wait(lambda: acted[-1:] == ["Run the tests."], 2)
       and time.time() - t0 < 1.0, acted)
+# Dropped before its worker even asked (they went on that fast: early asks at every pause make it likelier):
+# it still asks with its commit, which says no. It had none then, and the app read none as their turn.
+from native import qos as voice_qos  # noqa: E402
+go_on, real_interactive = threading.Event(), voice_qos.interactive
+voice_qos.interactive = lambda: go_on.wait(2)        # the worker's first step: held until the drop is in
+g.state = "listening"
+g._ask_early({"text": "Delete the old branch.", "turn": 7})
+g._drop_early("other words")
+go_on.set()
+check("an early question dropped before its worker asked: asked with its commit, which says no; never acts",
+      wait(lambda: "Delete the old branch." in acting_asked, 3) and (time.sleep(0.3) or True)
+      and "Delete the old branch." not in acted, (acting_asked[-2:], acted[-2:]))
+voice_qos.interactive = real_interactive
 
 # The recorder's likely_turn rows drive it: asked early, then taken or dropped.
 recorder["on"] = True

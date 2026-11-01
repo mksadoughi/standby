@@ -1207,7 +1207,10 @@ class VoiceSession(object):
         def work():
             try:
                 extra = {"heard": q.cut} if q.cut is not None and self._ask_heard else {}
-                if q.go is None and self._ask_commit:
+                # A held question always carries its commit, even one already decided: dropped between its
+                # thread starting and here (they went on that fast), it had none, and the app read that as
+                # their turn and acted on it (the early-asks replay, talk-20261023-200116 under load)
+                if hold and self._ask_commit:
                     extra["commit"] = q.committed
                 q.got["answer"] = self.ask(text, on_event, on_queued, **extra)
             except Exception as exc:
