@@ -912,10 +912,18 @@ function callSession() {
   return (S.call && S.call.session) || (live && live.kind === 'call' && live.session) || null
 }
 
+// What the session tells its voice: its text, whatever the model named the argument (a QA call, 2026-10-31: three
+// clear updates sent as "message" were refused as "Nothing to tell"), or its one string argument
+function toldText(e) {
+  for (const k of ['text', 'message', 'say', 'content', 'note']) if (typeof e[k] === 'string' && e[k].trim()) return e[k]
+  const strings = Object.keys(e).filter(k => !['tool', 'agentId', 'tool_use_id', 'origin'].includes(k) && typeof e[k] === 'string' && e[k].trim())
+  return strings.length === 1 ? e[strings[0]] : ''
+}
+
 async function tellVoice($, text, source) {
   const session = callSession()
   if (!session) return 'No call is on: answer the user here.'
-  if (!text.trim()) return 'Nothing to tell: say what the voice should know.'
+  if (!text.trim()) return 'Nothing to tell: put what the voice should know in text.'
   const r = await app($, '/api/lite/progress', { session, kind: 'tell', text, source })
   return r && r.ok ? 'The voice has it, and decides whether and when the user hears it.' : 'The voice didn\u2019t get it: ' + ((r && r.error) || 'Standby isn\u2019t answering')
 }
@@ -937,7 +945,9 @@ export function register(on) {
         { setting: { type: 'string', description: 'the setting, as the list names it (transcript, capture, mic, voice, ...)' },
           value: { type: 'string', description: 'one of its choices' } }],
     ]) {
-      try { await $.tool.register({ name, description, inputSchema: { type: 'object', properties: props || {} } }) }
+      // its one argument required, so the model never guesses its name (tell_voice was called with "message")
+      const required = name === 'tell_voice' ? { required: ['text'] } : {}
+      try { await $.tool.register({ name, description, inputSchema: { type: 'object', properties: props || {}, ...required } }) }
       catch (err) { $.ui.log('the ' + name + ' tool isn\u2019t available: ' + err.message) }
     }
     try { await $.command.register({ name: 'standby', description: 'Standby: Claude listens to your meeting with you', argumentHint: '[listen|stop|call|end|name|window|settings|set|off|help]', immediate: true }) }
@@ -992,7 +1002,7 @@ export function register(on) {
         return { result: act === 'call' ? 'Accepted: the call is starting' : 'Accepted: listening is starting' }
       }
     }
-    if (act === 'tell_voice') return { result: await tellVoice($, String(e.text || ''), 'session') }
+    if (act === 'tell_voice') return { result: await tellVoice($, toldText(e), 'session') }
     const how = ['ask', 'live'].includes(e.pass) ? e.pass : undefined     // the tool's arguments ride on the event
     const answer = act === 'listen' ? await startListening($, how) : act === 'stop' ? await stopListening($)
       : act === 'call' ? await startCall($) : act === 'end_call' ? await endCall($)

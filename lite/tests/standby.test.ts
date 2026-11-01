@@ -1702,6 +1702,13 @@ test('on a call, the session tells its voice with tell_voice; with no call it is
   expect(r.result).toBe('The voice has it, and decides whether and when the user hears it.')
   const told = seen.posts.filter((p: any) => p.path === '/api/lite/progress' && p.body.kind === 'tell').map((p: any) => p.body)
   expect(told).toEqual([{ session: 'c1', kind: 'tell', text: 'The tests pass, and the fix is merged.', source: 'session' }])
+  // the model naming its argument another way (a QA call: "message", refused three times): still told
+  const named: any = await $.tool.call({ tool: 'mcp__standby__tell_voice', message: 'The ten seconds are up.' } as any)
+  expect(named.result).toBe('The voice has it, and decides whether and when the user hears it.')
+  const posted = seen.posts.filter((p: any) => p.path === '/api/lite/progress' && p.body.kind === 'tell').map((p: any) => p.body.text)
+  expect(posted).toEqual(['The tests pass, and the fix is merged.', 'The ten seconds are up.'])
+  const empty: any = await $.tool.call({ tool: 'mcp__standby__tell_voice', text: '  ' } as any)
+  expect(empty.result).toBe('Nothing to tell: put what the voice should know in text.')
   seen.live = null
   seen.idle = true
   await $.command.run({ command: 'standby', args: '' })
