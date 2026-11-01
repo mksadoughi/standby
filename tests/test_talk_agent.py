@@ -335,20 +335,21 @@ try:
           and "Anything else, like changing a file, running a command, searching the web or reading where your tools can't, is your deeper side's" in call
           and "reply [DEEP] and what they want, in your words, with anything you know that matters, not how to do it; "
               "what was said goes with it." in call
-          and "[DEEP] and what they want, with anything you know that matters, not how to do it" in ledger
+          and ledger.startswith(call.split(" [CALL START] means")[0][:400]) and " ".join(sa.CALL_LEDGER_READING.split()) in ledger
+          and " ".join(sa.CALL_LEDGER_READING.split()) not in call
           and "Whenever you take something deeper, your few words to them come before [DEEP]: what follows it is never said; after they've talked a while, say back "
               "briefly what you understood, so a misreading shows at once." in call
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 380, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 410, (len(call.split()), call[:300]))
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
           "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming anything you're picking up." in call
           and "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming anything you're picking up." in ledger
           and "last message" not in ledger)
-    check("  saying nothing sits with the notes, where it's mostly used", "so never guess. To say nothing, reply [QUIET]." in call)
+    check("  saying nothing sits with the notes, where it's mostly used", "send the new work with [DEEP]. To say nothing, reply [QUIET]." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
           "Your own tools are only for looking: you can read and search where your session works, and ~/.standby." in call
           and "So whatever they ask for is yours to do" in call
@@ -361,9 +362,10 @@ try:
     check("  its deeper side never talks to them: it tells the voice, and the voice judges what they hear",
           "Your deeper side never talks to them. It tells you what it thinks they should know, as \"Deeper side: ...\", "
           "and what reaches them is yours to judge: now, later or not at all, the gist in your words." in call
-          and "Your deeper side never talks to them: it tells you what it thinks they should know" in ledger)
-    check("  on the record, the voice can stop or change a task by its number in TASKS",
-          "To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]." in ledger)
+          and "Your deeper side never talks to them. It tells you what it thinks they should know" in ledger)
+    check("  the voice can stop or change a task by its number in TASKS, on the record or not",
+          "To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]." in ledger
+          and "To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]." in call)
     json.dump({}, open(os.path.join(live, TALK + ".voice.json"), "w"))
     check("  its voice file unwritten: still a call's voice, with no folder named",
           sa.voice_prelude(TALK).startswith("You are the user's Claude Code session, on a voice call") and "{folder}" not in sa.voice_prelude(TALK))

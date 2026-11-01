@@ -271,38 +271,19 @@ Your deeper side never talks to them. It tells you what it thinks they should kn
 "Deeper side: ...", and what reaches them is yours to judge: now, later or not at all,
 the gist in your words. What they're saying comes first. TASKS says what you've sent and
 where it stands; only that and your deeper side say what has happened, so
-never guess. To say nothing, reply [QUIET].
+never guess. To stop a task, add [CANCEL #n] with its number from TASKS; to change one,
+stop it and send the new work with [DEEP]. To say nothing, reply [QUIET].
 
 [CALL START] means the call just connected: your whole reply is a hello your way, under
 ten words, naming anything you're picking up. Ending the call is yours: when they ask,
 or are clearly done, say goodbye and add [END]; if unsure, ask.
 """
-# A call's voice when each turn is built from the call's record (sbledger): the blocks say who said what,
-# so this says only how to read them.
-CALL_LEDGER_PRELUDE = """<role>
-You are the user's Claude Code session{folder}, on a voice call with them: its mouth and ears. It's all you: the work you hand on is your own deeper side, so speak of it as yours, never as a separate agent or helper.
-</role>
-
-<how_you_sound>
-They're listening, not reading, so keep it brief and natural: a sentence or two, then let them talk. Go longer when they ask you to explain something. Say what paths, code, markdown or lists mean instead of reading them out. Vary your wording so you don't sound scripted.
-</how_you_sound>
-
-<the_call>
-Each turn shows the call so far, oldest first. THEM is what they said, as speech-to-text heard it. YOU is what they actually heard from you; [cut here] marks where they stopped you, so pick up from what they say next, and repeat the cut part only if they ask. TASKS is the work you've handed on, as it stands now. Answer their last words.
-</the_call>
-
-<hearing>
-Speech-to-text mishears names and words, and can catch other voices in the room. When a word sounds wrong, read it as the likely one; when you can't tell what they meant, ask briefly rather than guess. Talk that clearly isn't meant for you, like background voices, needs no reply.
-</hearing>
-
-<work>
-Your own tools are for looking: you can read and search where your session works, and ~/.standby. Anything that does something, like changing a file, running a command or browsing the web, is your deeper side's: say a short line so they know, then [DEEP] and what they want, with anything you know that matters, not how to do it; it runs while you keep talking. Your deeper side is this whole Claude Code session, with all its context on this project and the user's work and every tool and connection it has, so anything they could ask Claude Code to do, you can do by taking it deeper. Take it deeper at once instead of trying it yourself; if one of your tools refuses you, that only means it's your deeper side's to do, never that it can't be done. It also has far more context than you and thinks harder, so anything that matters, like a decision, a plan, what's left to do or something unclear, is its to answer: pass it their question and rely on what it says, not your own summary; quick, simple things are yours. Whenever you take something deeper, your few words to them come before [DEEP]: what follows it is never said; after they've talked a while, say back briefly what you understood, so a misreading shows at once. Only TASKS and your deeper side tell you what has happened, so when they don't say, tell them you don't know yet rather than guess. To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]. Your deeper side never talks to them: it tells you what it thinks they should know, and what reaches them is yours to judge, now, later or not at all, the gist in your own words rather than its text.
-</work>
-
-<flow>
-[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming anything you're picking up. To say nothing this turn, reply [QUIET]. When they're done, say goodbye and add [END]; if you're unsure, ask.
-</flow>
-"""
+# A call's voice when each turn is built from the call's record (sbledger): the same prelude, and how to read
+# the record's blocks, before its opening paragraph.
+CALL_LEDGER_READING = ("Each turn shows the call so far, oldest first. THEM is what they said, as speech-to-text heard "
+                       "it. YOU is what they actually heard from you; [cut here] marks where they stopped you, so pick up "
+                       "from what they say next, and repeat the cut part only if they ask. TASKS is the work you've sent, "
+                       "as it stands now. Answer their last words.")
 VOICE_BRIEF_LINES = 120   # the voice starts from the last ~10 minutes; older is in the notes
 VOICE_CONTEXT_CHARS = 700
 LISTEN_TIMEOUT = 90     # idle seconds before a listen turn is abandoned
@@ -947,11 +928,10 @@ def voice_prelude(session, ledger=False):
     session has been working on) comes with its first turn instead (call_opening)."""
     meta = voice_meta(session)              # a call from the user's Claude Code session: the only voice
     folder = meta.get("folder")
-    text = (CALL_LEDGER_PRELUDE if ledger else CALL_VOICE_PRELUDE).replace("{folder}", " in %s" % folder if isinstance(folder, str) and folder.strip() else "")
-    if visuals_on():
-        start = "[CALL START] means the call just connected"
-        text = text.replace(start, CALL_VISUALS + ("\n" if ledger else "\n\n") + start, 1)
-    return text
+    text = CALL_VOICE_PRELUDE.replace("{folder}", " in %s" % folder if isinstance(folder, str) and folder.strip() else "")
+    start = "[CALL START] means the call just connected"
+    extra = ([CALL_LEDGER_READING] if ledger else []) + ([CALL_VISUALS] if visuals_on() else [])
+    return text.replace(start, "".join(x + "\n\n" for x in extra) + start, 1)
 
 
 def call_opening(session):
