@@ -358,7 +358,7 @@ try:
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 430, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 450, (len(call.split()), call[:300]))
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
@@ -483,6 +483,9 @@ try:
     json.dump({"handoff": True}, open(os.path.join(live, TALK + ".voice.json"), "w"))
     call = " ".join(sa.voice_prelude(TALK).split())
     check("  what they're saying comes first", "What they're saying comes first." in call, call[-700:])
+    check("  more than one thing asked: each gets its due, the quick answered, the rest taken deeper in the same turn",
+          "When they ask for more than one thing, each gets its due: answer what's quick, and take the rest deeper in "
+          "the same turn." in call and "When they ask for more than one thing" in ledger)
     check("  [NOW]: the time as the turn began and each task's age, said as spans, never clock times",
           "[NOW] is the time as this turn began, and how long ago each task was asked, ran or ended: say spans as a "
           "person would, never clock times." in call and "[NOW] is the time as this turn began" in ledger)
