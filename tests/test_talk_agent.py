@@ -363,8 +363,8 @@ try:
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
-          "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming anything you're picking up." in call
-          and "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming anything you're picking up." in ledger
+          "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming at most the one thing you're picking up." in call
+          and "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming at most the one thing you're picking up." in ledger
           and "last message" not in ledger)
     check("  saying nothing sits with the notes, where it's mostly used", "send the new work with [DEEP]. To say nothing, reply [QUIET]." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
