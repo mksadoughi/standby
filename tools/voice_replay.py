@@ -21,7 +21,8 @@ What each kind of turn should do (the voice's prompt's principles, checked by th
               hand-offs came out bare are in, as they should have gone)
     quiet     the voice chose silence: [QUIET], or a few words at most
     cancel    it stopped a task: the same [CANCEL #n]
-    told      something came back (a result, the deeper side's message): no bare [DEEP], brief
+    told      something came back (a result, the deeper side's message): said or [QUIET], its judgment either
+              way; no bare [DEEP], brief
     opening   the call just connected: a hello under ten words, nothing taken deeper
     answer    any other turn: no bare [DEEP], brief
 Every reply is brief (BRIEF words said, at most). Timing: the first word's time, against the same turns on
@@ -70,17 +71,19 @@ def spoken(reply):
 
 
 def kind_of(sent, reply):
+    """A turn's kind, from what it was asked and what the voice did. Something that came back (a result, the
+    deeper side's message) is "told" whatever the voice did with it: saying it or not is its judgment."""
     if CANCEL.search(reply or ""):
         return "cancel"
     if DEEP in (reply or ""):
         return "deep"
-    if (reply or "").strip() == "[QUIET]":
-        return "quiet"
     body = (sent or "").split("\n", 1)[-1]
     if body.startswith("[CALL START]") or body.startswith("They said: [CALL START]"):
         return "opening"
     if body.startswith("[RESULT") or "Deeper side:" in body:
         return "told"
+    if (reply or "").strip() == "[QUIET]":
+        return "quiet"
     return "answer"
 
 
