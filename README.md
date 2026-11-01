@@ -49,16 +49,14 @@ The installer sets everything up and downloads the models once. After that, its 
 
 ### Will it drain my Claude plan?
 
-Hardly. Speech-to-text, speaker labels and the voice all run on your Mac. Claude gets your words as text, and
-conversation is a small amount of text. People speak two or three words a second. Even if you stayed on a call for a
-whole eight-hour workday and never stopped talking, everything said would come to around 100,000 tokens. That's
-about what Claude reads when it looks over a medium-sized codebase once.
+Speech-to-text, speaker labels and the voice all run on your Mac. Claude gets your words as text, and conversation
+is a small amount of text. People speak two or three words a second. Even if you stayed on a call for a whole
+eight-hour workday and never stopped talking, everything said would come to around 100,000 tokens. That's about what
+Claude reads when it looks over a medium-sized codebase once.
 
-And most of that goes to Haiku, the smallest and lightest model. The call's quick replies run on Haiku, while the
-heavier work you hand your session counts there, as usual.
-
-In my own use, a full day of about ten calls took 1 to 2% of a $20 Pro plan's weekly limit. Settings > Usage shows
-exactly what Standby used.
+The call's quick replies run on Sonnet by default. You can switch them to Haiku, the lightest model, in
+Settings > Call. The heavier work you hand your session counts there, as usual. Settings > Usage shows exactly what
+Standby used.
 
 ## Use it
 
