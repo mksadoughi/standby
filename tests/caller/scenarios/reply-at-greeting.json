@@ -1,5 +1,5 @@
-{"name": "reply-at-greeting", "goal": "Answer the instant the greeting ends: every word of the request is heard",
- "after_greeting_s": 0,
+{"name": "reply-at-greeting", "goal": "Answer half a second after the greeting ends, while its turn is still open: every word of the request is heard",
+ "after_greeting_s": 0.5,
  "steps": [
   {"say": "Please add a line to the README saying the lamp was cleaned today."},
   {"wait": "voice_end", "timeout_s": 60},

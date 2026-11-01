@@ -379,6 +379,7 @@ class Call(object):
         self.mark = time.time()  # the start of the current exchange (the last thing said)
         self.sid = None
         self.started = None
+        self._lines = {}
 
     def pump(self):
         self.voice += self.audio.heard()
@@ -398,14 +399,28 @@ class Call(object):
                 state = False
         return state
 
+    def line(self, text, gap_ms=600):
+        """A line's audio, made once (macOS takes about a second: made ahead, a reply can come at once)."""
+        key = (text, gap_ms)
+        if key not in self._lines:
+            parts = [p.strip() for p in text.split("|") if p.strip()]
+            pcm = []
+            for i, p in enumerate(parts):
+                if i:
+                    pcm.append(np.zeros(int(RATE * gap_ms / 1000.0), np.float32))
+                pcm.append(synth(p))
+            self._lines[key] = (np.concatenate(pcm), " ".join(parts))
+        return self._lines[key]
+
+    def prepare(self, steps):
+        for s in steps:
+            for key in ("say", "interrupt"):
+                if key in s:
+                    self.line(s[key], s.get("gap_ms", 600))
+
     def say(self, text, gap_ms=600, interrupt=False):
-        parts = [p.strip() for p in text.split("|") if p.strip()]
-        pcm = []
-        for i, p in enumerate(parts):
-            if i:
-                pcm.append(np.zeros(int(RATE * gap_ms / 1000.0), np.float32))
-            pcm.append(synth(p))
-        x = np.concatenate(pcm)
+        x, said = self.line(text, gap_ms)
+        parts = [said]
         t0 = self.audio.speak(x)
         t1 = t0 + len(x) / float(RATE)
         self.said.append({"t0": t0, "t1": t1, "text": " ".join(parts), "interrupt": interrupt})
@@ -488,8 +503,8 @@ class Call(object):
                 n = len(self.cards_since(t))
                 ok, got = (n > 0) == bool(value), "%d card(s)" % n
             elif key == "handoff":
-                n = len(self.handoffs_since(t))
-                ok, got = (n > 0) == bool(value), "%d hand-off(s)" % n
+                n = len(self.handoffs_since(t))             # the terminal redraws it: given or not
+                ok, got = (n > 0) == bool(value), "given to Claude Code" if n else "none given"
             elif key == "halted":                            # it stopped soon after the caller started talking
                 wait(lambda: time.time() >= t + 2.5, 5)
                 n = len([e for e in self.voice_since(t, ("halt",)) if e["t"] <= t + 2.5])
@@ -564,7 +579,7 @@ def score(call, ui_lines, silence_s=4.0):
         edge = max(edge, b)
     out["silences"] = gaps
     out["cards"] = len(call.cards_since(call.started))
-    out["handoffs"] = len(call.handoffs_since(call.started))
+    out["handoffs"] = bool(call.handoffs_since(call.started))
     out["log"] = {k: sum(1 for l in ui_lines if rx.search(l)) for k, rx in LOG_SIGNS.items()}
     out["expects"] = call.expects
     out["passed"] = all(x["ok"] for x in call.expects)
@@ -608,7 +623,7 @@ def report_md(name, sc, heard):
              "- cut into the caller: %d" % len(sc["cut_ins"]),
              "- talked over: %s" % (", ".join("stopped" if x["stopped"] else "KEPT GOING" for x in sc["talked_over"]) or "-"),
              "- silences over 4 s: %s" % (", ".join("%.0f s at %.0f s" % (g["s"], g["at"]) for g in sc["silences"]) or "none"),
-             "- cards: %d, hand-offs: %d" % (sc["cards"], sc["handoffs"]),
+             "- cards: %d, a hand-off given: %s" % (sc["cards"], "yes" if sc["handoffs"] else "no"),
              "- from the log: %s" % ", ".join("%s %d" % kv for kv in sc["log"].items()), "", "## Expects", ""]
     lines += ["- %s %s: %s" % ("pass" if x["ok"] else "**FAIL**", json.dumps(x["want"]), x["got"]) for x in sc["expects"]]
     lines += ["", "## Turns", ""] + ["- \"%s\" -> %s s" % (t["said"], t["first_word_s"]) for t in sc["turns"]]
@@ -641,6 +656,7 @@ def run_one(path, echo=None, do_transcribe=True, log=print):
     call = Call(stack, audio, log=log)
     result = None
     try:
+        call.prepare(sc.get("steps", []))
         stack.start()
         call.started = time.time()
         stack.type("/standby call")
