@@ -41,7 +41,7 @@ class FakeInput(object):
 DEV = [{"name": "MacBook Pro Microphone", "max_input_channels": 1}]
 sys.modules["sounddevice"] = types.SimpleNamespace(
     InputStream=FakeInput, query_devices=lambda i=None: DEV if i is None else DEV[i],
-    default=types.SimpleNamespace(device=[0, 0]))
+    default=types.SimpleNamespace(device=[0, 0]), _terminate=lambda: None, _initialize=lambda: None)
 sb = SourceFileLoader("sb", "mac/standby.py").load_module()
 sb.log = lambda m: None
 sb.ROOT, sb.SESSIONS, sb.CONFIG = root, root / "sessions", root / "config.json"
@@ -76,8 +76,10 @@ engines = []
 class FakeEngine(object):
     """The echo-cancelling engine: what it was asked to play, for how long.
     stuck: it says it is playing for ever (a route change stopped it); fail_say:
-    it raises when asked to say something."""
-    aec, fail_mic, stuck, fail_say, loading = True, False, False, False, False
+    it raises when asked to say something; deaf: its mic sends nothing (the Mac's
+    default mic changed under it). Nothing is played with no engine up (neither
+    the mic's nor one of its own)."""
+    aec, fail_mic, stuck, fail_say, loading, deaf = True, False, False, False, False, False
     def __init__(self):
         self.mic, self.played, self.halts, self._until = None, [], 0, 0.0
         self.hold_next = False
@@ -90,14 +92,16 @@ class FakeEngine(object):
 
         def stream():                          # a real engine delivers audio all the time
             while self.mic is not None:
-                feed(np.zeros(800, "float32"))
+                if not FakeEngine.deaf:
+                    feed(np.zeros(800, "float32"))
                 time.sleep(0.05)               # real time on purpose: the engine's own block rate
         threading.Thread(target=stream, daemon=True).start()
     def stop_mic(self): self.mic = None
     def say(self, text):
         if FakeEngine.fail_say:
             raise RuntimeError("no synthesizer")
-        self.played.append(text)
+        if self.mic is not None or getattr(self, "output", False):
+            self.played.append(text)
         self._until = float("inf") if self.hold_next else time.time() + (2.5 if "long" in text else 0.3)
         self.hold_next = False
     @property
@@ -637,6 +641,28 @@ check("  and with one again: the next voice mode has it", wait(lambda: len(engin
       len(engines) - n0)
 (sdir / "dictate").write_text("off 9\n")
 check("  off: the engine given up", wait(lambda: "voice" not in live() and engines[-1].mic is None), engines[-1].mic)
+
+# The Mac's default mic changed mid-call under the echo-cancelling engine (AirPods,
+# talk-20261101-094525): its mic goes quiet, the mic is opened again, and echo cancelling can't
+# take it now. The voice plays on, on an engine of its own: never silent for the rest of the call.
+FakeEngine.start_output = lambda self: setattr(self, "output", True)
+n0 = len(engines)
+(sdir / "dictate").write_text("voice 15\n")
+wait(lambda: len(engines) == n0 + 1 and engines[-1].mic is not None and vlive().get("aec"))
+e15 = engines[-1]
+FakeEngine.deaf, FakeEngine.fail_mic = True, True
+check("the mic changed mid-call, echo cancelling can't take it: the voice plays on, on an engine of its own",
+      wait(lambda: e15.mic is None and getattr(e15, "output", False) and streams[-1].run and vlive().get("speaks")
+           and not vlive().get("half")), (e15.mic, getattr(e15, "output", None), vlive()))
+FakeEngine.deaf = False
+speak(seq=15, say="Still here after the switch.")
+check("  and it speaks: the rest of the call has its voice", wait(lambda: "Still here after the switch." in e15.played),
+      e15.played)
+(sdir / "dictate").write_text("off 15\n")
+check("  off: its engine stops", wait(lambda: "voice" not in live() and not e15.output), e15.output)
+FakeEngine.fail_mic = False
+del FakeEngine.start_output
+engines.remove(e15)
 
 # a mic muted for the meeting is closed, and the engine must never take it. Last: this
 # test's fake devices cannot open the mic again after (test_mic_mute covers unmuting).

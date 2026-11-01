@@ -72,6 +72,13 @@ busy.clear()
 check("  answered 'use': switched to", pick([MAC, POD], POD, current=MAC, choices={POD.uid: "use"})[:3:2] == (POD, None))
 m, why, ask = pick([MAC, POD], POD, current=MAC, choices={POD.uid: "keep"})
 check("  answered 'keep': not switched, not asked again", m == MAC and ask is None, (m, ask))
+m, why, ask = dv.choose_mic([MAC, POD], POD, "", MAC, {POD.uid: "keep"}, use, call=True)
+check("on a call: AirPods the default, taken with no question, whatever was answered for meetings",
+      m == POD and ask is None and "on a call" in why, (m, why, ask))
+m, why, ask = dv.choose_mic([MAC, POD], MAC, "", POD, {}, use, call=True)
+check("  and back to the MacBook when they go off the default", m == MAC and ask is None, (m, why, ask))
+check("  a mic chosen in Settings still holds on a call",
+      dv.choose_mic([MAC, POD], POD, "MacBook", MAC, {}, use, call=True)[:3:2] == (MAC, None))
 check("  already recording from them: kept (no flip back and forth)", pick([MAC, POD], POD, current=POD)[0] == POD)
 check("  the only mic there is: used", pick([POD], POD)[0] == POD)
 check("  pinned AirPods: the user's choice, no question", pick([MAC, POD], MAC, pinned="AirPods")[:3:2] == (POD, None))

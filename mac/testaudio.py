@@ -261,18 +261,26 @@ class LoopbackBackend(object):
         if not self.neural:
             self.failed = self.failed or "the test audio plays Standby's own voice only"
             return
+        if self.speech is not None:              # kept through every engine, as the Mac's (close() ends it)
+            return
         process = self.tts.VoiceProcess(self.neural, log=self.log)
         process.open()
         self.speech = self.tts.Speech(process, _Out(self), log=self.log)
 
     def stop_mic(self):
+        """That engine only, and the sentence it was playing: Standby's voice plays the next on the next."""
         self.halt()
         if self._feed is not None:
             self.mic.leave(self._feed)
             self._feed = None
+
+    def close(self):
+        self.stop_mic()
         speech, self.speech = self.speech, None
         if speech is not None:
             speech.close()
+
+    running = True
 
     def use_voice(self, system, neural, why=""):
         if neural and self.speech is not None:

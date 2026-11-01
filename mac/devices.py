@@ -123,7 +123,7 @@ class Device(object):
         return "<%s %s>" % (self.name, self.transport)
 
 
-def choose_mic(inputs, default, pinned, current, choices, in_use):
+def choose_mic(inputs, default, pinned, current, choices, in_use, call=False):
     """Which mic to record from now: (device, why, ask).
 
     inputs: the connected inputs; default: the system's default input; pinned:
@@ -138,6 +138,8 @@ def choose_mic(inputs, default, pinned, current, choices, in_use):
       quality). Taken without asking when a call already has it open, or when
       the user said so; told no, it is not taken; else it is asked about once,
       and the one recorded from stays meanwhile. ask: the device, or None.
+      On a call (call), it is taken all the same: the call follows the Mac,
+      headphones and all, and asking is for a meeting.
     """
     real = [d for d in inputs if not d.virtual]
     if pinned:
@@ -157,6 +159,8 @@ def choose_mic(inputs, default, pinned, current, choices, in_use):
         why = "%s is not connected: %s" % (pinned, why)
     if want.transport == BLUETOOTH and want != current:
         answer = (choices or {}).get(want.uid)
+        if call:
+            return want, why + ", on a call", None
         if in_use(want):
             return want, why + ", a call has it open", None
         if answer == "use":

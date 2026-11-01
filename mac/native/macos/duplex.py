@@ -105,11 +105,13 @@ class AVFBackend(object):
     so the recorder's main loop waits in idle() while voice mode is on.
 
     neural: a Pocket voice ("alba"): Standby's own voice (tts.py), its
-    process started with the mic and ended with it, its sound played by the
-    same player, so it is cancelled from the mic too. Every sentence is in it:
-    while it loads, its process holds them and says them once ready. Never the
-    Mac's voice instead (the user's rule): a process that dies is opened again
-    (REOPENS), and past that `failed` says why, for the orb, and nothing is said.
+    process started with the first engine and ended by close(), never by an
+    engine stopping (stop_mic: a mic or an output changed mid-call), its sound
+    played by the engine's player, so it is cancelled from the mic too. Every
+    sentence is in it: while it loads, its process holds them and says them
+    once ready. Never the Mac's voice instead (the user's rule): a process that
+    dies is opened again (REOPENS), and past that `failed` says why, for the
+    orb, and nothing is said.
     voice: a Mac voice the user chose instead (no neural), said by macOS.
 
     avf, foundation: the AVFoundation and Foundation modules, or fakes.
@@ -199,12 +201,13 @@ class AVFBackend(object):
         return None if ok else err
 
     def _voices(self):
-        """The Mac's voice, and Standby's own process (opened with the engine, ended with it)."""
+        """The Mac's voice, and Standby's own process: opened with the first engine, kept through
+        every engine after it (a mic switched, an output changed), ended by close()."""
         avf = self.avf
         self.synth = avf.AVSpeechSynthesizer.alloc().init()
         voices = list(avf.AVSpeechSynthesisVoice.speechVoices() or [])
         self.voice = pick_voice(voices, self.wanted)
-        if self.neural:
+        if self.neural and self.speech is None:
             import tts
             process = self._process or tts.VoiceProcess(self.neural, log=self.log)
             process.open()
@@ -271,11 +274,11 @@ class AVFBackend(object):
             self.log("voice: other apps are ducked as macOS does by default (%r)" % exc)
 
     def stop_mic(self):
+        """The engine stops (the mic's, or the one of its own), and the sentence it was playing
+        with it; Standby's voice process stays, so the next engine plays the next sentence. One
+        made meanwhile is dropped (nothing to play it on), never waited on."""
         self.halt()
-        speech, self.speech = self.speech, None
-        if speech is not None:
-            speech.close()                          # the voice process ends: its memory goes back
-        engine, inp, self.engine, self.inp = self.engine, self.inp, None, None
+        engine, inp, self.engine, self.inp, self.player = self.engine, self.inp, None, None, None
         if engine is None:
             return
         try:
@@ -286,6 +289,22 @@ class AVFBackend(object):
         except Exception as exc:
             self.log("voice: stopping the audio engine: %r" % exc)
         self.aec = False
+
+    def close(self):
+        """The call's voice is over: the engine, and Standby's voice process (its memory goes back)."""
+        self.stop_mic()
+        speech, self.speech = self.speech, None
+        if speech is not None:
+            speech.close()
+
+    @property
+    def running(self):
+        """An engine is up and playing to its output: macOS stops it when that output changes."""
+        engine = self.engine
+        try:
+            return engine is not None and bool(engine.isRunning())
+        except Exception:
+            return True
 
     # -- Claude's voice ----------------------------------------------------------
     REOPENS = 2          # Standby's voice process opened again this often in a voice mode, then: failed

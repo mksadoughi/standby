@@ -1160,8 +1160,9 @@ class MicFollow(object):
     default, or the one chosen in Settings while it is connected (choose_mic).
     ask: a mic to ask the user about, or None (the app shows it)."""
 
-    def __init__(self, devices, pinned, choices=CHOICES):
+    def __init__(self, devices, pinned, choices=CHOICES, call=False):
         self.devices, self.pinned, self.choices_path = devices, pinned or "", choices
+        self.call = call         # a call's mic: the Mac's default, never asked about (choose_mic)
         self.ask, self._told = None, set()
 
     def choices(self):
@@ -1173,7 +1174,7 @@ class MicFollow(object):
     def decide(self, current):
         import devices as dv
         mic, why, self.ask = dv.choose_mic(self.devices.inputs(), self.devices.default_input(), self.pinned,
-                                           current, self.choices(), self.devices.in_use)
+                                           current, self.choices(), self.devices.in_use, call=self.call)
         if self.ask is not None and self.ask.uid not in self._told:
             self._told.add(self.ask.uid)
             log("mic: %s (not asked yet)" % why)
@@ -2190,7 +2191,8 @@ class VoiceIO(object):
         self.talk_over = talk_over  # Settings' "Let me talk over Claude": off, it plays and the mic is held
         self.own = False       # it plays on an engine of its own, the mic left as it is (start_output)
         self.no_echo = False   # ...on headphones, where nothing played reaches the mic: talking over works
-        self._leak_at = 0.0
+        self._leak_at = self._follow_at = 0.0
+        self._no_aec = set()   # mics echo cancelling was tried on and couldn't take, this call
         self.seq, self._offset = None, 0
         self._queue, self._lock = deque(), threading.Lock()
         self.current, self.done, self.since = None, 0, None
@@ -2218,13 +2220,14 @@ class VoiceIO(object):
         except OSError:
             self._offset = 0
         self.borrowed = [c for c in mics if c.borrow(self.backend)] if self.talk_over else []
+        self._no_aec = {c.device_name for c in mics
+                        if self.talk_over and c not in self.borrowed and getattr(c, "borrow_error", None)}
         if not self.borrowed and hasattr(self.backend, "start_output"):
-            # Echo cancellation didn't take the mic (not the default one: the Mac's, kept while
-            # AirPods play), or talking over is off: the voice plays here all the same, the one
-            # voice of the call. On headphones the user can still talk over it (no echo).
+            # Echo cancellation didn't take the mic (not the default one: a mic chosen in Settings),
+            # or talking over is off: the voice plays here all the same, the one voice of the call.
+            # On headphones the user can still talk over it (no echo).
             try:
-                self.backend.start_output()
-                self.own, self.no_echo = True, self.talk_over and not self.leaks()
+                self._own_engine()
             except Exception as exc:
                 self.log("voice %s: the voice could not play here (%r)" % (seq, exc))
         self._on.set()
@@ -2242,12 +2245,62 @@ class VoiceIO(object):
         for c in self.borrowed:
             c.give_back()
         self.borrowed = []
-        if self.own:
-            self.own = self.no_echo = False
-            try:
-                self.backend.stop_mic()                  # its engine, and Standby's voice process
-            except Exception as exc:
-                self.log("voice: stopping the audio engine: %r" % exc)
+        self.own = self.no_echo = False
+        try:
+            getattr(self.backend, "close", self.backend.stop_mic)()     # its engine, and Standby's voice process
+        except Exception as exc:
+            self.log("voice: stopping the audio engine: %r" % exc)
+
+    def _own_engine(self):
+        """The voice on an engine of its own, the mic left as it is."""
+        self.backend.start_output()
+        self.own, self.no_echo = True, self.talk_over and not self.leaks()
+
+    FOLLOW_EVERY = 1.0    # how often, with the voice on an engine of its own, it looks whether a mic can cancel its echo again
+
+    def follow(self, mics):
+        """The Mac's devices changed under the call (on the main thread, where the mics switch): the
+        voice always has an engine to play on, whatever the mic did. A mic that lost echo cancelling
+        (switched to one it can't take, muted): the voice goes on, on an engine of its own. That
+        engine stopped by macOS (its output changed): made again. And on open speakers, once a mic
+        can take echo cancelling again (the Mac's default again), it does, between answers."""
+        if not self._on.is_set() or self.failed or not hasattr(self.backend, "start_output"):
+            return
+        kept = [c for c in self.borrowed if c.borrowed is self.backend]
+        try:
+            if len(kept) < len(self.borrowed):
+                self.borrowed = kept
+                if not kept:
+                    self._own_engine()
+                    self.log("voice %s: the mic left echo cancelling: the voice plays on, %s" % (
+                        self.seq, "on headphones, talking over it stops it" if self.no_echo else "half duplex"))
+                return
+            if not self.own:
+                return
+            if not getattr(self.backend, "running", True):
+                self.backend.stop_mic()
+                self._own_engine()
+                self.log("voice %s: its output changed: the voice plays on, on %s" % (
+                    self.seq, "headphones" if self.no_echo else "the speakers"))
+                return
+            if (not self.talk_over or self.talking or time.time() - self._follow_at < self.FOLLOW_EVERY
+                    or not hasattr(self.backend, "default_input")):
+                return
+            self._follow_at = time.time()
+            default = self.backend.default_input()
+            mic = next((c for c in mics if c.borrowed is None and c.state == "live" and c.device_name == default
+                        and default not in self._no_aec), None)
+            if mic is None or not self.leaks():
+                return
+            self.backend.stop_mic()
+            if mic.borrow(self.backend):
+                self.borrowed, self.own, self.no_echo = [mic], False, False
+                self.log("voice %s: %s takes echo cancelling again: talking over Claude stops it" % (self.seq, default))
+            else:
+                self._no_aec.add(default)            # tried once: never again this call, the mic left alone
+                self._own_engine()
+        except Exception as exc:
+            self.fail("its engine, as the devices changed: %r" % exc)
 
     @property
     def aec(self):
@@ -3591,7 +3644,8 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
         ch.base = t_offset                       # where its wav starts on the session clock
         ch.table = sources
         if devs is not None and speaker in MIC_ROLES:
-            ch.follow = MicFollow(devs, cfg.get("mic_device") if isinstance(cfg.get("mic_device"), str) else "")
+            ch.follow = MicFollow(devs, cfg.get("mic_device") if isinstance(cfg.get("mic_device"), str) else "",
+                                  call=kind == "talk")
         ch.refresh = refresh_portaudio
         ch.open()
         channels.append(ch)
@@ -4175,6 +4229,8 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
                 gate.check(force=not echo_chs())        # the call gone: decide with what there is
             asks.update()
             events.poll_mic(mics())
+            if voice["io"] is not None:
+                voice["io"].follow(mics())          # whatever the mic did, the voice has an engine to play on
             sync_off_echo()
             retire_voice_io()
             poll_dictation()

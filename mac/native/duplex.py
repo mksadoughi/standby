@@ -19,7 +19,8 @@ def engine(voice=None, neural=None, log=print):
     """A new engine, for one voice mode: voice, a system voice the user chose (or None); neural,
     one of Standby's own (tts.VOICES), which it opens with the mic. What VoiceIO asks of it:
     start_mic(device, feed) (aec says whether echo cancellation took), start_output(),
-    stop_mic(); begin(), say(text), halt(), duck(), unduck(); playing, loading, failed,
-    tts_status(); heard(), the sentence playing and its seconds of sound played, made and whether all
+    stop_mic() (that engine only: the voice plays on the next), close() (the voice too), running
+    (an engine is playing: macOS stops one whose output changed); begin(), say(text), halt(), duck(),
+    unduck(); playing, loading, failed, tts_status(); heard(), the sentence playing and its seconds of sound played, made and whether all
     made (or None); idle(seconds) for the recorder's main loop."""
     return _os.engine(voice=voice, neural=neural, log=log)

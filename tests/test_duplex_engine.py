@@ -111,6 +111,7 @@ class Engine(Obj):
         self.running = Engine.start_ok
         return (True, None) if Engine.start_ok else (False, "no audio device")
     def stop(self): self.running = False
+    def isRunning(self): return self.running
 
 
 class Player(Obj):
@@ -418,8 +419,8 @@ check("  and no longer that it's coming back: given up", "retrying_since" not in
 bn.say("After it failed.")
 check("  and after that, nothing at all: no Mac voice", bn.synth.asked == [] and fp.said[-1][1] != "After it failed.")
 bn.halt()
-bn.stop_mic()
-check("stop: the process ends with the mic", fp.closed == 1 and bn.speech is None)
+bn.close()
+check("close: the process ends with the call's voice", fp.closed == 1 and bn.speech is None)
 
 import threading, time  # noqa: E401,E402
 fp2 = FakeProcess()
@@ -475,7 +476,7 @@ bn4.say("Jean on the AirPods.")
 check("on headphones too: Standby's own voice, opened with the engine",
       fp4.opened == 1 and fp4.said == [(1, "Jean on the AirPods.")] and bn4.synth.asked == [], (fp4.said, bn4.synth.asked))
 bn4.halt()
-bn4.stop_mic()
+bn4.close()
 check("  and its process ends with it", fp4.closed == 1)
 bc = backend(voice="Daniel")
 bc.start_mic("MacBook Pro Microphone", lambda x: None)
@@ -507,6 +508,16 @@ def jean(b, fp, text):
     return len(b.player.scheduled) - n
 
 
+def jean_none(b, fp, text):
+    """A sentence made with no engine up: each buffer done at once, none scheduled anywhere."""
+    b.say(text)
+    sid = fp.said[-1][0]
+    for _ in range(3):
+        fp.on_audio(sid, np.full(1920, 0.25, "float32"))
+    fp.on_end(sid)
+    return b.player is None
+
+
 fp5 = FakeProcess()
 fp5.state = "ready"
 bn5 = backend(neural="jean", process=fp5)
@@ -521,6 +532,8 @@ bn5.begin()
 check("a mic switched mid-call: Standby's voice plays on the new engine, no buffer refused",
       jean(bn5, fp5, "After the switch.") == 3 and bn5.player.fmt.channelCount() == 1
       and not any("refused" in m or "could not play" in m for m in logged), logged[-3:])
+check("  the same voice process all along: never ended by the engine stopping, nor loaded again",
+      fp5.opened == 1 and fp5.closed == 0, (fp5.opened, fp5.closed))
 bn5.halt()
 bn5._say_av("The Mac's voice too.")
 bn5.synth.asked[-1][1](PCM(256, Fmt(22050)))
@@ -545,6 +558,32 @@ check("  refused again: dropped, never waited on (the sentence ends, the next ca
 bn5.engine.connect_to_format_ = real_connect
 bn5.halt()
 bn5.stop_mic()
+
+# The Mac's default mic changed mid-call (AirPods, talk-20261101-094525): the mic's engine
+# stopped, and echo cancelling can't take the mic now (start_mic refuses). The voice goes on,
+# on an engine of its own (VoiceIO.follow): the same process, mid-answer, never "isn't open".
+fp7 = FakeProcess()
+fp7.state = "ready"
+bn7 = backend(neural="jean", process=fp7)
+bn7.start_mic("MacBook Pro Microphone", lambda x: None)
+check("Standby's voice plays, echo cancelled", jean(bn7, fp7, "Before the AirPods.") == 3)
+bn7.stop_mic()
+try:
+    bn7.start_mic("AirPods Pro", lambda x: None)
+except RuntimeError:
+    pass
+bn7.start_output()
+check("the mic changed and echo cancelling can't take it: on an engine of its own, the voice plays on",
+      jean(bn7, fp7, "After the AirPods.") == 3 and not bn7.failed and fp7.opened == 1 and fp7.closed == 0,
+      (bn7.failed, fp7.opened, fp7.closed))
+bn7.stop_mic()
+check("  an engine stopped, nothing up: a sentence made meanwhile is dropped, never waited on",
+      jean_none(bn7, fp7, "Between engines.") and not bn7.playing and not bn7.failed, (bn7.playing, bn7.failed))
+bn7.start_output()
+check("  the next engine: it plays again", jean(bn7, fp7, "On the next engine.") == 3 and not bn7.failed)
+check("  running: an engine up", bn7.running)
+bn7.close()
+check("  close: the process ends", fp7.closed == 1 and bn7.speech is None and not bn7.running)
 
 # The probe for the user's -10875 (tools/duplex_probe.py) opens the real mic: never in a test.
 import subprocess  # noqa: E402
