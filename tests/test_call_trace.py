@@ -161,6 +161,10 @@ check("  each turn's outcome", [(r["turn"], r["outcome"]) for r in done] == [("o
 tm = [r for r in rows if r["ev"] == "timing" and r["turn"] == 0]
 check("  and its timing, in ms: their words to the turn over, to the first word, to the voice",
       tm and tm[0]["turn_over_ms"] is not None and tm[0]["first_word_ms"] is not None and tm[0]["total_ms"] is not None, tm)
+vp = (tm[0].get("voice_parts") or {}) if tm else {}
+check("  the first word to the voice in its parts: a whole sentence, the floor, the sound (the slow tail's three)",
+      set(vp) == {"sentence", "floor", "sound"} and all(isinstance(vp[k], int) for k in vp)
+      and sum(vp.values()) <= (tm[0]["voice_ms"] or 0) + 3, tm[:1])
 t0 = time.time()
 for i in range(2000):
     sbtrace.event("talk-1", "load", i=i)

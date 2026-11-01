@@ -1133,7 +1133,12 @@ class VoiceSession(object):
                     early_ms=int(early * 1000) if early is not None else None,
                     parts={"app": ms(started, m.get("app_spawned")), "start": ms(m.get("app_spawned"), m.get("app_queued")),
                            "queue": ms(queued, m.get("taken")), "prep": ms(m.get("taken"), m.get("sent")),
-                           "engine": ms(m.get("sent"), m.get("word"))})
+                           "engine": ms(m.get("sent"), m.get("word"))},
+                    # first word to first sound (voice_ms): a whole sentence out of the stream, the floor
+                    # (they may still be talking), the voice making it; the slow tail hid in one number
+                    voice_parts={"sentence": ms(max(first or 0, seen), got.get("sentence")),
+                                 "floor": ms(max(got.get("sentence") or 0, seen), got.get("given")),
+                                 "sound": ms(max(got.get("given") or 0, seen), audio)})
         self._early_turn = {"asked": 0, "dropped": []}
 
     def _early_said(self, early):
@@ -1212,6 +1217,7 @@ class VoiceSession(object):
         with q.lock:
             if q.cancelled or not sentences:
                 return
+            q.got.setdefault("sentence", time.time())     # its first whole sentence out of the stream
             if q.silenced:
                 q.unsaid.extend(sentences)
                 return
@@ -1237,6 +1243,7 @@ class VoiceSession(object):
             q.floor = True
             self._write("floor")
         held, q.held = q.held, []
+        q.got.setdefault("given", time.time())        # to the speaker: the floor was its
         q.spoken.extend(held)
         for sentence in held:
             self.speaker.say(sentence)
