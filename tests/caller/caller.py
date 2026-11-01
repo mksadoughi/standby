@@ -129,7 +129,8 @@ def setup(log=print):
         with open(os.path.join(REAL_ROOT, "config.json")) as fh:
             real = json.load(fh)
         # the same speech model, and the same voice settings (its voice, talking over it)
-        cfg.update({k: real[k] for k in ("speech_model", "speech_size", "model", "voice_mode") if k in real})
+        cfg.update({k: real[k] for k in ("speech_model", "speech_size", "model", "voice_mode", "agent", "voice",
+                                         "voice_model_haiku", "remember_voices") if k in real})
     except (OSError, ValueError):
         pass
     cfg.setdefault("debug", {})["call_trace"] = True
@@ -686,11 +687,12 @@ def run_one(path, echo=None, do_transcribe=True, log=print, settings=None):
         call.sid = stack.live()
         log("  call %s" % call.sid)
         if not wait(lambda: call.voice_since(call.started), 60):
-            log("  (no greeting in 60 s)")
+            log("  (no greeting in 60 s: the call opened in silence)")
+            call.expects.append({"want": {"greeting": True}, "ok": False, "got": "nothing said in 60 s", "at": 0.0})
         # the caller answers the greeting once it's over and a moment has passed ("after_greeting_s", 1.5 by
         # default; 0 answers the instant its last word ends, as people often do)
         quiet = float(sc.get("after_greeting_s", 1.5))
-        wait(lambda: not call.speaking() and time.time() - max(e["t"] for e in call.voice) >= quiet, 30)
+        wait(lambda: not call.speaking() and time.time() - max([call.started] + [e["t"] for e in call.voice]) >= quiet, 30)
         for s in sc.get("steps", []):
             call.step(s)
         time.sleep(2)
