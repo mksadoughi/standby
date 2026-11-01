@@ -616,8 +616,9 @@ def transcribe(audio_dir, events, log=print):
     return out
 
 
-def report_md(name, sc, heard):
+def report_md(name, sc, heard, settings=None):
     lines = ["# %s: %s" % (name, "PASS" if sc["passed"] else "FAIL"), "",
+             "- settings: %s" % (", ".join("%s=%s" % kv for kv in (settings or {}).items()) or "defaults"),
              "- session: %s" % sc["session"], "- first sound: %s s" % sc["first_sound_s"],
              "- first word after the caller stops (median): %s s" % sc["first_word_median_s"],
              "- cut into the caller: %d" % len(sc["cut_ins"]),
@@ -635,7 +636,25 @@ def report_md(name, sc, heard):
 
 # ---------------------------------------------------------------- running
 
-def run_one(path, echo=None, do_transcribe=True, log=print):
+def apply_config(cfg, pairs):
+    """KEY=VALUE settings for this batch, a dotted KEY into config.json, VALUE as JSON (else a string):
+    voice.tools=true. Returns what was set, for the report."""
+    out = {}
+    for pair in pairs or []:
+        key, _, raw = pair.partition("=")
+        try:
+            value = json.loads(raw)
+        except ValueError:
+            value = raw
+        node, parts = cfg, key.split(".")
+        for p in parts[:-1]:
+            node = node.setdefault(p, {}) if isinstance(node.get(p), dict) or p not in node else node[p]
+        node[parts[-1]] = value
+        out[key] = value
+    return out
+
+
+def run_one(path, echo=None, do_transcribe=True, log=print, settings=None):
     with open(path) as fh:
         sc = json.load(fh)
     name = sc.get("name") or os.path.splitext(os.path.basename(path))[0]
@@ -646,6 +665,8 @@ def run_one(path, echo=None, do_transcribe=True, log=print):
     with open(os.path.join(ROOT, "config.json")) as fh:
         cfg = json.load(fh)
     cfg["call_visuals"] = True                              # each run starts with cards on, and the project afresh
+    cfg.setdefault("voice", {}).pop("tools", None)
+    set_now = apply_config(cfg, settings)                   # this batch's settings (--config), else the defaults
     fresh_project()
     with open(os.path.join(ROOT, "config.json"), "w") as fh:
         json.dump(cfg, fh, indent=2)
@@ -695,8 +716,8 @@ def run_one(path, echo=None, do_transcribe=True, log=print):
         heard = transcribe(audio_dir, call.voice, log) if do_transcribe else []
         result["played"] = heard
         with open(os.path.join(run_dir, "report.md"), "w") as fh:
-            fh.write(report_md(name, result, heard))
-    result = dict(result or {}, name=name, said=call.said, voice=call.voice)
+            fh.write(report_md(name, result, heard, set_now))
+    result = dict(result or {}, name=name, said=call.said, voice=call.voice, settings=set_now)
     with open(os.path.join(run_dir, "report.json"), "w") as fh:
         json.dump(result, fh, indent=2)
     log("  %s  (%s)" % ("PASS" if result.get("passed") else "FAIL", run_dir))
@@ -713,6 +734,8 @@ def main(argv=None):
     r.add_argument("--echo", help="what it plays comes back into the mic: GAIN[,DELAY_MS]")
     r.add_argument("--audio", default="loopback", choices=["loopback"])
     r.add_argument("--no-transcribe", action="store_true")
+    r.add_argument("--config", action="append", metavar="KEY=VALUE",
+                   help="a setting for this batch, into its config.json: voice.tools=true")
     a = ap.parse_args(argv)
     if a.cmd == "setup":
         return 0 if setup() else 1
@@ -731,7 +754,7 @@ def main(argv=None):
         return 1
     setup(log=lambda m: None)
     pick = [f for f in files if not a.names or os.path.splitext(os.path.basename(f))[0] in a.names]
-    results = [run_one(f, a.echo, not a.no_transcribe) for f in pick]
+    results = [run_one(f, a.echo, not a.no_transcribe, settings=a.config) for f in pick]
     print("\n%d of %d passed" % (sum(1 for r in results if r.get("passed")), len(results)))
     return 0 if all(r.get("passed") for r in results) else 1
 
