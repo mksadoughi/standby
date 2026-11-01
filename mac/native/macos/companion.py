@@ -242,10 +242,16 @@ def home_frame(window=None):
 
 
 class CompanionPanel(AppKit.NSPanel):
-    """Never key unless asked: a click must leave the keyboard where it was."""
+    """Never key unless asked: a click must leave the keyboard where it was. The one exception is a press in the
+    visual card's visual (visualview), so Command-C and Command-A reach its selection; it lets go as soon as the
+    user is anywhere else (their app takes the keyboard back as it would from any window)."""
 
     def canBecomeKeyWindow(self):
-        return False
+        return bool(getattr(self, "_sb_key_ok", False))
+
+    def resignKeyWindow(self):
+        self._sb_key_ok = False
+        objc.super(CompanionPanel, self).resignKeyWindow()
 
     def canBecomeMainWindow(self):
         return False

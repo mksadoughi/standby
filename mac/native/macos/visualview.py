@@ -10,6 +10,7 @@ import json
 
 import AppKit
 import Foundation
+import objc
 import WebKit
 
 SCHEME = "standby-visual"
@@ -99,11 +100,40 @@ class _Guard(AppKit.NSObject):
             owner.on_message(m)
 
 
+def key_action(chars, flags):
+    """A key with Command alone, in the visual: "copy" (C) or "selectAll" (A); anything else isn't the visual's."""
+    mods = int(flags) & (AppKit.NSEventModifierFlagCommand | AppKit.NSEventModifierFlagShift
+                         | AppKit.NSEventModifierFlagOption | AppKit.NSEventModifierFlagControl)
+    if mods != AppKit.NSEventModifierFlagCommand:
+        return None
+    return {"c": "copy", "a": "selectAll"}.get(str(chars or "").lower())
+
+
 class _Web(WebKit.WKWebView):
-    """Takes the first click: the card's panel is never key (a plain WKWebView spends it on focusing)."""
+    """Takes the first click: the card's panel is never key (a plain WKWebView spends it on focusing). A press in it
+    makes the card key, without bringing Standby forward (its panel doesn't activate), so the selection made there
+    can be copied: Command-C and Command-A, which a panel without the app's Edit menu would otherwise drop."""
 
     def acceptsFirstMouse_(self, event):
         return True
+
+    def mouseDown_(self, event):
+        w = self.window()
+        if w is not None and not w.isKeyWindow():
+            w._sb_key_ok = True
+            w.makeKeyWindow()
+            w.makeFirstResponder_(self)
+        objc.super(_Web, self).mouseDown_(event)
+
+    def performKeyEquivalent_(self, event):
+        what = key_action(event.charactersIgnoringModifiers(), event.modifierFlags())
+        if what == "copy":
+            self.copy_(None)
+            return True
+        if what == "selectAll":
+            self.selectAll_(None)
+            return True
+        return objc.super(_Web, self).performKeyEquivalent_(event)
 
 
 class VisualView(object):

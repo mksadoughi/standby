@@ -34,7 +34,20 @@ check("  its messages: a size, or an https link; nothing else",
       and visualview.message({"sb": "chose", "label": " Option\n 3 " + "x" * 200})["label"] == ("Option 3 " + "x" * 200)[:80]
       and visualview.message({"sb": "chose", "label": "  "}) is None and visualview.message({"sb": "chose", "label": 3}) is None)
 
+C, S = AppKit.NSEventModifierFlagCommand, AppKit.NSEventModifierFlagShift
+check("keys in the visual: Command-C copies, Command-A selects all; nothing else is the visual's",
+      (visualview.key_action("c", C), visualview.key_action("A", C), visualview.key_action("c", C | S), visualview.key_action("v", C),
+       visualview.key_action("c", 0)) == ("copy", "selectAll", None, None, None))
 AppKit.NSApplication.sharedApplication()
+from native.macos import companion as cp
+panel = cp.CompanionPanel.alloc().initWithContentRect_styleMask_backing_defer_(
+    Foundation.NSMakeRect(-7000, -7000, 100, 100), AppKit.NSWindowStyleMaskBorderless | AppKit.NSWindowStyleMaskNonactivatingPanel, 2, False)
+first = panel.canBecomeKeyWindow()
+panel._sb_key_ok = True
+asked = panel.canBecomeKeyWindow()
+panel.resignKeyWindow()
+check("the card's panel: never key, except after a press in its visual, and only until it lets go",
+      (first, asked, panel.canBecomeKeyWindow()) == (False, True, False))
 got = []
 FRAG = """<div data-size="small"><h1>Probe</h1><button data-choice="Option  2">Two</button>
 <script>
