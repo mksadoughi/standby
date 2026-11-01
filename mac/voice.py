@@ -674,6 +674,7 @@ class VoiceSession(object):
         self._line = random.randrange(len(HANDOFF_LINES))     # the handoff line said last
         self._told = deque(maxlen=3)  # lines to say when nobody is talking (announce): news, not answers
         self._opening = None     # a first turn of Claude's own, before the user says anything (open_with)
+        self._opening_held = None    # [since, last] the hello waited on someone maybe talking
         self._chosen = deque()   # their picks on a visual card (choose): each a turn at the next quiet moment
 
     # -- control, from the app's request handlers ---------------------------
@@ -963,6 +964,8 @@ class VoiceSession(object):
                 if row.get("done"):
                     self.stop("recording stopped")
                     return
+                if self._opening is not None and interrupt.is_words(row.get("text", "")):
+                    self._no_opening()                    # they spoke first: their words, no hello
                 if row.get("likely_turn") or row.get("early_ask"):
                     if interrupt.is_words(row.get("text", "")):      # "mm-hm" asks nothing
                         self._ask_early(row)
@@ -981,6 +984,8 @@ class VoiceSession(object):
                         self._trace("turn_done", outcome="noise", question=question)
                         self._drop_early("only a sound")
                         continue
+                    if self._opening is not None:
+                        self._no_opening()                # their turn came first: it is the conversation
                     self._converse(question, row.get("spoke_until"), ask=self._take_early(question))
                     if self._stop.is_set():
                         return
@@ -998,10 +1003,13 @@ class VoiceSession(object):
                 self.you = self._caption(heard, st)
             else:
                 self.level = 0.0
-            if self._opening is not None and (heard or st.get("speaking") or self._you_speaking()):
-                self._opening = None                      # they spoke first: no greeting
-            if self._opening is not None and self.state == "listening" and not self._pending and self._q is None:
+            if self._opening is not None and not self._opening_waits() and self.state == "listening" \
+                    and not self._pending and self._q is None:
                 opening, self._opening = self._opening, None
+                if self._opening_held:
+                    self.log("voice %d: the hello, after %.1f s held for a sound that wasn't words"
+                             % (self.seq, time.time() - self._opening_held[0]))
+                    self._trace("opening", outcome="said after a sound", held=round(time.time() - self._opening_held[0], 2))
                 self._set_turn("open")
                 self._converse(opening, shown="")
                 if self._stop.is_set():
@@ -1023,6 +1031,25 @@ class VoiceSession(object):
                 self.stop("nothing said for %d minutes" % round(self.idle_end / 60.0))
                 return
             time.sleep(0.05)
+
+    def _opening_waits(self):
+        """The hello waits while someone may be talking: the speech model's "talking", never loudness alone
+        (a noise blip at the start once cost a call its hello for good, talk-20261101-173759). Only their
+        words cancel it; held, it waits DECIDE after the last of it, and no row unread, for those words."""
+        now = time.time()
+        if self._you_speaking():
+            if self._opening_held is None:
+                self._opening_held = [now, now]
+                self.log("voice %d: the hello waits: someone may be talking" % self.seq)
+            self._opening_held[1] = now
+            return True
+        held = self._opening_held
+        return bool(held) and (now - held[1] < self.DECIDE or self._unread())
+
+    def _no_opening(self):
+        self._opening = None
+        self.log("voice %d: they spoke first: no hello" % self.seq)
+        self._trace("opening", outcome="they spoke first")
 
     def _aside(self, text):
         """A line of Standby's own, said with the floor (no model call), then the

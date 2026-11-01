@@ -123,13 +123,14 @@ class Recorder(object):
     says_heard = False       # the turn's words in its status, as the real one: off for the older tests
     def __init__(self, sdir, old=False):
         self.sdir, self.you, self.on, self.old = sdir, False, True, old
+        self.loud = False        # an utterance open on loudness alone, not yet speech by the speech model
         self.heard, self._was = "", ""
         threading.Thread(target=self._run, daemon=True).start()
     def _run(self):
         while self.on:
             mode = self.mode()       # a turn open across a hold keeps its words (standby.py's switch)
             self._was = mode
-            st = {"at": time.time(), "level": 0.1, "partial": "", "speaking": self.you or self.old,
+            st = {"at": time.time(), "level": 0.1, "partial": "", "speaking": self.you or self.loud or self.old,
                   "voice": {"mode": mode}}
             if self.says_heard:
                 st["voice"]["heard"] = self.heard
@@ -856,9 +857,39 @@ rec.you = True                                   # they're already talking
 wait(lambda: json.loads((vs.sdir / "live.json").read_text()).get("voice", {}).get("you_speaking"))
 vs.open_with("[CALL START]")
 time.sleep(0.3)
+check("  someone may be talking: the hello waits, and says so in the log", agent.asked == []
+      and "voice %d: the hello waits: someone may be talking" % vs.seq in logged, (agent.asked, logged))
 rec.you = False
+rec.row(vs, turn=0, t=0, end=1, text="Hey, are you there?")
+rec.row(vs, turn=0, end_turn=True, text="Hey, are you there?")
+check("  they spoke first: no hello, their words are the turn, logged",
+      wait(lambda: agent.asked == ["Hey, are you there?"], 3) and vs._opening is None
+      and "voice %d: they spoke first: no hello" % vs.seq in logged, (agent.asked, logged))
+done(vs, rec)
+# A noise blip at the start (talk-20261101-173759): the hello is never lost to it.
+vs, rec, agent, spk, logged = session()
+agent.pieces = ["Hi, what can I do for you?"]
+wait(lambda: vs.state == "listening")
+rec.loud = True                                  # loud, but not speech by the speech model
+wait(lambda: json.loads((vs.sdir / "live.json").read_text()).get("speaking"))
+vs.open_with("[CALL START]")
+check("  a loud sound that isn't speech: the hello isn't held for it",
+      wait(lambda: agent.asked == ["[CALL START]"], 2), agent.asked)
+rec.loud = False
+done(vs, rec)
+vs, rec, agent, spk, logged = session()
+agent.pieces = ["Hi, what can I do for you?"]
+wait(lambda: vs.state == "listening")
+rec.you = True                                   # a sound the speech model took for speech...
+wait(lambda: json.loads((vs.sdir / "live.json").read_text()).get("voice", {}).get("you_speaking"))
+vs.open_with("[CALL START]")
 time.sleep(0.3)
-check("  they spoke first: no greeting", agent.asked == [] and vs._opening is None, agent.asked)
+rec.you = False                                  # ...then dropped as noise: no row comes
+rec.row(vs, turn=0, end_turn=True, text="Hm.")
+check("  held for a sound that wasn't words: said all the same, once it's judged, and logged",
+      wait(lambda: agent.asked == ["[CALL START]"], 3) and wait(lambda: "Hi, what can I do for you?" in spk.said, 3)
+      and any(l.startswith("voice %d: the hello, after " % vs.seq) and l.endswith("held for a sound that wasn't words")
+              for l in logged), (agent.asked, spk.said, logged))
 done(vs, rec)
 # They talk while the greeting is still being thought of: their words are a question of their own.
 # "[CALL START]" was carried into it ("[CALL START] This is the test, one, two, three.").
