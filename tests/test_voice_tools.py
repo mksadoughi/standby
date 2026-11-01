@@ -149,7 +149,7 @@ for visuals in (False, True):
               and "[END]" in plain and "[CANCEL #n]" in plain and (("[VISUAL:" in plain) == visuals))
 tools = agent.voice_prelude(SID, tools=True)
 check("  the layout rule keeps its meaning: words first, the deeper call never said",
-      "your few words to them come first, as deeper's say; its task is never said" in " ".join(tools.split()), tools)
+      "say a few words to them, as deeper's say:" in " ".join(tools.split()) and "deeper's task is never said" in " ".join(tools.split()), tools)
 check("  the task rule stays in the prompt, and in deeper's task description",
       "not how to do it" in tools and "not how to do it" in agent.VOICE_TOOLS[0]["inputSchema"]["properties"]["task"]["description"])
 check("the tools: the same six, every time, loaded up front (never behind a tool search)",

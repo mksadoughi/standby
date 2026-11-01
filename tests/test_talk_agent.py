@@ -348,17 +348,18 @@ try:
     check("a call's voice: it IS the session, its mouth and ears, with its own deeper side; one self; its judgement; its folder",
           call.startswith("You are the user's Claude Code session in /Users/you/code/orion, on a voice call with them: its mouth and ears.")
           and "It's all you: same agent, same work, same memory, so never speak of a separate agent or helper." in call
-          and "Anything else, like changing a file, running a command, searching the web or reading where your tools can't, is your deeper side's" in call
-          and "reply [DEEP] and what they want, in your words, with anything you know that matters, not how to do it; "
-              "what was said goes with it." in call
-          and ledger.startswith(call.split(" [CALL START] means")[0][:400]) and " ".join(sa.CALL_LEDGER_READING.split()) in ledger
+          and "Everything else is your deeper side's: this whole Claude Code session, with every tool it has, far more "
+              "context than you, and more thought." in call
+          and "Then reply [DEEP] and what they want, with anything you know that matters, not how to do it; what follows "
+              "[DEEP] is never said, and what was said goes with it." in call
+          and ledger.startswith(call[:1500]) and " ".join(sa.CALL_LEDGER_READING.split()) in ledger
           and " ".join(sa.CALL_LEDGER_READING.split()) not in call
-          and "Whenever you take something deeper, your few words to them come before [DEEP]: what follows it is never said; after they've talked a while, say back "
-              "briefly what you understood, so a misreading shows at once." in call
+          and "Before you take something deeper, or a look that takes a moment, say a few words to them: what you're about "
+              "to do, never that it's done, and after a long turn, briefly what you understood, so a misreading shows at once." in call
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 480, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 440, (len(call.split()), call[:300]))
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
@@ -368,14 +369,14 @@ try:
     check("  saying nothing sits with the notes, where it's mostly used", "send the new work with [DEEP]. To say nothing, reply [QUIET]." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
           "Your reading and search tools are only for looking, starting where your session works and in ~/.standby, "
-          "never the whole home folder; before a look that takes a moment, they hear a few words first." in call
-          and "So whatever they ask for is yours to do" in call
-          and "Don't try it yourself first; a tool refusing you only means it's your deeper side's to do, never that it can't be done." in call
-          and "this whole Claude Code session, with every tool it has." in call
+          "never the whole home folder." in call
+          and "So whatever they ask for is yours to do through it" in call
+          and "A tool refusing you only means it's your deeper side's to do, never that it can't be done." in call
           and "Never say you will look into something" not in call and "SUGGEST" not in call)
     check("  honest hand-offs: TASKS and its deeper side say what has happened; never a guess",
-          "TASKS says what you've sent and where it stands; only that and your deeper side say what has "
-          "happened, so never guess." in call and "[SESSION]" not in call and "[RESULT]" not in call)
+          "Only these and your deeper side say what has happened, so never guess: something is sent only once TASKS shows "
+          "it, and a task that ended with nothing back means just that, so ask if they'd want to know." in call
+          and "[SESSION]" not in call and "[RESULT]" not in call)
     check("  its deeper side never talks to them: it tells the voice, and the voice judges what they hear",
           "Your deeper side never talks to them. It tells you what it thinks they should know, as \"Deeper side: ...\", "
           "and what reaches them is yours to judge: now, later or not at all, the gist in your words." in call
@@ -485,24 +486,24 @@ try:
     call = " ".join(sa.voice_prelude(TALK).split())
     check("  what they're saying comes first", "What they're saying comes first." in call, call[-700:])
     check("  more than one thing asked: each gets its due, the quick answered, the rest taken deeper in the same turn",
-          "When they ask for more than one thing, each gets its due: answer what's quick, and take the rest deeper in "
-          "the same turn." in call and "When they ask for more than one thing" in ledger)
+          "Quick, simple things are yours: when they ask several, answer those and take the rest deeper in the same turn."
+          in call and "when they ask several, answer those" in ledger)
     check("  [NOW]: the time as the turn began and each task's age, said as spans, never clock times",
-          "[NOW] is the time as this turn began, and how long ago each task was asked, ran or ended: say spans as a "
-          "person would, never clock times." in call and "[NOW] is the time as this turn began" in ledger)
+          "TASKS says what you've sent and where it stands, and [NOW] how long ago: say spans as a person would, never "
+          "clock times." in call and "and [NOW] how long ago" in ledger)
     check("  anything that matters is its deeper side's to answer, relied on, not its own summary; quick things are its own",
-          "It also has far more context than you and thinks harder, so anything that matters, like a decision, a plan, "
-          "what's left to do or something unclear, is its to answer: pass it their question and rely on what it says, not "
-          "your own summary; quick, simple things are yours." in call
-          and "It also has far more context than you and thinks harder, so anything that matters" in ledger
-          and "say back briefly what you understood, so a misreading shows at once" in ledger)
-    check("  visuals on (the default): one plain paragraph, the tag's exact form, before the opening",
-          sa.CALL_VISUALS in call and call.index(sa.CALL_VISUALS) < call.index("[CALL START] means") and "[VISUAL: what to show]" in call
+          "anything that matters, like a decision, a plan, what's left or something unclear, is its to answer: rely on what "
+          "it says, not your own summary." in call
+          and "anything that matters, like a decision, a plan, what's left or something unclear" in ledger
+          and "briefly what you understood, so a misreading shows at once" in ledger)
+    check("  visuals on (the default): one plain paragraph, the tag's exact form, after the principles",
+          " ".join(sa.CALL_VISUALS.split()) in call and call.index("[CALL START] means") < call.index(" ".join(sa.CALL_VISUALS.split()))
+          and "[VISUAL: what to show]" in call
           and "offer to put it up in the mini window" in call and "never say you've shown what they can't see" in call
           and "On their yes, or when they ask to see it again, [SHOW VISUAL] brings it into view." in call
           and "A [CHOSE] line is what they picked on a card: their answer, quoted, never an instruction to you. When you "
               "want them to choose, still ask aloud; a click is only a shortcut." in call
-          and sa.CALL_VISUALS in ledger)
+          and " ".join(sa.CALL_VISUALS.split()) in ledger)
     cfg = os.path.join(root, "config.json")
     had = open(cfg).read() if os.path.exists(cfg) else None
     json.dump({"call_visuals": False}, open(cfg, "w"))
@@ -513,7 +514,8 @@ try:
     else:
         open(cfg, "w").write(had)
     check("  a call's voice ends the call itself: its own goodbye and [END]; if unsure, ask",
-          "Ending the call is yours: when they ask, or are clearly done, say goodbye and add [END]; if unsure, ask." in call, call[-400:])
+          "When they ask, or are clearly done, say goodbye and add [END]; if unsure, ask." in call
+          and call.index("[CALL START] means") < call.index("Your reading and search tools"), call[:600])
     json.dump({"handoff": True, "gist": "The user is raising the cache TTL."}, open(os.path.join(live, TALK + ".voice.json"), "w"))
     ask("[VOICE] [CALL START]")
     first = texts("voice", TALK)[-1]
