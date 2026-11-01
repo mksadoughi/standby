@@ -240,6 +240,18 @@ check("voice-turn: one turn as the engine asks it, as JSON for the replay",
       r.returncode == 0 and out.get("answer") == "Checking it now. [DEEP] Check the build" and out.get("tool") == ["deeper"]
       and out.get("words_before_tool_ms") is not None and out.get("post_tool_words") == "" and out.get("continued") is False
       and "first_token_ms" in out, (r.returncode, r.stdout[-400:], r.stderr[-400:]))
+os.remove(log)
+env["FAKE_PLAN"] = json.dumps([{"say": "It passed this morning."}])
+r2 = subprocess.run([sys.executable, "plugin/bin/standby-agent", "voice-turn", "--system", sysf, "--message", msgf,
+                     "--model", "haiku"], capture_output=True, text=True, env=env, timeout=60)
+try:
+    out2 = json.loads(r2.stdout.strip().splitlines()[-1])
+except (ValueError, IndexError):
+    out2 = {}
+check("  the first word's time in both: before a tool, and in a turn of words only (no tool)",
+      isinstance(out.get("first_token_ms"), int) and isinstance(out2.get("first_token_ms"), int)
+      and out2.get("answer") == "It passed this morning." and out2.get("tool") == []
+      and out2.get("words_before_tool_ms") is None, (out, out2))
 check("  with the tools, the hook's settings, its effort, and nothing saved",
       "--mcp-config" in argv and argv[argv.index("--effort") + 1] == "low" and "--no-session-persistence" in argv
       and json.loads(argv[argv.index("--settings") + 1])["disableAllHooks"] is True, argv)
