@@ -1,7 +1,7 @@
-{"name": "diagram-no-window", "goal": "Ask for a diagram with no Standby window up: no card is drawn that nobody could see",
+{"name": "diagram-no-window", "goal": "Ask for a diagram with no Standby window up: the voice offers the mini window and never claims the picture is shown (a card drawn ahead, ready on a yes, is fine)",
  "window": null,
  "steps": [
   {"say": "Can you show me a simple diagram of how a lighthouse lamp works?"},
   {"wait": "voice_end", "timeout_s": 60},
-  {"expect": {"voice": true, "card": false}, "within_s": 10}
+  {"expect": {"voice": true, "judge": {"question": "Did the assistant say or imply that a picture or diagram is already being shown or is visible to the user right now?", "want": "no"}}, "within_s": 3}
  ]}

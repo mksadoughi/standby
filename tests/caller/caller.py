@@ -517,6 +517,10 @@ class Call(object):
                 except OSError:
                     body = ""
                 ok, got = value["text"].lower() in body.lower(), "%s: %d chars" % (value["path"], len(body))
+            elif key == "judge":                             # a question about what the voice said, judged by a model
+                said = " ".join(e.get("text") or "" for e in self.voice_since(t, ("say",)))
+                ans = judge(value["question"], said)
+                ok, got = ans == value.get("want", "no"), "judged %s: %s" % (ans, said[:160])
             elif key == "voice":
                 n = len(self.voice_since(t))
                 ok, got = (n > 0) == bool(value), "%d answer(s) started" % n
@@ -524,6 +528,24 @@ class Call(object):
                 ok, got = False, "unknown expect"
             self.expects.append({"want": {key: value}, "ok": ok, "got": got, "at": round(t - self.started, 1)})
             self.log("  expect %s=%r: %s (%s)" % (key, value, "pass" if ok else "FAIL", got))
+
+
+def judge(question, said):
+    """"yes" or "no": a small model's reading of what the voice said (a claim isn't a word to match). Through
+    the test's own Claude Code, no tools; "?" when it can't be asked."""
+    prompt = ("Here is everything a voice assistant said on a call, after the user's last request:\n\n\"%s\"\n\n"
+              "Question: %s\nAnswer with one word, yes or no." % (said, question))
+    for _try in range(2):                                   # once more: a first ask has come back empty
+        try:
+            r = subprocess.run([claude_path(), "-p", prompt, "--model", "haiku", "--tools", "", "--strict-mcp-config",
+                                "--no-session-persistence"], env=env(), cwd=PROJECT, capture_output=True, text=True,
+                               timeout=90)
+            word = (r.stdout or "").strip().lower()
+            if word.startswith(("yes", "no")):
+                return "yes" if word.startswith("yes") else "no"
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return "?"
 
 
 def read_jsonl(path):
@@ -736,6 +758,7 @@ def main(argv=None):
     r.add_argument("--echo", help="what it plays comes back into the mic: GAIN[,DELAY_MS]")
     r.add_argument("--audio", default="loopback", choices=["loopback"])
     r.add_argument("--no-transcribe", action="store_true")
+    r.add_argument("--repeat", type=int, default=1, help="run each scenario this many times")
     r.add_argument("--config", action="append", metavar="KEY=VALUE",
                    help="a setting for this batch, into its config.json: voice.tools=true")
     a = ap.parse_args(argv)
@@ -755,7 +778,7 @@ def main(argv=None):
         print("Claude Code: %s" % how)
         return 1
     setup(log=lambda m: None)
-    pick = [f for f in files if not a.names or os.path.splitext(os.path.basename(f))[0] in a.names]
+    pick = [f for f in files if not a.names or os.path.splitext(os.path.basename(f))[0] in a.names] * max(1, a.repeat)
     results = [run_one(f, a.echo, not a.no_transcribe, settings=a.config) for f in pick]
     print("\n%d of %d passed" % (sum(1 for r in results if r.get("passed")), len(results)))
     return 0 if all(r.get("passed") for r in results) else 1
