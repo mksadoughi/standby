@@ -931,11 +931,11 @@ CALL_VISUALS = ("When a picture would help them follow, or they ask to see somet
 TOOL_WORDING = (
     ("reply [DEEP] and what they want", "call deeper with what they want"),
     ("your few words to them come before [DEEP]: what follows it is never said",
-     "your few words to them come first; the deeper call itself is never said"),
+     "your few words to them come first, as deeper's say; its task is never said"),
     ("add [CANCEL #n] with its number from TASKS", "call stop_task with its number from TASKS"),
     ("send the new work with [DEEP]", "send the new work with deeper"),
     ("reply [QUIET]", "call stay_quiet"),
-    ("say goodbye and add [END]", "say goodbye, then call end_call"),
+    ("say goodbye and add [END]", "call end_call with your goodbye"),
     ("put [VISUAL: what to show] in your reply", "call show with what to show"),
     ("[SHOW VISUAL] brings it into view", "calling bring_into_view brings it into view"),
 )
@@ -957,9 +957,11 @@ _UPFRONT = {"anthropic/alwaysLoad": True}
 VOICE_TOOLS = [
     {"name": "deeper", "_meta": _UPFRONT,
      "description": ("Take something to your deeper side: this whole Claude Code session, with every tool it has. "
-                     "Your few words to them come first, in your reply; this call is never said, and your turn ends "
-                     "with it."),
-     "inputSchema": {"type": "object", "required": ["task"], "properties": {
+                     "say comes first: your few words to them, spoken as you write it. The task is never said, and "
+                     "your turn ends with this."),
+     "inputSchema": {"type": "object", "required": ["say", "task"], "properties": {
+         "say": {"type": "string", "description": "What they hear first: your few words to them, like \"Sure, I'll "
+                                                  "look into it.\" Empty only if you already said them."},
          "task": {"type": "string", "description": "What they want, in your words, with anything you know that "
                                                    "matters, not how to do it; what was said goes with it."},
          "stop": {"type": "array", "items": {"type": "integer"},
@@ -968,8 +970,9 @@ VOICE_TOOLS = [
      "description": "Stop a task you sent, by its number from TASKS. Your words to them come first, in your reply.",
      "inputSchema": {"type": "object", "required": ["number"], "properties": {"number": {"type": "integer"}}}},
     {"name": "end_call", "_meta": _UPFRONT,
-     "description": "End the call. Your goodbye comes first, in your reply.",
-     "inputSchema": {"type": "object", "properties": {}}},
+     "description": "End the call, after your goodbye: say is your goodbye, spoken as you write it.",
+     "inputSchema": {"type": "object", "required": ["say"], "properties": {
+         "say": {"type": "string", "description": "Your goodbye. Empty only if you already said it."}}}},
     {"name": "show", "_meta": _UPFRONT,
      "description": "Draw a picture beside the call while you keep talking. Your words come first, in your reply.",
      "inputSchema": {"type": "object", "required": ["what"], "properties": {
@@ -1017,7 +1020,8 @@ def voice_tools(session):
 def tools_answer(words, calls):
     """The turn's answer as the marker text the engine and the Mac already act on: its words, then its
     actions, a hand-off's task last (what follows [DEEP] is the task)."""
-    words = (words or "").strip()
+    words = (words or "").strip() or " ".join(
+        " ".join(str((a if isinstance(a, dict) else {}).get("say") or "").split()) for _n, a in calls).strip()
     out, tasks = [words], []
     for name, args in calls:
         args = args if isinstance(args, dict) else {}
@@ -1039,6 +1043,57 @@ def tools_answer(words, calls):
     if tasks:
         out.append("%s %s" % (DEEP_TAG, " Also: ".join(tasks)))
     return " ".join(x for x in out if x)
+
+
+SPOKEN_FIRST = ("deeper", "end_call")   # the tools whose say argument is what they hear first
+
+
+class SayStream(object):
+    """The "say" string of a tool's input as its JSON streams in (input_json_delta), decoded as it comes:
+    each feed returns the words that arrived. Only the first "say", and only once its quote opens."""
+
+    KEY = re.compile(r'(?<!\\)"say"\s*:\s*"')
+    ESC = {'"': '"', "\\": "\\", "/": "/", "b": "", "f": "", "n": " ", "r": " ", "t": " "}
+
+    def __init__(self):
+        self.buf, self.pos, self.done = "", None, False
+
+    def feed(self, chunk):
+        if self.done:
+            return ""
+        self.buf += chunk
+        if self.pos is None:
+            m = self.KEY.search(self.buf)
+            if not m:
+                return ""
+            self.pos = m.end()
+        out, i = [], self.pos
+        while i < len(self.buf):
+            c = self.buf[i]
+            if c == '"':
+                self.done = True
+                i += 1
+                break
+            if c != "\\":
+                out.append(c)
+                i += 1
+                continue
+            if i + 1 >= len(self.buf):
+                break                          # an escape cut by the stream: the rest comes next
+            e = self.buf[i + 1]
+            if e == "u":
+                if i + 6 > len(self.buf):
+                    break
+                try:
+                    out.append(chr(int(self.buf[i + 2:i + 6], 16)))
+                except ValueError:
+                    pass
+                i += 6
+                continue
+            out.append(self.ESC.get(e, e))
+            i += 2
+        self.pos = i
+        return "".join(out)
 
 
 class VoiceTools(object):
@@ -1063,6 +1118,8 @@ class VoiceTools(object):
         self.words_before = 0               # characters said before the first tool
         self.post = ""                      # words after it (only when the turn went on)
         self.continued = self.stopped = False
+        self.saying = None                  # the say argument streaming now (SayStream), spoken as it comes
+        self.said_in = None                 # where its words were: "text" (the reply) or "say" (the tool)
 
     def start(self):
         self._send({"type": "control_request", "request_id": "voice-init",
@@ -1100,24 +1157,42 @@ class VoiceTools(object):
                 if isinstance(ev, dict) and ev.get("type") == "control_request":
                     self._answer(ev)
                     continue
-                if isinstance(ev, dict):
-                    self._watch(ev)
+                said = self._watch(ev) if isinstance(ev, dict) else None
                 self.lines.put(line)
+                if said:                    # to the turn as words it speaks, like a reply's
+                    self.lines.put(json.dumps({"type": "stream_event", "event": {
+                        "type": "content_block_delta", "delta": {"type": "text_delta", "text": said}}}).encode("utf-8"))
 
     def _watch(self, ev):
         """The turn as it streams: when its first word and its first tool came, what was said around them."""
         e = (ev.get("event") or {}) if ev.get("type") == "stream_event" else {}
-        if e.get("type") == "content_block_start" and (e.get("content_block") or {}).get("type") == "tool_use":
+        block = e.get("content_block") or {}
+        if e.get("type") == "content_block_start" and block.get("type") == "tool_use":
             if self.first_tool is None:
                 self.first_tool = time.time()
+            name = str(block.get("name") or "")[len(TOOL_PREFIX):]
+            # its words, when nothing was said before it: spoken as the model writes them
+            self.saying = SayStream() if name in SPOKEN_FIRST and not self.words_before else None
+        if e.get("type") == "content_block_stop":
+            self.saying = None
         d = e.get("delta") or {}
+        if d.get("type") == "input_json_delta" and self.saying is not None:
+            said = self.saying.feed(d.get("partial_json") or "")
+            if said:
+                if self.first_text is None:
+                    self.first_text = time.time()
+                self.words_before += len(said.strip())
+                self.said_in = self.said_in or "say"
+                return said
         if d.get("type") == "text_delta" and d.get("text"):
             if self.first_text is None:
                 self.first_text = time.time()
             if self.first_tool is None:
                 self.words_before += len(d["text"].strip())
+                self.said_in = self.said_in or "text"
             else:
                 self.post += d["text"]
+        return None
 
     def _answer(self, ev):
         req, rid = ev.get("request") or {}, ev.get("request_id")
@@ -1146,7 +1221,7 @@ class VoiceTools(object):
             name, args = str(params.get("name") or ""), params.get("arguments") or {}
             if name not in [t["name"] for t in VOICE_TOOLS]:
                 return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32602, "message": "no tool %s" % name}}
-            unsaid = not self.words_before and name in ("deeper", "end_call") and not self.continued
+            unsaid = not self.words_before and name in SPOKEN_FIRST and not self.continued
             self.calls.append((name, args))
             self.flags.append(unsaid)
             result = {"content": [{"type": "text", "text": TOOL_UNSAID if unsaid else TOOL_DONE}]}
@@ -1171,7 +1246,7 @@ class VoiceTools(object):
         ms = lambda t: int((t - self.t0) * 1000) if t is not None else None
         return {"tool": [n for n, _a in self.calls], "first_token_ms": ms(self.first_text),
                 "words_before_tool_ms": ms(self.first_text) if self.words_before and self.calls else None,
-                "tool_ms": ms(self.first_tool), "continued": self.continued,
+                "tool_ms": ms(self.first_tool), "continued": self.continued, "said_in": self.said_in,
                 "post_tool_words": " ".join(self.post.split())}
 
 

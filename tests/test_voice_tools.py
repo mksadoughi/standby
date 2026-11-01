@@ -77,6 +77,10 @@ while True:
             batch.append(plan[k]); k += 1
         for step in batch:
             emit({"type": "stream_event", "event": {"type": "content_block_start", "content_block": {"type": "tool_use", "name": "mcp__voice__" + step["tool"]}}})
+            raw = json.dumps(step.get("args") or {})       # its input as the API streams it: a few characters at a time
+            for i in range(0, len(raw), 5):
+                emit({"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"type": "input_json_delta", "partial_json": raw[i:i + 5]}}})
+            emit({"type": "stream_event", "event": {"type": "content_block_stop"}})
             emit({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "mcp__voice__" + step["tool"], "input": step.get("args") or {}}]}})
         for j, step in enumerate(batch):
             got = mcp("tools/call", {"name": step["tool"], "arguments": step.get("args") or {}}, 10 + k + j)
@@ -145,7 +149,7 @@ for visuals in (False, True):
               and "[END]" in plain and "[CANCEL #n]" in plain and (("[VISUAL:" in plain) == visuals))
 tools = agent.voice_prelude(SID, tools=True)
 check("  the layout rule keeps its meaning: words first, the deeper call never said",
-      "your few words to them come first; the deeper call itself is never said" in " ".join(tools.split()), tools)
+      "your few words to them come first, as deeper's say; its task is never said" in " ".join(tools.split()), tools)
 check("  the task rule stays in the prompt, and in deeper's task description",
       "not how to do it" in tools and "not how to do it" in agent.VOICE_TOOLS[0]["inputSchema"]["properties"]["task"]["description"])
 check("the tools: the same six, every time, loaded up front (never behind a tool search)",
@@ -203,6 +207,27 @@ check("  the words still come before the hand-off (it's acted on once the turn e
       rc == 0 and answer == "On it, running the tests. [DEEP] Run the tests" and s["words_before_tool_ms"] is None
       and s["post_tool_words"] == "On it, running the tests.", (answer, s))
 
+# The live replay: the model often calls deeper first and speaks after (7 of 16 hand-offs). Its words are an
+# argument it writes first, spoken as they stream, so the order can't go wrong and no second call is made.
+answer, rc, s, deltas, notes = turn([{"tool": "deeper", "args": {"say": "Sure, I\u2019ll check \"the build\" now.",
+                                                                 "task": "Find why the build fails"}}])
+check("deeper first, its say written first: spoken as it streams, the task never",
+      "".join(deltas) == "Sure, I\u2019ll check \"the build\" now." and "Find" not in "".join(deltas), deltas)
+check("  the turn ends with the tool: no second call, nothing after it, said in say",
+      {"continue": False, "stopReason": "Done."} in [x["hook"] for x in notes if "hook" in x] and not s["continued"]
+      and s["post_tool_words"] == "" and s["said_in"] == "say" and s["words_before_tool_ms"] is not None, (notes, s))
+check("  the answer: its words, then the hand-off", rc == 0 and answer == "Sure, I\u2019ll check \"the build\" now. "
+      "[DEEP] Find why the build fails", answer)
+answer, rc, s, deltas, notes = turn([{"say": "On it."}, {"tool": "deeper", "args": {"say": "On it, checking.", "task": "Check it"}}])
+check("  words in the reply and in say: the reply's are said, say isn't said twice",
+      deltas == ["On it."] and answer == "On it. [DEEP] Check it" and s["said_in"] == "text", (deltas, answer, s))
+answer, rc, s, deltas, notes = turn([{"tool": "end_call", "args": {"say": "Talk soon, bye!"}}])
+check("end_call with its goodbye: said, then the end", "".join(deltas) == "Talk soon, bye!" and answer == "Talk soon, bye! [END]"
+      and not s["continued"], (deltas, answer))
+ss = agent.SayStream()
+got = [ss.feed(c) for c in ['{"task": "a \\"say\\": \\"x", "sa', 'y": "Hi \\', 'u00e9 the', 're\\', 'n!", "more": "no"}']]
+check("say decoded as it streams: a key inside another string isn't it, escapes cut by the stream wait",
+      "".join(got) == "Hi \u00e9 there !" and got[0] == "", got)
 answer, rc, s, deltas, notes = turn([{"tool": "stay_quiet"}], FAKE_STOP_ERROR="1")
 check("stay_quiet: [QUIET], ended at once; however Claude Code reports the hook's stop",
       rc == 0 and answer == "[QUIET]" and {"continue": False, "stopReason": "Done."} in [x["hook"] for x in notes if "hook" in x],
