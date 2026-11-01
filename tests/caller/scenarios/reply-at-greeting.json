@@ -1,0 +1,8 @@
+{"name": "reply-at-greeting", "goal": "Answer the instant the greeting ends: every word of the request is heard",
+ "after_greeting_s": 0,
+ "steps": [
+  {"say": "Please add a line to the README saying the lamp was cleaned today."},
+  {"wait": "voice_end", "timeout_s": 60},
+  {"wait": "quiet", "quiet_s": 8, "timeout_s": 120},
+  {"expect": {"handoff": true, "file_contains": {"path": "README.md", "text": "lamp"}}}
+ ]}

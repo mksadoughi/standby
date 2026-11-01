@@ -1,0 +1,7 @@
+{"name": "diagram-no-window", "goal": "Ask for a diagram with no Standby window up: no card is drawn that nobody could see",
+ "window": null,
+ "steps": [
+  {"say": "Can you show me a simple diagram of how a lighthouse lamp works?"},
+  {"wait": "voice_end", "timeout_s": 60},
+  {"expect": {"voice": true, "card": false}, "within_s": 10}
+ ]}

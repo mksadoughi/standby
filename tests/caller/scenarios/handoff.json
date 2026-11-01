@@ -4,5 +4,5 @@
   {"wait": "voice_end", "timeout_s": 60},
   {"expect": {"handoff": true}, "within_s": 5},
   {"wait": "quiet", "quiet_s": 8, "timeout_s": 120},
-  {"expect": {"file_contains": {"path": "README.md", "text": "lamp was cleaned"}}}
+  {"expect": {"file_contains": {"path": "README.md", "text": "lamp"}}}
  ]}

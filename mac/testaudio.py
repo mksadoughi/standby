@@ -356,7 +356,7 @@ class LoopbackBackend(object):
         out = open(os.path.join(self.dir, "speaker.pcm"), "ab")
         while True:
             try:
-                x, done = self._queue.get(timeout=0.1)
+                x, done = self._queue.get(timeout=0.3)    # a pause this long between pieces ends what it said
             except queue.Empty:
                 if self._sounding:
                     self._sounding = False

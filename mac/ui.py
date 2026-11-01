@@ -5421,6 +5421,8 @@ def visual_where(sid):
     one nobody can see): "the main window", "the mini window", or None (neither is up), or "off" (visuals off)."""
     if not visuals_on():
         return "off"
+    if os.environ.get("STANDBY_TEST_AUDIO") and os.environ.get("STANDBY_TEST_WINDOW"):    # the AI caller: headless,
+        return {"main": "the main window", "mini": "the mini window"}.get(os.environ["STANDBY_TEST_WINDOW"])  # as if up
     win = APP_WINDOW.get("win")
     try:
         native = getattr(win, "native", None)

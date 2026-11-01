@@ -55,8 +55,35 @@ SPEAKER_RATE = 24000
 SHARED = ("venv", "python", "models", "kit")         # the install's, used as they are: never written to
 
 
+BIN = os.path.join(HOME, "bin")                      # its own `claude`: the real one, with the test's token
+
+
+def real_claude():
+    return shutil.which("claude", path=os.environ.get("PATH", "").replace(BIN, "")) \
+        or os.path.join(REAL_HOME, ".local", "bin", "claude")
+
+
 def claude_path():
-    return shutil.which("claude") or os.path.join(REAL_HOME, ".local", "bin", "claude")
+    """The test's `claude`: a wrapper that reads the token from its file each time. Claude Code keeps
+    CLAUDE_CODE_OAUTH_TOKEN from the processes it starts (the plugin's sign-in check, the agent server and
+    every Claude Code that starts), and under the test's HOME there is no keychain to fall back on."""
+    return os.path.join(BIN, "claude")
+
+
+def write_wrapper():
+    os.makedirs(BIN, exist_ok=True)
+    path = claude_path()
+    body = ('#!/bin/sh\n# the AI caller\'s Claude Code: the real one, signed in with the test token (never printed)\n'
+            'CLAUDE_CODE_OAUTH_TOKEN="$(cat %s 2>/dev/null)"\nexport CLAUDE_CODE_OAUTH_TOKEN\nexec %s "$@"\n'
+            % (shlex_quote(TOKEN_FILE), shlex_quote(real_claude())))
+    with open(path, "w") as fh:
+        fh.write(body)
+    os.chmod(path, 0o700)
+
+
+def shlex_quote(s):
+    import shlex
+    return shlex.quote(s)
 
 
 def token():
@@ -67,21 +94,20 @@ def token():
         return None
 
 
-def env(audio_dir=None, echo=None):
+def env(audio_dir=None, echo=None, window=None):
     """The test's environment: its own HOME, the test audio, never a device, its own port and recorder."""
     out = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE_CODE_", "CLAUDECODE", "STANDBY_"))}
     out.update(HOME=HOME, STANDBY_NO_DEVICES="1", STANDBY_UI_PORT=str(PORT), STANDBY_CLAUDE=claude_path(),
                HF_HOME=os.environ.get("HF_HOME") or os.path.join(REAL_HOME, ".cache", "huggingface"),
                DISABLE_AUTOUPDATER="1", STANDBY_CALL_TRACE="1", PYTHONUTF8="1",
                STANDBY_RECORDER_MATCH=re.escape(os.path.join(REPO, "mac")) + "/standby[.]py run",
-               PATH=os.path.join(REAL_HOME, ".local", "bin") + os.pathsep + os.environ.get("PATH", ""))
-    tok = token()
-    if tok:
-        out["CLAUDE_CODE_OAUTH_TOKEN"] = tok
+               PATH=os.pathsep.join([BIN, os.path.join(REAL_HOME, ".local", "bin"), os.environ.get("PATH", "")]))
     if audio_dir:
         out["STANDBY_TEST_AUDIO"] = audio_dir
     if echo:
         out["STANDBY_TEST_ECHO"] = echo
+    if window:                                               # headless, as if this window were up (visual_where)
+        out["STANDBY_TEST_WINDOW"] = window
     return out
 
 
@@ -92,6 +118,7 @@ def setup(log=print):
     answers, and the plugin from this checkout. Safe to run again."""
     os.makedirs(ROOT, exist_ok=True)
     os.makedirs(PROJECT, exist_ok=True)
+    write_wrapper()
     for name in SHARED:
         src, dst = os.path.join(REAL_ROOT, name), os.path.join(ROOT, name)
         if os.path.exists(src) and not os.path.lexists(dst):
@@ -109,10 +136,7 @@ def setup(log=print):
     cfg["call_visuals"] = True
     with open(cfg_path, "w") as fh:
         json.dump(cfg, fh, indent=2)
-    readme = os.path.join(PROJECT, "README.md")
-    if not os.path.exists(readme):
-        with open(readme, "w") as fh:
-            fh.write("# Lighthouse\n\nA small test project: a lighthouse keeper's log. The keeper is Robin.\n")
+    fresh_project()
     # Claude Code's first run, answered: no theme question, the project trusted
     cj = os.path.join(HOME, ".claude.json")
     try:
@@ -135,6 +159,20 @@ def setup(log=print):
     ok, how = signed_in()
     log("Claude Code: %s" % how)
     return ok
+
+
+README = "# Lighthouse\n\nA small test project: a lighthouse keeper's log. The keeper is Robin.\n"
+
+
+def fresh_project():
+    """The test project as it starts every run: its README only (a hand-off's work from before is gone)."""
+    os.makedirs(PROJECT, exist_ok=True)
+    for name in os.listdir(PROJECT):
+        path = os.path.join(PROJECT, name)
+        if name != ".claude":
+            shutil.rmtree(path) if os.path.isdir(path) and not os.path.islink(path) else os.unlink(path)
+    with open(os.path.join(PROJECT, "README.md"), "w") as fh:
+        fh.write(README)
 
 
 def signed_in():
@@ -209,11 +247,13 @@ def synth(text, voice="Samantha"):
 class Stack(object):
     """The test's Standby app (headless, its own port) and Claude Code in a terminal of its own."""
 
-    def __init__(self, run_dir, audio_dir, echo=None, log=print):
+    def __init__(self, run_dir, audio_dir, echo=None, log=print, window="mini"):
         self.run_dir, self.audio_dir, self.log = run_dir, audio_dir, log
-        self.env = env(audio_dir, echo)
+        self.env = env(audio_dir, echo, window)
         self.app = self.cc = None
+        self.cc_session = None
         self.tui = open(os.path.join(run_dir, "claude-code.log"), "wb")
+        self.tui_at = []                                     # (when, how much of the log there was then)
 
     def start(self):
         for f in ("ui.port", "ui.token"):
@@ -245,6 +285,17 @@ class Stack(object):
                 return
             self.tui.write(chunk)
             self.tui.flush()
+            self.tui_at.append((time.time(), self.tui.tell()))
+
+    def tui_count(self, text, since):
+        """How often `text` showed in Claude Code's terminal after `since` (its escapes taken out)."""
+        offset = max([n for at, n in self.tui_at if at < since] or [0])    # the log as it was at `since`
+        with open(os.path.join(self.run_dir, "claude-code.log"), "rb") as fh:
+            fh.seek(offset)
+            raw = fh.read()
+        body = re.sub(r"\x1b\[[0-9;?<>]*[a-zA-Z~]|\x1b\][^\x07]*\x07|\x1b[()][A-Z0-9]|\r", "",
+                      raw.decode("utf-8", "replace"))
+        return re.findall(re.escape(text), body)
 
     def type(self, text):
         for ch in text:
@@ -266,9 +317,21 @@ class Stack(object):
         except Exception:
             return None
 
+    CALL_RX = re.compile(r"lite: call (talk-[0-9-]+) for Claude Code session ([0-9a-f-]+)")
+
     def live(self):
-        st = self.api("/api/lite/state") or {}
-        return (st.get("live") or {}).get("id")
+        """The call this run's Claude Code is on, from the app's own log (the state endpoint wants the Claude Code
+        session's id, which only the plugin knows), or None once it has ended."""
+        try:
+            with open(os.path.join(self.run_dir, "app.out"), errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            return None
+        found = self.CALL_RX.findall(text)
+        if not found:
+            return None
+        sid, self.cc_session = found[-1]
+        return None if re.search(r"lite: call %s ended|talk %s ends" % (sid, sid), text) else sid
 
     def stop(self):
         sid = self.live()
@@ -409,8 +472,9 @@ class Call(object):
         return out
 
     def handoffs_since(self, t):
-        return [r for r in read_jsonl(os.path.join(self.session_dir() or "", "trace.jsonl"))
-                if r.get("kind") == "handoff" and r.get("step") == "handed" and float(r.get("t") or 0) >= t]
+        """The hand-offs Claude Code was given since `t`: "From your call:" in its terminal (the trace has none
+        on every build), counted from where its log was then."""
+        return self.stack.tui_count("From your call:", t)
 
     def expect(self, want, within):
         if within:
@@ -427,6 +491,7 @@ class Call(object):
                 n = len(self.handoffs_since(t))
                 ok, got = (n > 0) == bool(value), "%d hand-off(s)" % n
             elif key == "halted":                            # it stopped soon after the caller started talking
+                wait(lambda: time.time() >= t + 2.5, 5)
                 n = len([e for e in self.voice_since(t, ("halt",)) if e["t"] <= t + 2.5])
                 ok, got = (n > 0) == bool(value), "%d halt(s) within 2.5 s" % n
             elif key == "file_contains":                     # a hand-off's work, done in the project
@@ -565,14 +630,14 @@ def run_one(path, echo=None, do_transcribe=True, log=print):
     log("== %s: %s" % (name, sc.get("goal", "")))
     with open(os.path.join(ROOT, "config.json")) as fh:
         cfg = json.load(fh)
-    cfg["call_visuals"] = True                              # each run starts with cards on
+    cfg["call_visuals"] = True                              # each run starts with cards on, and the project afresh
+    fresh_project()
     with open(os.path.join(ROOT, "config.json"), "w") as fh:
         json.dump(cfg, fh, indent=2)
-    ui_log = os.path.join(ROOT, "ui.log")
-    ui_from = os.path.getsize(ui_log) if os.path.exists(ui_log) else 0
     audio = LoopbackAudio(audio_dir)
     audio.start()
-    stack = Stack(run_dir, audio_dir, echo or sc.get("echo"), log=log)
+    # "window": "mini" (the default: the user watching the mini window), "main", or null (no window up)
+    stack = Stack(run_dir, audio_dir, echo or sc.get("echo"), log=log, window=sc.get("window", "mini"))
     call = Call(stack, audio, log=log)
     result = None
     try:
@@ -585,7 +650,10 @@ def run_one(path, echo=None, do_transcribe=True, log=print):
         log("  call %s" % call.sid)
         if not wait(lambda: call.voice_since(call.started), 60):
             log("  (no greeting in 60 s)")
-        wait(lambda: not call.speaking(), 30)
+        # the caller answers the greeting once it's over and a moment has passed ("after_greeting_s", 1.5 by
+        # default; 0 answers the instant its last word ends, as people often do)
+        quiet = float(sc.get("after_greeting_s", 1.5))
+        wait(lambda: not call.speaking() and time.time() - max(e["t"] for e in call.voice) >= quiet, 30)
         for s in sc.get("steps", []):
             call.step(s)
         time.sleep(2)
@@ -595,14 +663,15 @@ def run_one(path, echo=None, do_transcribe=True, log=print):
         result = {"error": str(exc)}
     finally:
         stack.stop()
-    try:
-        with open(ui_log, errors="replace") as fh:
-            fh.seek(ui_from)
+    try:                                                     # the app's log: in serve mode, its own output
+        with open(os.path.join(run_dir, "app.out"), errors="replace") as fh:
             ui_lines = fh.read().splitlines()
     except OSError:
         ui_lines = []
-    with open(os.path.join(run_dir, "ui.log"), "w") as fh:
-        fh.write("\n".join(ui_lines) + "\n")
+    try:                                                     # the recorder's: it starts a new file each session
+        shutil.copyfile(os.path.join(ROOT, "daemon.log"), os.path.join(run_dir, "daemon.log"))
+    except OSError:
+        pass
     if call.sid and os.path.isdir(call.session_dir()):
         shutil.copytree(call.session_dir(), os.path.join(run_dir, "session"), dirs_exist_ok=True)
     if result is None and call.started:
