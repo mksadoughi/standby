@@ -336,12 +336,12 @@ try:
           and "reply [DEEP] and what they want, in your words, with anything you know that matters, not how to do it; "
               "what was said goes with it." in call
           and "[DEEP] and what they want, with anything you know that matters, not how to do it" in ledger
-          and "Whenever you take something deeper, they hear a few words first; after they've talked a while, say back "
+          and "Whenever you take something deeper, your few words to them come before [DEEP]: what follows it is never said; after they've talked a while, say back "
               "briefly what you understood, so a misreading shows at once." in call
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call
-          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 370, (len(call.split()), call[:300]))
+          and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 380, (len(call.split()), call[:300]))
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
