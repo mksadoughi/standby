@@ -2,7 +2,8 @@
 // "Listening" and its sources small ("Your mic · Google Chrome ⌄"), the newest words, Pause and Stop. A click on
 // the sources opens them above the row, each with its tick. Off, a source carries a calm "not listened to"
 // mark (a muted speaker) and says if it's still playing. A tick sends /api/live/source at once and follows
-// before the recorder answers; refused, it's put back and why said. One that joins later is "new" for a few
+// before the recorder answers, holding until the recorder's list agrees (one click, never two); refused, it's put
+// back and why said. One that joins later is "new" for a few
 // seconds. Paused: grey bars, Resume, no words. The transcript marks a source turned off.
 const fs = require("fs"), path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "..", "mac", "agents.js"), "utf8");
@@ -31,7 +32,12 @@ const M = {session: "s1", kind: "meeting", live: true}, dock = (lv, m) => mxMeet
   check("  in the row: struck with the same calm mark", /<s title="Not listened to"><svg class="mx-noear"[^]*?<\/svg>Zoom<\/s>/.test(h), h);
   await p;
   check("  sent to the recorder: {session, id, on: false}", posts[0][0] === "/api/live/source" && posts[0][1].id === "us.zoom.xos" && posts[0][1].on === false, posts);
+  check("  the poll after it, the recorder not there yet (still on): it stays off, no second click needed",
+    /class="mx-src off"[^>]*aria-checked="false"/.test(dock({hearing: [mic, zoom]})) && /class="mx-src off"/.test(dock({hearing: [mic, zoom]})) && posts.length === 1);
   check("  off and quiet: \"Not listened to\"", /Zoom<small>Not listened to<\/small>/.test(dock({hearing: [mic, Object.assign({}, zoom, {on: false, heard: false})]})));
+  check("  the recorder agreed: its list rules again (on there, on here)", !("us.zoom.xos" in MXHEAR.want) && /class="mx-src"[^>]*aria-checked="true"[^]*Zoom/.test(dock({hearing: [mic, zoom]})));
+  await mxSource("s1", "mic", false); MXHEAR.want.mic.at -= MXHOLD + 1;
+  check("  a switch the recorder never takes: its list again after a few seconds", /class="mx-src"[^>]*aria-checked="true"[^>]*mxSource\('s1','mic',false\)/.test(dock({hearing: [mic, zoom]})) && !("mic" in MXHEAR.want));
   reply = {error: "Standby isn't hearing that any more"}; await mxSource("s1", "us.zoom.xos", false);
   check("  refused: put back (the recorder's own word), and why said", /class="mx-src"[^>]*onclick="event.stopPropagation\(\);mxSource\('s1','us.zoom.xos',false\)"/.test(dock({hearing: [mic, zoom]})) && toasts.includes("Standby isn't hearing that any more"));
   h = dock({hearing: [mic, zoom, {id: "com.google.Chrome", kind: "app", name: "Google Chrome", on: true, heard: true}]});

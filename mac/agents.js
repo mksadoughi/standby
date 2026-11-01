@@ -344,13 +344,17 @@ async function mxAnswerAsk(id, value) {
 // still playing. One that starts playing joins ticked, "new" for a few seconds. Paused, grey bars and Resume.
 // The words keep one fixed height, three lines, empty or full (the user, 2026-10-23: the transcript jumped as
 // they grew and shrank): the newest show, the oldest slide off the top. Only opening the list moves anything.
-// The recorder's: /api/live/<sid>'s "hearing" and "partial"; a choice: POST /api/live/source.
-const MXHEAR = {open: false, want: {}, seen: {}};
+// The recorder's: /api/live/<sid>'s "hearing" and "partial"; a choice: POST /api/live/source. A tick shows at once
+// and holds until the recorder's list says the same (it reads the switch on its own tick, after the next poll): let
+// go sooner, the tick flipped back and took a second click (the user, 2026-11-01). Never longer than MXHOLD.
+const MXHEAR = {open: false, want: {}, seen: {}}, MXHOLD = 8000;
 const MXBARS = (heard, cls) => `<span class="lv${heard ? "" : " still"}${cls ? " " + cls : ""}" aria-hidden="true"><i></i><i></i><i></i></span>`;
 const MXNOEAR = '<svg class="mx-noear" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></svg>';
 function mxMeetDock(m, lv) {
   const sid = m.session, paused = !!m.paused, list = (lv && lv.hearing) || [], words = paused ? "" : String((lv && lv.partial) || "").trim();
-  const now = Date.now(), on = x => x.id in MXHEAR.want ? MXHEAR.want[x.id] : x.on !== false;
+  const now = Date.now(), on = x => { const w = MXHEAR.want[x.id], has = x.on !== false;
+    if (w && (w.on === has || now - w.at > MXHOLD)) delete MXHEAR.want[x.id];
+    return MXHEAR.want[x.id] ? w.on : has };
   // seen first now, after this meeting's list was first drawn: new (those there from the start aren't)
   const seen = MXHEAR.seen[sid] || (MXHEAR.seen[sid] = {}), first = !Object.keys(seen).length;
   for (const x of list) if (!(x.id in seen)) seen[x.id] = first ? 0 : now;
@@ -370,10 +374,10 @@ function mxMeetDock(m, lv) {
     {k: "pop", h: MXHEAR.open && list.length ? `<div class="mx-dpop">${rows}</div>` : ""}];
 }
 async function mxSource(sid, id, on) {
-  MXHEAR.want[id] = on; mxPaint();
+  MXHEAR.want[id] = {on, at: Date.now()}; mxPaint();
   const r = await mxGet("/api/live/source", {session: sid, id, on});
-  if (r && r.error) toast(r.error);
-  await mxPoll(); delete MXHEAR.want[id]; mxPaint();
+  if (r && r.error) { toast(r.error); delete MXHEAR.want[id] }        // refused: the recorder's own word again
+  await mxPoll(); mxPaint();
 }
 /* ---------------------------------------------------------------- past meetings and calls */
 // Standby opened on its own: every past meeting and call, newest first by day; what's live pinned on top.
