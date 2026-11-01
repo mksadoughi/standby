@@ -953,6 +953,8 @@ def tools_wording(text):
 # Served by the engine itself, over Claude Code's own pipe (an SDK server: VoiceTools). Loaded up front,
 # never behind a tool search: the voice can't pay a search before it acts.
 VOICE_SERVER = "voice"
+# Every tool they'd notice carries the words they hear first (say), spoken as it streams (SayStream)
+SAY_FIRST = "What they hear first: your few words to them. Empty only if you already said them."
 _UPFRONT = {"anthropic/alwaysLoad": True}
 VOICE_TOOLS = [
     {"name": "deeper", "_meta": _UPFRONT,
@@ -967,19 +969,21 @@ VOICE_TOOLS = [
          "stop": {"type": "array", "items": {"type": "integer"},
                   "description": "Numbers from TASKS of the tasks this one replaces, stopped first."}}}},
     {"name": "stop_task", "_meta": _UPFRONT,
-     "description": "Stop a task you sent, by its number from TASKS. Your words to them come first, in your reply.",
-     "inputSchema": {"type": "object", "required": ["number"], "properties": {"number": {"type": "integer"}}}},
+     "description": "Stop a task you sent, by its number from TASKS. say comes first: your few words to them.",
+     "inputSchema": {"type": "object", "required": ["say", "number"], "properties": {
+         "say": {"type": "string", "description": SAY_FIRST}, "number": {"type": "integer"}}}},
     {"name": "end_call", "_meta": _UPFRONT,
      "description": "End the call, after your goodbye: say is your goodbye, spoken as you write it.",
      "inputSchema": {"type": "object", "required": ["say"], "properties": {
          "say": {"type": "string", "description": "Your goodbye. Empty only if you already said it."}}}},
     {"name": "show", "_meta": _UPFRONT,
-     "description": "Draw a picture beside the call while you keep talking. Your words come first, in your reply.",
-     "inputSchema": {"type": "object", "required": ["what"], "properties": {
+     "description": "Draw a picture beside the call while you keep talking. say comes first: your few words to them.",
+     "inputSchema": {"type": "object", "required": ["say", "what"], "properties": {
+         "say": {"type": "string", "description": SAY_FIRST},
          "what": {"type": "string", "description": "What to show."}}}},
     {"name": "bring_into_view", "_meta": _UPFRONT,
-     "description": "Bring the call's pictures into view, on their yes.",
-     "inputSchema": {"type": "object", "properties": {}}},
+     "description": "Bring the call's pictures into view, on their yes. say comes first: your few words to them.",
+     "inputSchema": {"type": "object", "required": ["say"], "properties": {"say": {"type": "string", "description": SAY_FIRST}}}},
     {"name": "stay_quiet", "_meta": _UPFRONT,
      "description": "Say nothing this turn: call it alone, with no words.",
      "inputSchema": {"type": "object", "properties": {}}},
@@ -1020,8 +1024,8 @@ def voice_tools(session):
 def tools_answer(words, calls):
     """The turn's answer as the marker text the engine and the Mac already act on: its words, then its
     actions, a hand-off's task last (what follows [DEEP] is the task)."""
-    words = (words or "").strip() or " ".join(
-        " ".join(str((a if isinstance(a, dict) else {}).get("say") or "").split()) for _n, a in calls).strip()
+    says = [" ".join(str(a.get("say") or "").split()) for _n, a in calls if isinstance(a, dict)]
+    words = (words or "").strip() or next((x for x in says if x), "")      # only the first is spoken
     out, tasks = [words], []
     for name, args in calls:
         args = args if isinstance(args, dict) else {}
@@ -1045,7 +1049,7 @@ def tools_answer(words, calls):
     return " ".join(x for x in out if x)
 
 
-SPOKEN_FIRST = ("deeper", "end_call")   # the tools whose say argument is what they hear first
+SPOKEN_FIRST = ("deeper", "stop_task", "end_call", "show", "bring_into_view")   # those with say: all but stay_quiet
 
 
 class SayStream(object):

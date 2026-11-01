@@ -224,6 +224,18 @@ check("  words in the reply and in say: the reply's are said, say isn't said twi
 answer, rc, s, deltas, notes = turn([{"tool": "end_call", "args": {"say": "Talk soon, bye!"}}])
 check("end_call with its goodbye: said, then the end", "".join(deltas) == "Talk soon, bye!" and answer == "Talk soon, bye! [END]"
       and not s["continued"], (deltas, answer))
+answer, rc, s, deltas, notes = turn([{"tool": "show", "args": {"say": "Here's the flow.", "what": "the build steps"}}])
+check("show with its words (it was drawn in silence once): they're said, then it's drawn",
+      "".join(deltas) == "Here's the flow." and answer == "Here's the flow. [VISUAL: the build steps]" and not s["continued"],
+      (deltas, answer))
+answer, rc, s, deltas, notes = turn([{"tool": "stop_task", "args": {"say": "Stopping that one.", "number": 2}},
+                                     {"tool": "deeper", "args": {"say": "And starting the new one.", "task": "Use v2"}}])
+check("  two tools, each with words: the first's are said, and the answer has only those",
+      "".join(deltas) == "Stopping that one." and answer == "Stopping that one. [CANCEL #2] [DEEP] Use v2", (deltas, answer))
+check("  every tool they'd notice has say, written first; stay_quiet has none",
+      all(list(t["inputSchema"]["properties"])[0] == "say" and "say" in t["inputSchema"].get("required", [])
+          for t in agent.VOICE_TOOLS if t["name"] != "stay_quiet")
+      and not agent.VOICE_TOOLS[-1]["inputSchema"]["properties"])
 ss = agent.SayStream()
 got = [ss.feed(c) for c in ['{"task": "a \\"say\\": \\"x", "sa', 'y": "Hi \\', 'u00e9 the', 're\\', 'n!", "more": "no"}']]
 check("say decoded as it streams: a key inside another string isn't it, escapes cut by the stream wait",
