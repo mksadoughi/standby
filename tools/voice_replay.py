@@ -10,9 +10,11 @@ on demand: tests/suites.txt group "ondemand").
 
 The cases are the user's own words, so they stay on this Mac: ~/.standby/replay/cases.json, never the
 repository. Claude Code runs with a config of its own (CLAUDE_CONFIG_DIR=~/.standby/replay/claude), never the
-user's ~/.claude, with no tools and no MCP servers, and keeps no session. It needs its own login there once:
-    CLAUDE_CONFIG_DIR=~/.standby/replay/claude claude        then /login, then quit
-(or ANTHROPIC_API_KEY in the environment). Nothing is copied from the user's own login.
+user's ~/.claude, with no tools and no MCP servers, and keeps no session. It signs in with the test tooling's
+own token, which the user saves once (the AI caller in tests/caller uses the same one):
+    claude setup-token        then save what it prints in ~/.standby/replay/oauth-token, readable by you alone
+(or a /login in that config, or ANTHROPIC_API_KEY in the environment). Nothing is copied from the user's own
+login, and the token is never printed or logged.
 
 What each kind of turn should do (the voice's prompt's principles, checked by their shape, never by words):
     deep      it took the turn deeper: [DEEP], with its few words to them before the tag (the two calls whose
@@ -47,6 +49,7 @@ ROOT = os.path.expanduser(os.environ.get("STANDBY_REPLAY_ROOT", "~/.standby/repl
 CASES = os.path.join(ROOT, "cases.json")
 LAST = os.path.join(ROOT, "last.json")
 CONFIG = os.path.join(ROOT, "claude")
+TOKEN = os.path.join(ROOT, "oauth-token")    # the one sign-in for all test tooling (claude setup-token), the user's to save
 SESSIONS = os.path.expanduser(os.environ.get("STANDBY_REPLAY_SESSIONS", "~/.standby/sessions"))
 # The calls whose hand-offs came out bare ("[DEEP] <task>", then their words, never said: 2026-10-31)
 BARE_CALLS = ("talk-20261031-013229", "talk-20261031-173859")
@@ -156,11 +159,25 @@ def claude():
     return shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
 
 
+def token():
+    """The test tooling's own sign-in (TOKEN), or None: only a file of the user's alone is used."""
+    try:
+        if os.stat(TOKEN).st_mode & 0o077:
+            return None                   # readable by others: not used (chmod 600 it)
+        with open(TOKEN) as fh:
+            return fh.read().strip() or None
+    except OSError:
+        return None
+
+
 def env():
-    """Its own Claude Code config, never the user's ~/.claude."""
+    """Its own Claude Code config, never the user's ~/.claude, signed in with the tooling's token when saved."""
     os.makedirs(CONFIG, exist_ok=True)
     out = dict(os.environ, CLAUDE_CONFIG_DIR=CONFIG)
     out.pop("CLAUDE_CODE_CHILD_SESSION", None)
+    t = token()
+    if t:
+        out["CLAUDE_CODE_OAUTH_TOKEN"] = t
     return out
 
 
@@ -168,6 +185,10 @@ def signed_in():
     """(True, how) when its own Claude Code can answer: a login in its config, or an API key."""
     if os.environ.get("ANTHROPIC_API_KEY"):
         return True, "an API key in the environment"
+    if token():
+        return True, "the test tooling's token in %s" % TOKEN
+    if os.path.exists(TOKEN):
+        return False, "%s is readable by others, so it isn't used: chmod 600 it" % TOKEN
     try:
         r = subprocess.run([claude(), "auth", "status", "--json"], env=env(), stdin=subprocess.DEVNULL,
                            capture_output=True, text=True, timeout=20)
@@ -175,7 +196,8 @@ def signed_in():
             return True, "its own login in %s" % CONFIG
     except (OSError, ValueError, subprocess.SubprocessError):
         pass
-    return False, "not signed in: run  CLAUDE_CONFIG_DIR=%s claude  then /login, then quit" % CONFIG
+    return False, ("not signed in: run  claude setup-token  and save what it prints in %s (chmod 600), "
+                   "or  CLAUDE_CONFIG_DIR=%s claude  then /login" % (TOKEN, CONFIG))
 
 
 def ask(case, system, model=None, effort=None, timeout=120, run=subprocess.Popen):
