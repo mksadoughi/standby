@@ -590,6 +590,7 @@ TALK_OVER_MIC = "Needs the Mac's default microphone (Settings > Recording)"
 DEFAULTS = {"push_lines": 10, "speakers": True, "capture": "auto",
             "remember_voices": True, "lite_transcript": "ask",
             "auto_stop_min": 15, "auto_accept": False, "call_visuals": True}
+VOICE_EFFORTS = ("auto", "low", "medium", "high")   # the voice's thinking (Settings > Call); auto: Claude Code's own
 LITE_PASSES = ("ask", "live")     # a meeting from Claude Code: its transcript with each prompt, or pushed as it goes
 VOICES = ROOT / "voices.json"
 # the speech model being downloaded, if one is: {"key", "state", "done", "total", "error"}.
@@ -677,6 +678,8 @@ def get_settings():
     cfg = transport.load_config()
     a = transport.agent_settings(cfg)
     return {"model": a["model"], "voice_model": a["voice_model"],
+            "voice_effort": a.get("voice_effort") if a.get("voice_effort") in VOICE_EFFORTS else "auto",
+            "voice_effort_inherit": claude_effort(),        # what "auto" is: Claude Code's own effortLevel, if it has one
             "push_lines": int(cfg.get("push_lines", DEFAULTS["push_lines"])),
             "speakers": bool(cfg.get("speakers", DEFAULTS["speakers"])),
             "remember_voices": bool(cfg.get("remember_voices", DEFAULTS["remember_voices"])),
@@ -697,6 +700,17 @@ def get_settings():
             "talk_over": bool((cfg.get("voice_mode") or {}).get("duplex", False)),
             "talk_over_note": talk_over_note(cfg),
             "speech": speech_status(cfg)}
+
+
+def claude_effort():
+    """Claude Code's own effort level (~/.claude/settings.json effortLevel), what the voice runs at unless Settings
+    > Call's Thinking says otherwise; "" when it says none."""
+    try:
+        with open(os.path.expanduser("~/.claude/settings.json")) as fh:
+            level = (json.load(fh) or {}).get("effortLevel")
+    except (OSError, ValueError, AttributeError):
+        level = None
+    return level if isinstance(level, str) and level in ("low", "medium", "high", "xhigh", "max") else ""
 
 
 def talk_over_note(cfg):
@@ -827,6 +841,11 @@ def set_settings(b):
         a["model"] = b["model"]
     if b.get("voice_model") in ("sonnet", "opus", "haiku"):
         a["voice_model"] = b["voice_model"]
+    if b.get("voice_effort") in VOICE_EFFORTS:           # "auto": Claude Code's own, as before
+        if b["voice_effort"] == "auto":
+            a.pop("voice_effort", None)
+        else:
+            a["voice_effort"] = b["voice_effort"]
     cfg["agent"] = a
     for legacy in ("host", "remote_dir", "workspace", "claude_on_start"):
         cfg.pop(legacy, None)
@@ -902,6 +921,8 @@ def _named_settings():
         ("voice", "the voice Standby speaks in", voice_now,
          ["automatic"] + [v["name"] for v in vs.get("standby", []) + vs.get("voices", [])], "voice"),
         ("voice_model", "the model the voice talks with", st["voice_model"], list(MODEL_NAMES), "voice_model"),
+        ("voice_thinking", "how hard the voice thinks before it answers, from the next call (auto: as Claude Code is set)",
+         st["voice_effort"], list(VOICE_EFFORTS), "voice_effort"),
         ("model", "the model of Standby's meeting agent", st["model"], list(MODEL_NAMES), "model"),
         ("talk_over", "talk over the voice to interrupt it", onoff(st["talk_over"]), list(ON_OFF), "talk_over"),
         ("speakers", "tell the speakers apart", onoff(st["speakers"]), list(ON_OFF), "speakers"),
@@ -7189,6 +7210,9 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
       <div class="field"><label>Voice mode model</label><select id="s_vmodel" data-save><option value="haiku">Haiku · Recommended</option>
         <option value="sonnet">Sonnet</option><option value="opus">Opus</option></select>
         <div class="hint" id="s_vmodelnote" hidden></div></div>
+      <div class="field"><label>Thinking<span class="mx-help" tabindex="0" title="How much the call's voice thinks before it answers. Low answers fastest; High is more careful but takes longer to start speaking. From the next call." aria-label="About thinking" onclick="event.preventDefault()"></span></label><input type="hidden" id="s_veffort">
+        <div class="seg" id="effseg"><button type="button" data-e="low" onclick="setEffort('low')">Low</button><button type="button" data-e="medium" onclick="setEffort('medium')">Medium</button><button type="button" data-e="high" onclick="setEffort('high')">High</button></div>
+        <div class="hint" id="s_effhint"></div></div>
       <div class="field"><label>Voice<span class="mx-help" id="s_voicecredit" tabindex="0" title="" aria-label="About the voice" onclick="event.preventDefault()" hidden></span></label>
         <div class="row"><select id="s_voice" style="flex:1" onchange="pickVoice(this.value)"></select>
           <button type="button" class="btn sm" id="s_voicetry" onclick="tryVoice()">Try</button></div>
@@ -7385,6 +7409,11 @@ function paintSpeech(s){SPEECH=s||SPEECH;const d=$("s_speechdl"),sp=SPEECH;if(!s
   d.textContent=t;d.hidden=!t}
 async function pollSpeech(){clearTimeout(speechT);try{paintSpeech(await api("/api/speech"))}catch(e){}
   if(SPEECH&&SPEECH.download&&SPEECH.download.state==="downloading"&&settings.open)speechT=setTimeout(pollSpeech,1000)}
+// Settings > Call, Thinking: the call's voice's effort, from the next call. Not picked yet: as Claude Code is set
+// (the default until it's measured), said in the hint, nothing lit
+const EFFHINT={low:"Answers fastest.",medium:"Thinks a little before answering.",high:"Most careful, slower to answer."};let EFFINH="";
+function setEffort(e,quiet){$("s_veffort").value=e;document.querySelectorAll("#effseg button").forEach(b=>b.classList.toggle("on",b.dataset.e===e));
+  $("s_effhint").textContent=EFFHINT[e]||("As your Claude Code is set"+(EFFINH?" ("+EFFINH[0].toUpperCase()+EFFINH.slice(1)+")":"")+", until you pick one.");if(!quiet)autosave()}
 function setCapture(c,quiet){$("s_capture").value=c;document.querySelectorAll("#capseg button").forEach(b=>b.classList.toggle("on",b.dataset.c===c));
   setHelp("s_caphint",CAPHINT[c]||"");$("micf").style.display=c==="meeting"?"none":"";if(!quiet)autosave()}
 async function openPrompt(){const r=await api("/api/prompt");if(r.error){toast(r.error);return}PR=r;$("ptext").value=r.prompt;
@@ -7571,7 +7600,7 @@ async function openSettings(pane){if(!SETWIN&&window.pywebview&&pywebview.api&&p
     try{const r=await pywebview.api.open_settings(typeof pane==="string"?pane:null);if(r&&r.ok)return}catch(e){}}
   return showSettings(pane)}
 async function showSettings(pane){const r=await api("/api/settings"),s=r.settings;
-  $("s_vmodel").value=s.voice_model||"haiku";$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
+  $("s_vmodel").value=s.voice_model||"haiku";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"auto",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
   $("s_remember").checked=!!s.remember_voices;
   // Talking over Claude (the duplex engine): from the next voice mode; a quiet line when the mic chosen can't
   $("s_autoaccept").checked=!!s.auto_accept;$("s_visuals").checked=s.call_visuals!==false;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}
@@ -7593,7 +7622,7 @@ function watchModel(){loadModels();
   clearInterval(MODELT);let k=0;MODELT=setInterval(()=>{if(++k>40)clearInterval(MODELT);loadModels()},3000)}
 function markModels(off){["s_vmodel"].forEach(id=>{for(const o of $(id).options){o.dataset.label=o.dataset.label||o.textContent;
   o.disabled=off.includes(o.value);o.textContent=o.disabled?o.dataset.label.split(" (")[0]+" (not available)":o.dataset.label}})}
-function formSettings(){return {voice_model:$("s_vmodel").value,
+function formSettings(){return {voice_model:$("s_vmodel").value,voice_effort:$("s_veffort").value,voice_effort:$("s_veffort").value,
   push_lines:$("s_push").value,lite_transcript:$("s_litepass").value,speakers:$("s_speakers").checked,remember_voices:$("s_remember").checked,talk_over:$("s_talkover").checked,auto_accept:$("s_autoaccept").checked,call_visuals:$("s_visuals").checked,capture:$("s_capture").value,mic_device:$("s_mic").value,
   speech_model:SPEECHSET?($("s_speech").value||undefined):undefined,english_only:$("s_english").checked}}
 let VOICES=null;

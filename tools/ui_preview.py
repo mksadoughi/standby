@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-STATES = ["settings", "settings-help", "settings-call", "settings-permissions", "settings-recording", "usage", "usage-today", "usage-empty", "dictation", "dictation-shortcut", "dictation-recording", "settings-voice-prep", "settings-try-start", "settings-try-mid", "settings-try-failed", "settings-try-playing", "dictation-words", "settings-talkover", "settings-speech-dl", "settings-speech-8gb", "settings-speech-8gb-standard",
+STATES = ["settings", "settings-help", "settings-call", "settings-call-low", "settings-call-medium", "settings-call-high", "settings-permissions", "settings-recording", "usage", "usage-today", "usage-empty", "dictation", "dictation-shortcut", "dictation-recording", "settings-voice-prep", "settings-try-start", "settings-try-mid", "settings-try-failed", "settings-try-playing", "dictation-words", "settings-talkover", "settings-speech-dl", "settings-speech-8gb", "settings-speech-8gb-standard",
           "mx-past", "mx-row-menu", "mx-delete-ask", "mx-past-session", "mx-past-open", "mx-past-open-menu", "mx-past-empty", "mx-live", "mx-hear", "mx-hear-open", "mx-hear-off", "mx-hear-new", "mx-ask", "mx-pausing", "mx-ending", "mx-live-menu", "mx-paused", "mx-micno", "mx-soundno", "mx-soundask", "mx-spkname", "cc-live", "cc-livemenu", "cc-call", "cc-call-tasks", "cc-call-thinking", "cc-call-pausing", "cc-call-paused", "cc-call-waiting", "cc-call-working", "cc-call-visual", "cc-callmenu", "cc-callcopy", "cc-callend", "cc-ended", "cc-long", "cc-past", "cc-past-menu"]
 
 FAKE = r"""
@@ -408,6 +408,9 @@ SCENES = r"""
     await wait(300); return }
   if (SCENE === "settings") { await openSettings() }
   if (SCENE === "settings-call" || SCENE === "settings-talkover") { await openSettings(); setPane("call") }
+  // Thinking: not picked (as Claude Code is set, here high), then each choice
+  if (SCENE === "settings-call") { EFFINH = "high"; setEffort("auto", true) }
+  if (SCENE.startsWith("settings-call-")) { await openSettings(); setPane("call"); setEffort(SCENE.slice(14), true) }
   if (SCENE === "settings-permissions") { await openSettings(); setPane("permissions"); await wait(300) }
   if (SCENE === "dictation" || SCENE === "dictation-words") { await openSettings(); setPane("dictation") }
   if (SCENE === "settings-recording" || SCENE.startsWith("settings-speech")) { await openSettings(); setPane("recording") }

@@ -1372,7 +1372,8 @@ def claude_caps():
         mode = "--permission-mode" in text
         _CAPS.update(auto=mode and '"auto"' in text, dont_ask=mode and '"dontAsk"' in text,
                      prompts="--permission-prompts" in text, no_persist="--no-session-persistence" in text,
-                     bare="--bare" in text, settings="--settings" in text, autocompact="--autocompact" in text, name="--name" in text)
+                     bare="--bare" in text, settings="--settings" in text, autocompact="--autocompact" in text, name="--name" in text,
+                     effort="--effort" in text)
     return _CAPS
 
 
@@ -1469,6 +1470,25 @@ def live_voice_model(started_with):
     except (IOError, OSError, ValueError, AttributeError):
         chosen = None
     return chosen if sbagents.valid_model(chosen) else started_with
+
+
+# The voice's thinking effort (Settings > Call, "Thinking": config.json agent.voice_effort, low, medium or high; unset,
+# Claude Code's own, as before). Read once a call and kept for it, its turns and its forks alike: a change mid-call
+# would miss the prompt cache, so it takes effect from the next call.
+VOICE_EFFORTS = ("low", "medium", "high")
+_VOICE_EFFORT = {}
+
+
+def voice_effort(session):
+    """The effort this call's voice runs at, or None (Claude Code's own setting)."""
+    if session not in _VOICE_EFFORT:
+        try:
+            with open(os.path.join(ROOT, "config.json")) as fh:
+                chosen = ((json.load(fh) or {}).get("agent") or {}).get("voice_effort")
+        except (IOError, OSError, ValueError, AttributeError):
+            chosen = None
+        _VOICE_EFFORT[session] = chosen if chosen in VOICE_EFFORTS else None
+    return _VOICE_EFFORT[session]
 
 
 def note_switch(session, wanted, was, error=None):
@@ -1742,6 +1762,9 @@ def build_argv(session, model, fresh, sid, stream, kind="meeting", turn=False, p
             argv.append("--bare")
         if agent_voice and caps.get("autocompact") and not turn:
             argv += ["--autocompact", VOICE_COMPACT]
+        effort = voice_effort(session) if caps.get("effort") else None
+        if effort:                                      # the same for the whole call: its prompt cache holds
+            argv += ["--effort", effort]
         name = voice_meta(session).get("name") if agent_voice and caps.get("name") else None
         if turn and caps.get("name") and not (isinstance(name, str) and name.strip()):
             name = "Standby call voice"            # named: no title call of Claude Code's own for each turn
