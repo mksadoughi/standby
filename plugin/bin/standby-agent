@@ -1058,13 +1058,15 @@ SPOKEN_FIRST = ("deeper", "stop_task", "end_call", "show", "bring_into_view")   
 
 class SayStream(object):
     """The "say" string of a tool's input as its JSON streams in (input_json_delta), decoded as it comes:
-    each feed returns the words that arrived. Only the first "say", and only once its quote opens."""
+    each feed returns the words that arrived. Only the first "say", and only once its quote opens. Its
+    end is a line break: the Mac says a sentence once it's whole, and nothing else follows the say to
+    show it is (its last sentence waited for the turn's end, 0.4-1.6 s on the AI caller's calls)."""
 
     KEY = re.compile(r'(?<!\\)"say"\s*:\s*"')
     ESC = {'"': '"', "\\": "\\", "/": "/", "b": "", "f": "", "n": " ", "r": " ", "t": " "}
 
     def __init__(self):
-        self.buf, self.pos, self.done = "", None, False
+        self.buf, self.pos, self.done, self.said = "", None, False, False
 
     def feed(self, chunk):
         if self.done:
@@ -1101,6 +1103,9 @@ class SayStream(object):
             out.append(self.ESC.get(e, e))
             i += 2
         self.pos = i
+        self.said = self.said or any(c.strip() for c in out)
+        if self.done and self.said:
+            out.append("\n")
         return "".join(out)
 
 
@@ -3850,6 +3855,10 @@ HELD = ("Held, not sent: you took this deeper on only part of their words, befor
 # has the context); its answer is what the session works on.
 TASK_TURN = ("[TASK] You went deeper without saying on what. Write it now: only what they want, in your "
              "words, with what it needs to know, not how to do it.")
+# A call's opening with no words in it: the voice is asked for its hello, once (_hello).
+HELLO_TURN = "[HELLO] They're on the line, waiting to hear you: say your hello now, in words."
+# A voice tool's name written as words ("mcp__voice__stay_quiet"): never said, nor kept as its reply
+TOOL_NAME = re.compile(r"\bmcp__\w+:?")
 WENT_ON = re.compile(r'^\s*\(They went on before hearing your answer\.\)\s*')
 _NOTES = re.compile(r'^\s*\(They (?:went on before hearing your answer\.|cut in while you were saying: ".*?")\)\s*', re.S)
 _BLOCKS = re.compile(r"\[SUMMARY\].*?\[END SUMMARY\]\s*|\[RESULT[^\]]*\].*?\[END RESULT\]\s*|^\[(?:SESSION|RESUMED)\][^\n]*\n?",
@@ -4357,6 +4366,23 @@ class Voice(object):
                 rc, "  FAILED: %s" % text[:200])))
         sys.stderr.flush()
 
+    def _hello(self, session, turn, text, interrupt, progress):
+        """A call's opening, its hello, always: they wait for it, and a quiet one left the call silent
+        until they spoke (stay_quiet at [CALL START], or a tool's name written as words: the AI caller's
+        calls, 2026-11-01). Nothing in it ends the call. With no words in it, the voice is asked once
+        more, in its own conversation, and its words stream as a reply's do."""
+        text = (text or "").replace(END_TAG, "").strip()
+        if any(ch.isalnum() for ch in CANCEL_RE.sub("", text.replace(QUIET_TAG, ""))):
+            return text
+        if turn is not None:
+            hello, rc = self._ask_turn(turn, session, HELLO_TURN, interrupt, progress)
+        else:
+            hello, rc = engine_claude(HELLO_TURN, session, self.model, self.args.timeout, kind="voice",
+                                      should_interrupt=interrupt, on_event=progress, label="voice")
+        hello = TOOL_NAME.sub("", hello or "").replace(END_TAG, "").replace(QUIET_TAG, "").strip() if rc == 0 else ""
+        sys.stderr.write("voice: the call's hello had no words; asked again: %s\n" % (hello[:80] or "none"))
+        return hello if any(ch.isalnum() for ch in hello) else text
+
     def _ledger_message(self, session, raw):
         """A call's turn as the voice reads it: the call's record (sbledger) as blocks, oldest first, its
         question last. What came with the question goes in the record first, as facts of its own: the
@@ -4483,6 +4509,9 @@ class Voice(object):
                                  args=(session, ident, asks, getattr(engine, "sid", None),
                                        live_voice_model(self.model)), daemon=True).start()
         (commit if rc in (0, ClaudeSession.INTERRUPTED) else restore)()
+        text = TOOL_NAME.sub("", text or "").strip() if text else text      # a tool's name written as words
+        if raw.startswith(CALL_START) and rc == 0 and not wants_deep(text):
+            text = self._hello(session, turn, text, interrupt, progress)
         went = runs(session, "voice", self.model)
         # Cut off as it spoke (not "they went on", whose next turn has it all): a hand-off its reply made in
         # full, task and all, still goes; it may have said it's on it

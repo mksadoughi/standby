@@ -212,7 +212,9 @@ check("  the words still come before the hand-off (it's acted on once the turn e
 answer, rc, s, deltas, notes = turn([{"tool": "deeper", "args": {"say": "Sure, I\u2019ll check \"the build\" now.",
                                                                  "task": "Find why the build fails"}}])
 check("deeper first, its say written first: spoken as it streams, the task never",
-      "".join(deltas) == "Sure, I\u2019ll check \"the build\" now." and "Find" not in "".join(deltas), deltas)
+      "".join(deltas).strip() == "Sure, I\u2019ll check \"the build\" now." and "Find" not in "".join(deltas), deltas)
+check("  its end a line break: the Mac says its last sentence then, not at the turn's end (0.4-1.6 s later)",
+      "".join(deltas).endswith("now.\n") and "".join(deltas).count("\n") == 1, deltas)
 check("  the turn ends with the tool: no second call, nothing after it, said in say",
       {"continue": False, "stopReason": "Done."} in [x["hook"] for x in notes if "hook" in x] and not s["continued"]
       and s["post_tool_words"] == "" and s["said_in"] == "say" and s["words_before_tool_ms"] is not None, (notes, s))
@@ -222,16 +224,16 @@ answer, rc, s, deltas, notes = turn([{"say": "On it."}, {"tool": "deeper", "args
 check("  words in the reply and in say: the reply's are said, say isn't said twice",
       deltas == ["On it."] and answer == "On it. [DEEP] Check it" and s["said_in"] == "text", (deltas, answer, s))
 answer, rc, s, deltas, notes = turn([{"tool": "end_call", "args": {"say": "Talk soon, bye!"}}])
-check("end_call with its goodbye: said, then the end", "".join(deltas) == "Talk soon, bye!" and answer == "Talk soon, bye! [END]"
+check("end_call with its goodbye: said, then the end", "".join(deltas) == "Talk soon, bye!\n" and answer == "Talk soon, bye! [END]"
       and not s["continued"], (deltas, answer))
 answer, rc, s, deltas, notes = turn([{"tool": "show", "args": {"say": "Here's the flow.", "what": "the build steps"}}])
 check("show with its words (it was drawn in silence once): they're said, then it's drawn",
-      "".join(deltas) == "Here's the flow." and answer == "Here's the flow. [VISUAL: the build steps]" and not s["continued"],
+      "".join(deltas) == "Here's the flow.\n" and answer == "Here's the flow. [VISUAL: the build steps]" and not s["continued"],
       (deltas, answer))
 answer, rc, s, deltas, notes = turn([{"tool": "stop_task", "args": {"say": "Stopping that one.", "number": 2}},
                                      {"tool": "deeper", "args": {"say": "And starting the new one.", "task": "Use v2"}}])
 check("  two tools, each with words: the first's are said, and the answer has only those",
-      "".join(deltas) == "Stopping that one." and answer == "Stopping that one. [CANCEL #2] [DEEP] Use v2", (deltas, answer))
+      "".join(deltas) == "Stopping that one.\n" and answer == "Stopping that one. [CANCEL #2] [DEEP] Use v2", (deltas, answer))
 check("  every tool they'd notice has say, written first; stay_quiet has none",
       all(list(t["inputSchema"]["properties"])[0] == "say" and "say" in t["inputSchema"].get("required", [])
           for t in agent.VOICE_TOOLS if t["name"] != "stay_quiet")
@@ -239,7 +241,9 @@ check("  every tool they'd notice has say, written first; stay_quiet has none",
 ss = agent.SayStream()
 got = [ss.feed(c) for c in ['{"task": "a \\"say\\": \\"x", "sa', 'y": "Hi \\', 'u00e9 the', 're\\', 'n!", "more": "no"}']]
 check("say decoded as it streams: a key inside another string isn't it, escapes cut by the stream wait",
-      "".join(got) == "Hi \u00e9 there !" and got[0] == "", got)
+      "".join(got) == "Hi \u00e9 there !\n" and got[0] == "", got)
+ss = agent.SayStream()
+check("  an empty say ends with nothing: no line break said for it", ss.feed('{"say": "", "task": "x"}') == "", ss.buf)
 answer, rc, s, deltas, notes = turn([{"tool": "stay_quiet"}], FAKE_STOP_ERROR="1")
 check("stay_quiet: [QUIET], ended at once; however Claude Code reports the hook's stop",
       rc == 0 and answer == "[QUIET]" and {"continue": False, "stopReason": "Done."} in [x["hook"] for x in notes if "hook" in x],
@@ -259,6 +263,38 @@ agent.TOOLS_BROKEN[:] = []
 check("tools_answer: words alone stay words; quiet with words is just the words",
       agent.tools_answer("Hi there.", []) == "Hi there." and agent.tools_answer("Okay.", [("stay_quiet", {})]) == "Okay."
       and agent.tools_answer("", [("stop_task", {"number": 3}), ("bring_into_view", {})]) == "[CANCEL #3] [SHOW VISUAL]")
+
+# ---------------------------------------------------------------- a call's opening: a hello, always
+# The AI caller's calls with tools on: at [CALL START] the voice called stay_quiet (60 s of silence), or wrote
+# a tool's name as its words ("mcp__voice__stay_quiet", said aloud). The opening is asked again, once.
+class Hello(object):
+    def __init__(self, again):
+        self.again, self.asked = again, []
+
+    def _ask_turn(self, turn, session, msg, interrupt, progress):
+        self.asked.append(msg)
+        if progress:
+            progress("delta", self.again)
+        return self.again, 0
+
+v = Hello("Hi, I'm here.")
+said = []
+out = [agent.Voice._hello(v, SID, object(), t, None, lambda k, x: said.append(x)) for t in ("[QUIET]", "", "  ")]
+check("an opening with no words (stay_quiet, nothing, a tool's name taken out): its hello asked for, streamed",
+      out == ["Hi, I'm here."] * 3 and v.asked == [agent.HELLO_TURN] * 3 and said == ["Hi, I'm here."] * 3, (out, v.asked))
+v = Hello("unused")
+check("  one with words is kept as it is, never asked again; nothing in it ends the call",
+      agent.Voice._hello(v, SID, object(), "Hey, I'm here. [END]", None, None) == "Hey, I'm here." and not v.asked)
+v = Hello("[QUIET]")
+check("  asked once only: a second quiet one stays as it was", agent.Voice._hello(v, SID, object(), "[QUIET]", None, None)
+      == "[QUIET]" and len(v.asked) == 1)
+check("  a tool's name written as words is never kept: \"mcp__voice__say: Hi\" is \"Hi\"",
+      agent.TOOL_NAME.sub("", "mcp__voice__say: Hi there.").strip() == "Hi there."
+      and agent.TOOL_NAME.sub("", "mcp__voice__stay_quiet").strip() == "")
+sys.path.insert(0, "mac")
+import voice as macvoice  # noqa: E402
+check("  nor said on the Mac, in a reply that streamed it", macvoice.speakable("mcp__voice__stay_quiet") == ""
+      and macvoice.speakable("mcp__voice__say: Hi, I'm here.") == "Hi, I'm here.")
 
 # ---------------------------------------------------------------- the replay harness's entry point
 sysf, msgf = os.path.join(root, "sys.txt"), os.path.join(root, "msg.txt")

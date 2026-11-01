@@ -48,6 +48,7 @@ _HEADING = re.compile(r"^[ \t]*#{1,6}[ \t]*", re.M)
 def speakable(text):
     """What to say aloud for a piece of an answer: markdown, links, URLs and
     file references removed. Empty if nothing worth saying is left."""
+    text = _TOOL.sub("", text)
     text = _LINK.sub(r"\1", text)
     text = _URL.sub("", text)
     text = _SOURCE.sub("", text)
@@ -70,6 +71,9 @@ _WRITTEN = re.compile(r"(?m)^[ \t]*(?:-{3,}|`{3})|\[(?:DEEP|HANDOFF)\]")
 # with no deltas (one that was only a signal: the agent's stream had nothing to send) is said from
 # its answer, so they must go here too ("[QUIET]" said as a call's greeting).
 _MARK = re.compile(r"\[(?:QUIET|END|CANCEL[^\]]*)\]")
+# A call voice's tool named in its words ("mcp__voice__stay_quiet" as a greeting): never said. First, before
+# its underscores read as emphasis.
+_TOOL = re.compile(r"\bmcp__\w+:?")
 # Where an answer's first clause may end, to be said before its sentence is whole.
 _CLAUSE = re.compile(r"[,;:](?=\s)|\s[\u2014\u2013]\s")
 
