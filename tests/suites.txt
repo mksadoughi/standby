@@ -3,6 +3,7 @@
 #   group: par  runs with the others, in parallel: its own STANDBY_ROOT, no real window, model, ssh or device
 #          full only with STANDBY_TESTS=full, one at a time, behind the machine's lock: it needs the real world
 #                (a window, the display, the speaker models, ssh to localhost); the why is its comment
+#          ondemand only when named (bash tests/run_all.sh <name>): never part of a normal run
 test_voice_listening       py    par  
 test_signin                py    par  
 test_meeting_audio         py    par  
@@ -138,3 +139,4 @@ test_native_service        py    par
 test_api_auth              py    par  
 test_log_privacy           py    par
 test_home_start            py    par  
+test_voice_replay          py    ondemand   # the voice's replay: the gate for its prompt, effort or model; live Claude, its own login

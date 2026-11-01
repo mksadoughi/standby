@@ -42,8 +42,8 @@ while read -r name how group _; do
   [[ -z "$name" || "$name" == \#* ]] && continue
   if [[ $ASKED -gt 0 ]]; then
     [[ "$WANT" == *" $name "* ]] || continue
-  elif [[ "$group" == "full" && $FULL -eq 0 ]]; then
-    continue
+  elif [[ "$group" == "full" && $FULL -eq 0 ]] || [[ "$group" == "ondemand" ]]; then
+    continue                     # ondemand: only when named
   fi
   SUITES+=("$name $how $group")
 done < tests/suites.txt
@@ -76,7 +76,7 @@ T_START="$(now)"
 # The par ones, together: the slowest first (the manifest's order), a few at once.
 for item in "${SUITES[@]}"; do
   read -r name how group <<< "$item"
-  [[ "$group" == "par" ]] || continue
+  [[ "$group" == "par" || "$group" == "ondemand" ]] || continue
   while [[ "$(jobs -rp | wc -l)" -ge "$JOBS" ]]; do sleep 0.1; done
   run_suite "$name" "$how" &
 done
