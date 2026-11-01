@@ -108,6 +108,7 @@ test_utterance             py    par
 test_addmac                py    par  
 test_companion_rules       py    par  
 test_setup                 py    par  
+test_config_writers        py    par
 test_port                  py    par
 test_voice_persist         py    par
 test_voice_pause_player    py    par

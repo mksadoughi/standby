@@ -339,25 +339,7 @@ else
 fi
 
 say "Configuration"
-"$VENV/bin/python" - "$ROOT/config.json" <<'PYCODE'
-import json, os, sys
-p = sys.argv[1]
-cfg = {}
-if os.path.exists(p):
-    cfg = json.load(open(p))
-agent = cfg.get("agent") or {}
-agent["mode"] = "local"                      # Claude Code runs on this Mac: an SSH host saved before goes
-for k in ("host", "remote_dir"):
-    agent.pop(k, None)
-cfg["agent"] = agent
-for k in ("host", "remote_dir"):
-    cfg.pop(k, None)
-if isinstance(cfg.get("mic_device"), int):   # saved indices are unreliable
-    cfg.pop("mic_device")
-cfg.setdefault("mode", "auto")
-json.dump(cfg, open(p, "w"), indent=2)
-print("   \033[32m✓\033[0m %s" % p)
-PYCODE
+STANDBY_ROOT="$ROOT" "$VENV/bin/python" "$REPO/mac/config.py" install     # as the app writes it: every other key kept
 
 # What macOS keys an app's permissions on: its designated requirement. Signed ad hoc, that is the code's own
 # hash, so any rebuild that changed a byte made a new app to macOS and every permission went stale (the

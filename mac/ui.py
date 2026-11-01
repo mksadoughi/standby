@@ -603,11 +603,14 @@ def speech_migrate():
     """A stored speech model that is no longer offered, moved to this Mac's default
     (speechmodel.migrate): once, at start, before any session."""
     import speechmodel
-    cfg = transport.load_config()
-    moved = speechmodel.migrate(cfg)
+    try:
+        with transport.update() as cfg:
+            moved = speechmodel.migrate(cfg)
+    except transport.Unreadable as exc:
+        log("speech: %s" % exc)
+        return None
     if moved is None:
         return None
-    transport.save_config(cfg)
     was, now = speechmodel.MODELS[speechmodel.chosen({"speech_model": moved[0], "english_only": True})], \
         speechmodel.MODELS[speechmodel.chosen(cfg)]
     SPEECH_MOVED[0] = ("%s wrote no capitals or full stops, so it is no longer offered: %s now."
@@ -836,57 +839,63 @@ def usage_info(rng):
     return out
 
 
+class _Refused(Exception):
+    """A setting that can't be: nothing is saved, and the page says why."""
+
+
 def set_settings(b):
-    cfg = transport.load_config()
-    a = transport.agent_settings(cfg)
-    a.pop("host", None)                       # an SSH host an older Standby saved: Claude Code runs on this Mac
-    models = (a.get("model"), a.get("voice_model"))
-    if b.get("model") in ("sonnet", "opus", "haiku"):
-        a["model"] = b["model"]
-    if b.get("voice_model") in ("sonnet", "opus", "haiku"):
-        a["voice_model"] = b["voice_model"]
-    if b.get("voice_effort") in VOICE_EFFORTS:           # "auto": Claude Code's own; unset: high
-        a["voice_effort"] = b["voice_effort"]
-    cfg["agent"] = a
-    for legacy in ("host", "remote_dir", "workspace", "claude_on_start"):
-        cfg.pop(legacy, None)
-    if "push_lines" in b:
-        try:
-            cfg["push_lines"] = max(1, min(200, int(b["push_lines"])))
-        except (TypeError, ValueError):
-            return {"error": "AI update must be a number of sentences."}
-    if "speakers" in b:
-        cfg["speakers"] = bool(b["speakers"])
-    if "remember_voices" in b:
-        cfg["remember_voices"] = bool(b["remember_voices"])
-    if "auto_accept" in b:
-        cfg["auto_accept"] = bool(b["auto_accept"])
-    if "call_visuals" in b:
-        cfg["call_visuals"] = bool(b["call_visuals"])
-    if b.get("lite_transcript") in LITE_PASSES:
-        cfg["lite_transcript"] = b["lite_transcript"]
-    if "auto_stop_min" in b:
-        try:
-            cfg["auto_stop_min"] = max(0, min(AUTO_STOP_MAX, int(b["auto_stop_min"])))
-        except (TypeError, ValueError):
-            return {"error": "auto_stop is a number of minutes, 0 (never) to %d." % AUTO_STOP_MAX}
-    if "talk_over" in b:
-        cfg.setdefault("voice_mode", {})["duplex"] = bool(b["talk_over"])
     import speechmodel
-    speech_was = speechmodel.chosen(cfg)
-    if b.get("speech_model") in speechmodel.OFFERED:     # only what Settings offers, and only if picked
-        cfg["speech_model"] = b["speech_model"]
-    if "english_only" in b:
-        cfg["english_only"] = bool(b["english_only"])
-    if b.get("capture") in ("auto", "mic", "meeting"):
-        cfg["mode"] = b["capture"]
-    cfg["mic_automatic"] = cfg["capture_automatic"] = True     # what is picked here from now on is the user's
-    if "mic_device" in b:
-        if b["mic_device"]:
-            cfg["mic_device"] = b["mic_device"]
-        else:
-            cfg.pop("mic_device", None)       # system default microphone
-    transport.save_config(cfg)
+    try:
+        with transport.update() as cfg:   # read fresh and saved whole: no other key is lost
+            a = transport.agent_settings(cfg)
+            a.pop("host", None)                       # an SSH host an older Standby saved: Claude Code runs on this Mac
+            models = (a.get("model"), a.get("voice_model"))
+            if b.get("model") in ("sonnet", "opus", "haiku"):
+                a["model"] = b["model"]
+            if b.get("voice_model") in ("sonnet", "opus", "haiku"):
+                a["voice_model"] = b["voice_model"]
+            if b.get("voice_effort") in VOICE_EFFORTS:           # "auto": Claude Code's own; unset: high
+                a["voice_effort"] = b["voice_effort"]
+            cfg["agent"] = a
+            for legacy in ("host", "remote_dir", "workspace", "claude_on_start"):
+                cfg.pop(legacy, None)
+            if "push_lines" in b:
+                try:
+                    cfg["push_lines"] = max(1, min(200, int(b["push_lines"])))
+                except (TypeError, ValueError):
+                    raise _Refused("AI update must be a number of sentences.")
+            if "speakers" in b:
+                cfg["speakers"] = bool(b["speakers"])
+            if "remember_voices" in b:
+                cfg["remember_voices"] = bool(b["remember_voices"])
+            if "auto_accept" in b:
+                cfg["auto_accept"] = bool(b["auto_accept"])
+            if "call_visuals" in b:
+                cfg["call_visuals"] = bool(b["call_visuals"])
+            if b.get("lite_transcript") in LITE_PASSES:
+                cfg["lite_transcript"] = b["lite_transcript"]
+            if "auto_stop_min" in b:
+                try:
+                    cfg["auto_stop_min"] = max(0, min(AUTO_STOP_MAX, int(b["auto_stop_min"])))
+                except (TypeError, ValueError):
+                    raise _Refused("auto_stop is a number of minutes, 0 (never) to %d." % AUTO_STOP_MAX)
+            if "talk_over" in b:
+                cfg.setdefault("voice_mode", {})["duplex"] = bool(b["talk_over"])
+            speech_was = speechmodel.chosen(cfg)
+            if b.get("speech_model") in speechmodel.OFFERED:     # only what Settings offers, and only if picked
+                cfg["speech_model"] = b["speech_model"]
+            if "english_only" in b:
+                cfg["english_only"] = bool(b["english_only"])
+            if b.get("capture") in ("auto", "mic", "meeting"):
+                cfg["mode"] = b["capture"]
+            cfg["mic_automatic"] = cfg["capture_automatic"] = True     # what is picked here from now on is the user's
+            if "mic_device" in b:
+                if b["mic_device"]:
+                    cfg["mic_device"] = b["mic_device"]
+                else:
+                    cfg.pop("mic_device", None)       # system default microphone
+    except (_Refused, transport.Unreadable) as exc:      # nothing saved
+        return {"error": str(exc)}
     if speechmodel.chosen(cfg) != speech_was:
         log("settings: speech model %s" % speechmodel.MODELS[speechmodel.chosen(cfg)].words)
         ensure_speech_model()
@@ -5131,9 +5140,11 @@ def lite_incoming_answer(b):
             return {"error": "That request has expired"}
         r["answer"] = "decline" if answer == "decline" else "accept"
     if answer == "always":
-        cfg = transport.load_config()
-        cfg["auto_accept"] = True
-        transport.save_config(cfg)
+        try:
+            with transport.update() as cfg:
+                cfg["auto_accept"] = True
+        except transport.Unreadable as exc:
+            log("lite: always accept not saved: %s" % exc)
     r["done"].set()
     log("lite: Claude's %s request %s: %s" % (r["kind"], r["id"], {"always": "always accept, saved"}.get(answer, answer)))
     return {"ok": True}
@@ -5235,13 +5246,15 @@ def voices_action(b):
     vid = b.get("id") or None
     if vid is not None and vid not in ids:
         return {"error": "that voice is not installed"}
-    cfg = transport.load_config()
-    vm = cfg.setdefault("voice_mode", {})
-    if vid:
-        vm["voice"] = vid
-    else:
-        vm.pop("voice", None)
-    transport.save_config(cfg)
+    try:
+        with transport.update() as cfg:
+            vm = cfg.setdefault("voice_mode", {})
+            if vid:
+                vm["voice"] = vid
+            else:
+                vm.pop("voice", None)
+    except transport.Unreadable as exc:
+        return {"error": str(exc)}
     log("voice mode's voice: %s" % (vid or "automatic"))
     return {"ok": True, "voices": voices_info()}
 
@@ -6726,14 +6739,10 @@ def main():
     # `standby start` only looks): transport.ensure_agent, _agent_from_claude_code
     os.environ.setdefault("STANDBY_AGENT_BY", "app")
     window_mode = "--window" in sys.argv
-    cfg = transport.load_config()
-    pinned, was = cfg.get("mic_device"), cfg.get("mode")
-    if cfg and (transport.migrate_mic(cfg) | transport.migrate_capture(cfg)):  # once: Automatic from the start
-        transport.save_config(cfg)
-        if pinned:
-            log("mic: %r was pinned; Automatic now, following the Mac's mic (once)" % pinned)
-        if cfg.get("mode") != was:
-            log("capture: %s -> %s (once: the Mac's sound joins when an app plays)" % (was, cfg["mode"]))
+    try:
+        transport.migrate_config(log)          # once: Automatic from the start
+    except transport.Unreadable as exc:
+        log("config: %s" % exc)
     speech_migrate()               # a stored speech model that is no longer offered (once)
     if window_mode:
         adopt_login_path()

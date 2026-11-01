@@ -28,7 +28,7 @@ from pathlib import Path
 
 HOME = Path.home()
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import CONFIG, ROOT, load_config, save_config  # noqa: E402,F401  (one place for config.json)
+from config import CONFIG, ROOT, Unreadable, load_config, update  # noqa: E402,F401  (one place for config.json)
 REPO = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO / "plugin" / "bin"))
 import sbclaude  # noqa: E402  (where Claude Code is: the one finder, the agent's too)
@@ -70,6 +70,23 @@ def migrate_capture(cfg):
     if cfg.get("mode") in (None, "mic"):
         cfg["mode"] = "auto"
     return True
+
+
+def migrate_config(log):
+    """As the app or a recording starts: migrate_mic and migrate_capture, saved through
+    update() so every other key is kept, and said once. The config, read fresh: {}
+    before setup. Raises Unreadable for a config.json that isn't JSON."""
+    with update() as cfg:
+        if not cfg:
+            return cfg
+        pinned, was = cfg.get("mic_device"), cfg.get("mode")
+        mic_moved, capture_moved = migrate_mic(cfg), migrate_capture(cfg)
+    if mic_moved and pinned:
+        log("mic: %r was pinned; Automatic now, following the Mac's mic (once; "
+            "a mic picked in Settings from now on stays)" % pinned)
+    if capture_moved and cfg.get("mode") != was:
+        log("capture: %s -> %s (once: the Mac's sound joins when an app plays)" % (was, cfg["mode"]))
+    return cfg
 
 
 def agent_settings(cfg=None):

@@ -130,9 +130,8 @@ def settings():
 
 
 def save_setting(key, value):
-    cfg = config.load_config()          # fresh: the app writes this file too
-    cfg.setdefault("dictation", {})[key] = value
-    config.save_config(cfg)
+    with config.update() as cfg:        # fresh, under its lock: the app writes this file too
+        cfg.setdefault("dictation", {})[key] = value
 
 
 # --------------------------------------------------------------------------

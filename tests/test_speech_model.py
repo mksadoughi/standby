@@ -3,7 +3,7 @@ choice, pinned, from Hugging Face the first time. A made-up Hugging Face cache a
 stand-in hf_hub_download: nothing is downloaded. Also the app's background download
 (ui.ensure_speech_model) with a stand-in fetch."""
 import agentpath  # noqa: E402,F401  (first: never the real ~/.standby, see agentpath.guard)
-import os, sys, tempfile, threading, time, types
+import json, os, sys, tempfile, threading, time, types
 from pathlib import Path
 
 hub = Path(tempfile.mkdtemp(prefix="sbhf-"))
@@ -163,7 +163,15 @@ def fake_fetch(key, tell):
 
 ui.speechmodel = sm
 sm.fetch = fake_fetch
-ui.transport.save_config({"speech_model": "large", "english_only": True})
+
+
+def set_config(cfg):
+    """The test's own config.json, whole (the app changes it only through config.update)."""
+    ui.transport.CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    ui.transport.CONFIG.write_text(json.dumps(cfg))
+
+
+set_config({"speech_model": "large", "english_only": True})
 check("in a test the app never downloads", ui.ensure_speech_model() is False and not fetched)
 saved = os.environ.pop("STANDBY_NO_DEVICES")         # only around these calls: the fetch is a stand-in
 try:
@@ -191,7 +199,7 @@ check("  then ready", st["ready"] and st["download"]["state"] == "ready", st)
 saved = os.environ.pop("STANDBY_NO_DEVICES")
 try:
     check("  and nothing more once it's here", ui.ensure_speech_model() is False and fetched == ["large"])
-    ui.transport.save_config({"speech_model": "small", "english_only": True})
+    set_config({"speech_model": "small", "english_only": True})
     shutil_small = sm.local("small")
     import shutil  # noqa: E402
     shutil.rmtree(str(shutil_small))
@@ -205,7 +213,7 @@ st = ui.speech_status()
 check("a failed download: said, and the row says why", st["download"]["state"] == "error"
       and "no network" in st["download"]["error"] and not st["ready"], st)
 # The app at start: a stored size that is no longer offered, moved once, and said.
-ui.transport.save_config({"speech_model": "large", "english_only": True})
+set_config({"speech_model": "large", "english_only": True})
 said_moved = ui.speech_migrate()
 expected_model = sm.MODELS[sm.chosen(ui.transport.load_config())].words
 check("the app moves a stored Large at start, and says why in plain words",
@@ -217,7 +225,7 @@ check("  and Settings says it, with what it is now",
       ui.speech_status()["moved"] == said_moved and ui.speech_status()["model"] == expected_model,
       ui.speech_status())
 ui.SPEECH_MOVED[0] = None
-ui.transport.save_config({"speech_model": "small", "english_only": True})
+set_config({"speech_model": "small", "english_only": True})
 check("  nothing to move: nothing said", ui.speech_migrate() is None and ui.speech_status()["moved"] is None)
 
 # ---------------------------------------------------------------- the flag, against the model

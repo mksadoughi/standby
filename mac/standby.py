@@ -3171,19 +3171,9 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
                 workspace=None, resume=None, push_lines=None, push_seconds=None,
                 no_claude=False, kind=None, attach=None, claude_model=None,
                 claude_voice=None):
-    cfg = load_config()
+    load_config()                                   # none yet: run standby setup
     import transport
-    pinned, was = cfg.get("mic_device"), cfg.get("mode")
-    mic_moved, capture_moved = transport.migrate_mic(cfg), transport.migrate_capture(cfg)
-    if mic_moved and pinned:
-        log("mic: %r was pinned; Automatic now, following the Mac's mic (once; "
-            "a mic picked in Settings from now on stays)" % pinned)
-    if capture_moved and cfg.get("mode") != was:
-        log("capture: %s -> %s (once: the Mac's sound joins when an app plays)" % (was, cfg["mode"]))
-    if mic_moved or capture_moved:
-        tmp = CONFIG.with_suffix(".tmp")
-        tmp.write_text(json.dumps(cfg, indent=2))
-        tmp.replace(CONFIG)
+    cfg = transport.migrate_config(log)
     prior = {}
     if resume:
         # Continue an ended session: same id, same transcript, same agent
@@ -4317,10 +4307,6 @@ def cmd_setup(args):
     import sounddevice as sd
     ROOT.mkdir(parents=True, exist_ok=True)
     devices = sd.query_devices()
-    existing = {}
-    if CONFIG.exists():
-        with open(CONFIG) as fh:
-            existing = json.load(fh)
 
     mode = args.mode
     # As Settings > Recording: Automatic is the default.
@@ -4336,10 +4322,8 @@ def cmd_setup(args):
     print("")
     print("record: %s" % mode)
 
-    cfg = dict(existing)
-    cfg["mode"] = mode
-    cfg["capture_automatic"] = cfg["mic_automatic"] = True     # chosen here: never migrated
     needed = set(key for _name, key in MODES[mode])
+    mic = None                       # the mic chosen here: a name, or "" for Automatic
 
     if "mic_device" in needed:
         # Automatic follows the Mac (AirPods in, AirPods out): only a mic picked here is pinned.
@@ -4350,19 +4334,21 @@ def cmd_setup(args):
         for idx, name in inputs:
             print("  %-4d %s" % (idx, name))
         raw = input("Microphone [Automatic]: ").strip()
-        if raw:
-            cfg["mic_device"] = devices[int(raw)]["name"]
-        else:
-            cfg.pop("mic_device", None)
-    cfg.pop("loopback_device", None)
+        mic = devices[int(raw)]["name"] if raw else ""
 
     import transport
-    cfg["agent"] = transport.agent_settings(existing)       # Claude Code runs on this Mac
-    for legacy in ("host", "remote_dir"):
-        cfg.pop(legacy, None)
-    cfg.setdefault("rotate_minutes", 5)
-    with open(CONFIG, "w") as fh:
-        json.dump(cfg, fh, indent=2)
+    with transport.update() as cfg:              # after the questions: read fresh, every other key kept
+        cfg["mode"] = mode
+        cfg["capture_automatic"] = cfg["mic_automatic"] = True     # chosen here: never migrated
+        if mic:
+            cfg["mic_device"] = mic
+        elif mic is not None:
+            cfg.pop("mic_device", None)
+        cfg.pop("loopback_device", None)
+        cfg["agent"] = transport.agent_settings(cfg)       # Claude Code runs on this Mac
+        for legacy in ("host", "remote_dir"):
+            cfg.pop(legacy, None)
+        cfg.setdefault("rotate_minutes", 5)
     print("")
     print("wrote %s" % CONFIG)
     print("Now run: standby selftest")
