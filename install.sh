@@ -453,7 +453,7 @@ plist = {
     "CFBundleShortVersionString": "0.9", "CFBundleVersion": "0.9",
     "LSMinimumSystemVersion": "14.4", "NSHighResolutionCapable": True,
     "NSMicrophoneUsageDescription":
-        "Standby transcribes your meeting on this Mac so your Claude Code can answer questions about it.",
+        "Standby hears you on calls and transcribes your meetings on this Mac, so your Claude Code can follow along.",
     # System Audio Recording (the meeting's sound, through a Core Audio tap): without it macOS refuses silently
     "NSAudioCaptureUsageDescription": "Standby hears the other side of your call so your Claude Code can follow it.",
     # macOS asks for these when a call's Claude reads a project kept in one of them: its words say why

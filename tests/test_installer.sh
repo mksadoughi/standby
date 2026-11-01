@@ -121,8 +121,8 @@ check "standby command linked to the repo" "[[ \"\$(readlink $H/.local/bin/stand
 check "standby-ctx linked" "[[ -x $H/.local/bin/standby-ctx ]]"
 check "no standalone meeting skill linked any more" "[[ ! -e $H/.claude/skills/meeting-standby ]]"
 P="$H/Applications/Standby.app/Contents"
-check "app bundle: Info.plist valid, asks for the microphone and the Mac's sound (the user's words), says why for the Desktop and Documents, macOS 14.4 on" \
-  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$P/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby' and d['CFBundleIdentifier']=='dev.standby.app' and d.get('NSMicrophoneUsageDescription') and d.get('NSAudioCaptureUsageDescription') == 'Standby hears the other side of your call so your Claude Code can follow it.' and d.get('LSMinimumSystemVersion') == '14.4' and 'read the project you' in d.get('NSDesktopFolderUsageDescription', '') and d.get('NSDocumentsFolderUsageDescription') == d['NSDesktopFolderUsageDescription']))\""
+check "app bundle: Info.plist valid, asks for the microphone (for calls and meetings) and the Mac's sound (the user's words), says why for the Desktop and Documents, macOS 14.4 on" \
+  "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$P/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby' and d['CFBundleIdentifier']=='dev.standby.app' and d.get('NSMicrophoneUsageDescription') == 'Standby hears you on calls and transcribes your meetings on this Mac, so your Claude Code can follow along.' and d.get('NSAudioCaptureUsageDescription') == 'Standby hears the other side of your call so your Claude Code can follow it.' and d.get('LSMinimumSystemVersion') == '14.4' and 'read the project you' in d.get('NSDesktopFolderUsageDescription', '') and d.get('NSDocumentsFolderUsageDescription') == d['NSDesktopFolderUsageDescription']))\""
 E="$H/.standby/app-build/Standby.py"
 check "app built in alias mode from the generated entry point, with icon" \
   "[[ \"\$(cat $P/build.txt)\" == '$E|True|$ICON_STANDBY' ]]"
