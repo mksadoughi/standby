@@ -1,0 +1,6 @@
+{"name": "long-thought", "goal": "A long thought with pauses: the voice waits for the end before it answers",
+ "steps": [
+  {"say": "So I was thinking | about the keeper's log | and whether we should keep it on paper | or move it all into a file.", "gap_ms": 1500},
+  {"wait": "voice_end", "timeout_s": 60},
+  {"expect": {"voice": true}}
+ ]}

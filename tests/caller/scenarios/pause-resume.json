@@ -1,0 +1,10 @@
+{"name": "pause-resume", "goal": "Pause while work is going on, then resume: what came back is said at once",
+ "steps": [
+  {"say": "Could you count the lines in the README and tell me? Take your time."},
+  {"wait": "voice_end", "timeout_s": 60},
+  {"action": "pause"},
+  {"sleep_s": 30},
+  {"action": "resume"},
+  {"wait": "voice_start", "timeout_s": 10},
+  {"expect": {"voice": true}}
+ ]}

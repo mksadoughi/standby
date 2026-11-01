@@ -27,6 +27,11 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # transport.py
 
+# The AI caller's test audio (tests/caller): the mic from a file and the voice to one, never a device
+if os.environ.get("STANDBY_TEST_AUDIO"):
+    import testaudio
+    testaudio.install()
+
 HOME = Path.home()
 ROOT = Path(os.environ.get("STANDBY_ROOT", HOME / ".standby"))   # as everywhere else; tests set it
 CONFIG = ROOT / "config.json"
@@ -2013,6 +2018,16 @@ def voice_backend(voice=None):
     session's agent was given, else Settings' voice."""
     if VOICE_BACKEND is not None:
         return VOICE_BACKEND
+    if os.environ.get("STANDBY_TEST_AUDIO"):         # the AI caller's: Standby's real voice, to a file
+        import testaudio
+
+        def make_test():
+            _system, neural, why = backend_voices(voice, load_config())
+            b = testaudio.engine(neural=neural, log=log)
+            if why:
+                b.failed = b._why = why
+            return b
+        return make_test
     if os.environ.get("STANDBY_NO_DEVICES"):
         return None
     from native import duplex as os_duplex

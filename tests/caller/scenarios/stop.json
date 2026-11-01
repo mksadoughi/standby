@@ -1,0 +1,8 @@
+{"name": "stop", "goal": "Say stop mid-answer: the voice stops at once",
+ "steps": [
+  {"say": "Tell me everything you know about lighthouses."},
+  {"wait": "voice_start", "timeout_s": 60},
+  {"sleep_s": 2},
+  {"say": "Stop."},
+  {"expect": {"halted": true}}
+ ]}

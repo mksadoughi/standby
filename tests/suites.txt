@@ -9,6 +9,7 @@ test_signin                py    par
 test_meeting_audio         py    par  
 test_echo                  py    par  
 test_voice_speed           py    par  
+test_testaudio             py    par  
 test_ui                    py    par  
 test_companion_pointer     py    full   # a real window and the pointer
 test_voice                 py    par  
@@ -141,3 +142,4 @@ test_api_auth              py    par
 test_log_privacy           py    par
 test_home_start            py    par  
 test_voice_replay          py    ondemand   # the voice's replay: the gate for its prompt, effort or model; live Claude, its own login
+test_caller                py    ondemand   # the AI caller: whole calls with no one on them, scored; live Claude, its own token

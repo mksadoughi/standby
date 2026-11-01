@@ -1,0 +1,8 @@
+{"name": "interrupt", "goal": "Talk over a long answer: the voice stops and answers the new question",
+ "steps": [
+  {"say": "Tell me a long story about a lighthouse keeper, take your time."},
+  {"interrupt": "Wait, sorry. Just tell me the keeper's name in this project.", "after_ms": 3000, "timeout_s": 60},
+  {"expect": {"halted": true}},
+  {"wait": "voice_end", "timeout_s": 60},
+  {"expect": {"spoken_contains": "Robin"}}
+ ]}

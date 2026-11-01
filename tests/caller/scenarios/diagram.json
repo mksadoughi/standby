@@ -1,0 +1,6 @@
+{"name": "diagram", "goal": "Ask for a diagram: the voice answers and a card is drawn",
+ "steps": [
+  {"say": "Can you show me a simple diagram of how a lighthouse lamp works?"},
+  {"wait": "voice_end", "timeout_s": 60},
+  {"expect": {"voice": true, "card": true}, "within_s": 15}
+ ]}

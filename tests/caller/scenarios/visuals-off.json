@@ -1,0 +1,8 @@
+{"name": "visuals-off", "goal": "Cards switched off mid-call, then a card asked for: none is drawn",
+ "steps": [
+  {"action": "visuals_off"},
+  {"sleep_s": 2},
+  {"say": "Can you put a card up about the lighthouse keeper?"},
+  {"wait": "voice_end", "timeout_s": 60},
+  {"expect": {"card": false}, "within_s": 10}
+ ]}
