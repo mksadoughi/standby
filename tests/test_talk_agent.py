@@ -351,7 +351,7 @@ try:
           and "last message" not in ledger)
     check("  saying nothing sits with the notes, where it's mostly used", "send the new work with [DEEP]. To say nothing, reply [QUIET]." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
-          "Your own tools are only for looking: you can read and search where your session works, and ~/.standby." in call
+          "Your reading and search tools are only for looking: where your session works, and in ~/.standby." in call
           and "So whatever they ask for is yours to do" in call
           and "Don't try it yourself first; a tool refusing you only means it's your deeper side's to do, never that it can't be done." in call
           and "this whole Claude Code session, with every tool it has." in call
