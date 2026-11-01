@@ -702,6 +702,38 @@ back()
 time.sleep(ui.LITE_QUIET_GAP + 0.3)
 check("  a turn's end with nothing running and nothing told: nothing said, nothing asked", len(vs.told) == n and len(told_model) == n_model)
 
+# A handed task that ends with nothing told for it: after a grace, once, the plain fact, never the session's answer
+ui.LITE_NOTHING_GRACE, grace_was = 0.3, ui.LITE_NOTHING_GRACE
+wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+ev, _s = hand("check the release list")
+n_model = len(told_model)
+replies.append("It finished, but nothing came back yet. Want me to ask?")
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "text": "Here is the full release list, as I found it."})
+check("a handed task ends, nothing told for it: the voice gets the plain fact after the grace, once",
+      wait(lambda: len(told_model) > n_model) and re.search(r"#\d+ \(check the release list\) ended; nothing came back from your deeper side yet\.", told_model[-1])
+      and "Deeper side:" not in told_model[-1] and "full release list" not in told_model[-1], told_model[n_model:])
+check("  TASKS marks it: nothing told", re.search(r"#\d+ done at [\d:]{8}, nothing told: check the release list", tasks_txt()), tasks_txt())
+wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+time.sleep(0.6)
+check("  once", len(told_model) == n_model + 1, told_model[n_model:])
+check("  not in the call's summary as something Claude Code said",
+      not any("nothing came back" in str(k.get("more", {}).get("result", "")) for _a, k in chat))
+ev, _s = hand("tag the build")
+n_model = len(told_model)
+replies.append("It's tagged.")
+back("Tagged.")
+wait(lambda: len(told_model) > n_model)
+wait(lambda: not ui.LITE_CALLS[sid].get("telling"))
+time.sleep(0.6)
+check("a task the session told of: only its message, no \"nothing came back\"",
+      len(told_model) == n_model + 1 and "nothing came back" not in told_model[-1], told_model[n_model:])
+ev, _s = hand("make the snake gold")
+ui.LITE_POST["/api/lite/progress"]({"session": sid, "kind": "done", "reason": "aborted"})
+n_model = len(told_model)
+time.sleep(0.8)
+check("  one stopped: no \"nothing came back\" for it", len(told_model) == n_model, told_model[n_model:])
+ui.LITE_NOTHING_GRACE = grace_was
+
 # Cancel by voice: [CANCEL #n] stops a task; alone in its turn, the turn stops; with others, the session is told to drop it.
 ev, _s = hand("make the snake gold")
 tid = ui._lite_of(ui.LITE_CALLS[sid], ev["id"])["id"]

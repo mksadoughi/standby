@@ -3258,6 +3258,10 @@ LITE_OPENING = "[CALL START]"                 # the voice's first turn, before t
 LITE_ORB = set()                               # sessions the user sent to the orb (minimize to orb, Cmd+M): only these have one
 LITE_RESULT_MAX = 4000                        # a message from the session to its voice, kept whole up to this
 LITE_DEEPER = "Deeper side: "                  # how a message the session sends its voice reads to the voice
+# A task the voice handed over ended and its deeper side sent nothing for it: after a grace (a tell can come right at
+# the turn's end), once, the plain fact, so the voice never pretends and can ask. Never the session's own answer.
+LITE_NOTHING_GRACE = 15.0
+LITE_NOTHING = "#%s (%s) ended; nothing came back from your deeper side yet."
 # The session's own picture of the call (a quiet note: no turn, the system prompt as it was), at its start
 # and end. Who is who, and how it works; never rules for the model to follow line by line.
 LITE_CALL_NOTE = (
@@ -3356,6 +3360,8 @@ def _lite_task_line(t, now=None, full=False):
         head = "%s at %s" % (st, at(t.get("ended", t["since"])))
     else:
         head = "%s since %s" % (st, at(t["since"]))
+    if t.get("nothing"):
+        head += ", nothing told"
     line = "#%s %s: %s" % (t["id"], head, what)
     if st in LITE_ENDED and t["result"]:
         line += " \u2192 " + _clip(t["result"], LITE_RESULT_MAX if full else LITE_LINE_RESULT)
@@ -3917,9 +3923,17 @@ def lite_progress(b):
         for x in working:
             x["seen"] = True                       # a state, in TASKS: nothing to tell on its own
             _lite_set(sid, c, x, "stopped" if reason == "aborted" else "failed" if reason == "error" else "done")
+            if x["kind"] == "handoff" and x["source"] == "voice" and x["state"] != "stopped" and not x.get("told"):
+                late = threading.Timer(LITE_NOTHING_GRACE, _lite_nothing, args=(sid, x["id"]))
+                late.daemon = True
+                late.start()
     elif kind == "tell" and text:
         # The session tells its voice something (its tell_voice tool, or the mod: it waits on the user's OK).
         # The voice judges whether, when and how the user hears it: said in a quiet moment, else with their turn.
+        # What it was on, or ended just now, has been told of (no "nothing came back" for it).
+        for x in c.get("tasks", {}).values():
+            if x["state"] in ("running", "stalled") or (x["state"] in LITE_ENDED and now - x.get("ended", 0) <= LITE_NOTHING_GRACE):
+                x["told"] = True
         c.setdefault("inbox", []).append({"text": text[:LITE_RESULT_MAX], "at": now, "seen": False,
                                           "source": str(b.get("source") or "session")})
         log("lite: %s: the session tells its voice (%d characters, %s)" % (sid, len(text), b.get("source") or "session"))
@@ -3998,8 +4012,24 @@ def _lite_untold(c, sid=None):
 
 
 def _lite_messages(items):
-    """The session's messages, as the voice reads them."""
-    return "\n".join(LITE_DEEPER + m["text"] for m in items)
+    """The session's messages, as the voice reads them, and Standby's own facts (a task with nothing back), plain."""
+    return "\n".join((m["text"] if m.get("fact") else LITE_DEEPER + m["text"]) for m in items)
+
+
+def _lite_nothing(sid, tid):
+    """LITE_NOTHING_GRACE after a handed task ended: still nothing told for it, so the voice gets the fact, once."""
+    c = LITE_CALLS.get(sid)
+    t = (c or {}).get("tasks", {}).get(str(tid))
+    if t is None or t.get("told") or t.get("nothing") or t["state"] not in ("done", "failed"):
+        return
+    t["nothing"] = True
+    what = t["what"] if len(t["what"]) <= LITE_DOING_WHAT else t["what"][:LITE_DOING_WHAT].rsplit(" ", 1)[0] + "\u2026"
+    c.setdefault("inbox", []).append({"text": LITE_NOTHING % (t["id"], what), "at": time.time(), "seen": False,
+                                      "source": "standby", "fact": True})
+    log("lite: %s: #%s ended with nothing told: the voice is told so" % (sid, t["id"]))
+    trace(sid, "handoff", id=t["id"], step="nothing")
+    _lite_tasks_file(sid, c)
+    _lite_announce(sid)
 
 
 def _lite_pick(news):
@@ -4143,7 +4173,8 @@ def _lite_came_back(sid, tasks):
     call's summary says so; a message of the session's to its voice, as it sent it)."""
     for t in tasks:
         if "id" not in t:
-            append_chat(sid, "ai", "", voice=True, more={"result": t["text"][:LITE_RESULT_MAX], "reason": "message"})
+            if not t.get("fact"):                  # Standby's own fact (nothing came back) isn't the session's
+                append_chat(sid, "ai", "", voice=True, more={"result": t["text"][:LITE_RESULT_MAX], "reason": "message"})
             continue
         lost = bool(t.get("lost"))
         append_chat(sid, "ai", "", voice=True, more={
