@@ -945,9 +945,11 @@ export function register(on) {
         { setting: { type: 'string', description: 'the setting, as the list names it (transcript, capture, mic, voice, ...)' },
           value: { type: 'string', description: 'one of its choices' } }],
     ]) {
-      // its one argument required, so the model never guesses its name (tell_voice was called with "message")
+      // tell_voice: its schema always in the prompt, never behind ToolSearch, and its argument required, so the
+      // model never calls it unseen and guesses the name (a QA call: never loaded, called with "message")
+      const own = name === 'tell_voice' ? { isDeferred: false } : {}
       const required = name === 'tell_voice' ? { required: ['text'] } : {}
-      try { await $.tool.register({ name, description, inputSchema: { type: 'object', properties: props || {}, ...required } }) }
+      try { await $.tool.register({ name, description, inputSchema: { type: 'object', properties: props || {}, ...required }, ...own }) }
       catch (err) { $.ui.log('the ' + name + ' tool isn\u2019t available: ' + err.message) }
     }
     try { await $.command.register({ name: 'standby', description: 'Standby: Claude listens to your meeting with you', argumentHint: '[listen|stop|call|end|name|window|settings|set|off|help]', immediate: true }) }
