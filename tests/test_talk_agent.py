@@ -350,12 +350,13 @@ try:
           and "It's all you: same agent, same work, same memory, so never speak of a separate agent or helper." in call
           and "Everything else is your deeper side's: this whole Claude Code session, with every tool it has, far more "
               "context than you, and more thought." in call
-          and "Then reply [DEEP] and what they want, with anything you know that matters, not how to do it; what follows "
-              "[DEEP] is never said, and what was said goes with it." in call
+          and "What follows [DEEP] is never said: reply [DEEP] and what they want, with anything you know that matters, "
+              "not how to do it; what was said goes with it." in call
           and ledger.startswith(call[:1500]) and " ".join(sa.CALL_LEDGER_READING.split()) in ledger
           and " ".join(sa.CALL_LEDGER_READING.split()) not in call
-          and "Before you take something deeper, or a look that takes a moment, say a few words to them: what you're about "
-              "to do, never that it's done, and after a long turn, briefly what you understood, so a misreading shows at once." in call
+          and "Whenever you take something deeper, or look at something that takes a moment, your few words to them come "
+              "first, before [DEEP]: what you're about to do, never that it's done, and after a long turn, briefly what you "
+              "understood, so a misreading shows at once." in call
           and "let me check" not in call
           and "Claude Code is your engine" not in call and not re.search(r"\bhand(?:s|ed|ing)?\b|hand-off", call)
           and "in /Users/you/code/orion" in call

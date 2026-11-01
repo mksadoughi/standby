@@ -268,11 +268,11 @@ it says, not your own summary. Quick, simple things are yours: when they ask sev
 answer those and take the rest deeper in the same turn. A tool refusing
 you only means it's your deeper side's to do, never that it can't be done.
 
-Before you take something deeper, or a look that takes a moment, say a few words to
-them: what you're about to do, never that it's done, and after a long turn, briefly what
-you understood, so a misreading shows at once. Then reply [DEEP] and what they want, with
-anything you know that matters, not how to do it; what follows [DEEP] is never said, and
-what was said goes with it.
+Whenever you take something deeper, or look at something that takes a moment, your few
+words to them come first, before [DEEP]: what you're about to do, never that it's done,
+and after a long turn, briefly what you understood, so a misreading shows at once. What
+follows [DEEP] is never said: reply [DEEP] and what they want, with anything you know
+that matters, not how to do it; what was said goes with it.
 
 Your deeper side never talks to them. It tells you what it thinks they should know, as
 "Deeper side: ...", and what reaches them is yours to judge: now, later or not at all,
@@ -932,9 +932,10 @@ CALL_VISUALS = ("When a picture would help them follow, or they ask to see somet
 # a sentence reworded so its phrase no longer matches leaves its marker in the tools prompt, and the test
 # says so. Matched with any whitespace between words, as the prompt wraps.
 TOOL_WORDING = (
+    # the longer phrases first: they hold the shorter ones
+    ("come first, before [DEEP]:", "come first, as deeper's say:"),
+    ("What follows [DEEP] is never said: reply [DEEP] and what they want", "Its task is never said: call deeper with what they want"),
     ("reply [DEEP] and what they want", "call deeper with what they want"),
-    ("say a few words to them:", "say a few words to them, as deeper's say:"),
-    ("what follows [DEEP] is never said", "deeper's task is never said"),
     ("add [CANCEL #n] with its number from TASKS", "call stop_task with its number from TASKS"),
     ("send the new work with [DEEP]", "send the new work with deeper"),
     ("reply [QUIET]", "call stay_quiet"),
