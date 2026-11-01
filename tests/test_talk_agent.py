@@ -267,10 +267,10 @@ try:
     check("the session's own message: \"Deeper side: ...\" as it is, no preamble, not the user's words",
           last.rstrip().endswith("Deeper side: The tests pass, and the fix is merged.") and "Not from the user" not in last
           and "They said:" not in last and "[RESULT" not in last.split("Deeper side:")[-1], last[-300:])
-    ask("[VOICE] how is it going\n[RESULT message] Deeper side: Developer 8 answered: nothing to hold.\n[END RESULT]")
+    ask("[VOICE] how is it going\n[RESULT message] Deeper side: Sam answered: nothing to hold.\n[END RESULT]")
     last = texts("voice", TALK)[-1]
     check("  one that came while they talked: their words first, then it, as it is",
-          "They said: how is it going\n\nDeeper side: Developer 8 answered: nothing to hold." in last
+          "They said: how is it going\n\nDeeper side: Sam answered: nothing to hold." in last
           and "[END RESULT]" not in last and "Background, not from the user" not in last, last[-300:])
     # Cut off as it speaks, once its hand-off has begun ([DEEP] streamed, the task still coming): the task streams
     # to its end and the work still goes, as it said it would. "They went on" (the next turn has it all) never.
