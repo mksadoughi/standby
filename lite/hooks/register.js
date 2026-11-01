@@ -496,12 +496,27 @@ async function press($, what, sure) {
   return r
 }
 
+// Is this Claude Code signed in (an expired login made every answer of a call fail)? Asked here, as this app:
+// asked by Standby, `claude auth status` read the plugin's folders as Standby's (macOS asked it for Documents).
+// true, false, or null when it can't be told (a call is never refused on a guess).
+async function signedIn($) {
+  try {
+    let out = ''
+    for await (const chunk of $.process.spawn({ argv: ['claude', 'auth', 'status', '--json'] }))
+      if (chunk.stream === 'stdout') out += chunk.text
+    const got = JSON.parse(out || '{}').loggedIn
+    return got === false ? false : got === true ? true : null
+  } catch (err) {
+    return null
+  }
+}
+
 async function startCall($) {
   startingNow($, 'call')
   if (!S.on) await turnOn($)
   else if (!(await ensureApp($))) return startFailed($, 'call', 'Standby isn\u2019t running, and it didn\u2019t open.')
   void listen($)
-  let r = await app($, '/api/lite/call', { cc: S.cc, cwd: await $.session.cwd() })
+  let r = await app($, '/api/lite/call', { cc: S.cc, cwd: await $.session.cwd(), signed_in: await signedIn($) })
   if (r.error === DOWN) { const live = await stillStarting($, 'call'); if (live) r = { session: live.session } }
   if (r.setup) r = await setupDone($, 'call')
   if (r.cancelled) return setupCancelled($, 'call')

@@ -79,6 +79,11 @@ function fakeApp(on: any, events: any[], seen: any) {
       (seen.agentStarts ||= []).push(argv)
       return { value: { code: 0, signal: null } }
     }
+    if (argv[0] === 'claude') {                         // `claude auth status --json`, asked here (signedIn)
+      (seen.authAsked ||= []).push(argv)
+      yield { stream: 'stdout', text: seen.auth ?? '{"loggedIn": true}' }
+      return { value: { code: 0, signal: null } }
+    }
     seen.spawned = argv
     seen.spawns = (seen.spawns || 0) + 1
     // the stream comes in pieces that aren't lines
@@ -157,6 +162,19 @@ test('Standby asks: the agent is started from here, as this Claude Code, and onl
   await settle()
   expect(seen.agentStarts).toEqual([['/usr/bin/env', 'STANDBY_AGENT_BY=claude-code'].concat(ok)])
 })
+
+// asked by Standby, `claude auth status` read the plugin's folders as Standby's: macOS asked it for Documents
+for (const [auth, said] of [['{"loggedIn": false}', false], ['{"loggedIn": true}', true], ['not json', null]] as const)
+  test(`a call asks Claude Code here whether it is signed in, and tells Standby (${auth} -> ${said})`, async ($, on) => {
+    const seen: any = { posts: [], submitted: [], aborted: [], status: [], auth }
+    mock.clock(on)
+    fakeApp(on, [], seen)
+    await $.command.run({ command: 'standby', args: '' })
+    await $.command.run({ command: 'standby', args: 'call' })
+    const post = seen.posts.find((p: any) => p.path === '/api/lite/call')
+    expect(seen.authAsked && seen.authAsked[0]).toEqual(['claude', 'auth', 'status', '--json'])
+    expect(post && post.body.signed_in).toBe(said)
+  })
 
 test('a hand-off while the session is busy: said back as queued at once, then received when it enters', async ($, on) => {
   const seen = { posts: [] as any[], submitted: [] as any[], aborted: [] as string[], status: [] }
