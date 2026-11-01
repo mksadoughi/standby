@@ -3275,8 +3275,8 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
     # too, whatever the turn verdict; its answer is still held until the turn is over, and dropped if they go
     # on. The verdict missed the user's last pause in every slow turn measured (talk-20261031-173859 turn 11:
     # 31 of 44 judged unlikely there). tools/early_asks_replay.py weighs the ways against the user's calls.
-    early_asks = (cfg.get("voice_mode") or {}).get("early_asks", EARLY_ASKS)
-    early_asks = early_asks if early_asks in ("likely", "every", "chunk") else EARLY_ASKS
+    early_setting = (cfg.get("voice_mode") or {}).get("early_asks")
+    early_asks = early_setting if early_setting in ("likely", "every", "chunk") else EARLY_ASKS
 
     def likely_turn():
         """Voice mode: words at a short pause, before their utterance closes,
