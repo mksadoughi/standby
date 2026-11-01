@@ -7413,7 +7413,7 @@ async function pollSpeech(){clearTimeout(speechT);try{paintSpeech(await api("/ap
 // (the default until it's measured), said in the hint, nothing lit
 const EFFHINT={low:"Answers fastest.",medium:"Thinks a little before answering.",high:"Most careful, slower to answer."};let EFFINH="";
 function setEffort(e,quiet){$("s_veffort").value=e;document.querySelectorAll("#effseg button").forEach(b=>b.classList.toggle("on",b.dataset.e===e));
-  $("s_effhint").textContent=EFFHINT[e]||("As your Claude Code is set"+(EFFINH?" ("+EFFINH[0].toUpperCase()+EFFINH.slice(1)+")":"")+", until you pick one.");if(!quiet)autosave()}
+  $("s_effhint").textContent=EFFHINT[e]||("Following your Claude Code\u2019s setting"+(EFFINH?" ("+EFFINH[0].toUpperCase()+EFFINH.slice(1)+")":"")+" until you pick one.");if(!quiet)autosave()}
 function setCapture(c,quiet){$("s_capture").value=c;document.querySelectorAll("#capseg button").forEach(b=>b.classList.toggle("on",b.dataset.c===c));
   setHelp("s_caphint",CAPHINT[c]||"");$("micf").style.display=c==="meeting"?"none":"";if(!quiet)autosave()}
 async function openPrompt(){const r=await api("/api/prompt");if(r.error){toast(r.error);return}PR=r;$("ptext").value=r.prompt;
