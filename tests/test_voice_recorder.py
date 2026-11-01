@@ -47,7 +47,14 @@ class Script(object):
     """Speech on demand: said() lines come out on the next drain; `talking`
     is an utterance still in progress, closed only by a forced drain."""
     lines, talking, early, instances = [], None, None, []
-    def __init__(self, *a, **k): Script.instances.append(self); self.early_after = None
+    begun, trimmed = None, []         # when `talking` began on the mic's clock (None: from before any cut)
+    def __init__(self, *a, **k):
+        Script.instances.append(self); self.early_after = None
+        self.pos, self.carry = 0, np.zeros(0, "float32")
+    def trim_head(self, at):          # listening again: the open utterance from `at` on (UtteranceTranscriber's)
+        Script.trimmed.append(at)
+        if Script.talking and (Script.begun is None or Script.begun < at):
+            Script.talking = None
     def take_early(self):
         early, Script.early = Script.early, None
         return early
@@ -234,6 +241,19 @@ say("back to the meeting")
 check("after voice mode, speech goes to the meeting again", texts(local)[-1] == "back to the meeting", texts(local))
 check("the meeting before voice mode is untouched", "the meeting before voice mode" in texts(local))
 
+
+
+class Voice(object):
+    """The call's voice here, played on an engine of its own (no echo cancellation): nothing to say."""
+    playing = False
+    def start_output(self): pass
+    def stop_mic(self): pass
+    def begin(self): pass
+    def say(self, text): pass
+    def halt(self): pass
+
+
+sb.VOICE_BACKEND = Voice          # the second voice mode has a voice, so a time its sound stopped
 (sdir / "dictate").write_text("voice 8\n")
 wait(lambda: (live_st().get("voice") or {}).get("mode") == "voice")
 # A voice turn spanning heartbeats, in a Room meeting: it ends as a turn, the channel alive.
@@ -247,6 +267,32 @@ check("  the turn still ends, as one turn", wait(lambda: turns8())
       and turns8()[0]["text"] == "so before the plan what is the plan?", turns8())
 check("  and the recording goes on, the Room channel alive", not crashed() and (root / "daemon.ready").exists()
       and all(c.get("state") != "dead" for c in live_st().get("sources", [])), crashed())
+# Listening again, the voice quiet: what they began saying as it ended is theirs, kept open through the switch
+# from where its sound and echo stopped. It was dropped whole as the voice's own (an AI caller run, 2026-10-31:
+# "Please add a line to the readme" lost, only "...saying the lamp was clean today" heard).
+(sdir / "dictate").write_text("hold 8\n")
+mode_is("hold")
+time.sleep(0.5)                                   # its last sound and echo over (VoiceIO.ECHO_TAIL)
+Script.talking, Script.begun = "please add a line to the readme", 0.0
+(sdir / "dictate").write_text("voice 8\n")
+mode_is("voice")
+time.sleep(0.3)
+check("listening again: words begun after the voice's sound stay open through the switch, not dropped",
+      Script.trimmed and Script.talking == "please add a line to the readme", (Script.trimmed, Script.talking))
+Script.lines.append(Script.talking)
+Script.talking = None
+check("  and close as the user's words, in a turn of theirs",
+      wait(lambda: any(r.get("seq") == 8 and r.get("text") == "please add a line to the readme" for r in rows()), 6),
+      rows()[-3:])
+n_trim = len(Script.trimmed)
+(sdir / "dictate").write_text("hold 8\n")
+mode_is("hold")
+Script.talking, Script.begun = "the tail of its voice", None
+(sdir / "dictate").write_text("voice 8\n")
+mode_is("voice")
+time.sleep(0.3)
+check("  what began before its sound and echo ended is still dropped (no self-hearing)",
+      len(Script.trimmed) > n_trim and not any("tail of its voice" in (r.get("text") or "") for r in rows()), rows()[-3:])
 sb._stop.set()
 th.join(timeout=15)
 check("the session ending in voice mode ends it cleanly",

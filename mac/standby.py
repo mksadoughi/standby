@@ -121,6 +121,7 @@ class UtteranceTranscriber:
         self.carry = np.zeros(0, dtype="float32")
         self.pre = []                # recent quiet frames (pre-roll)
         self.utt = None              # frames of the open utterance, or None
+        self.quiet_until = 0         # samples before this are never speech (trim_head: the voice's own sound)
         self.utt_start = 0
         self.silence = 0.0
         self.voiced = 0.0
@@ -164,6 +165,9 @@ class UtteranceTranscriber:
             if len(self._levels) >= 10:          # from 0.3 s in: speech can start at once
                 self.noise = min(self._levels)
             speech = rms > max(self.min_rms, self.noise * self.NOISE_MULT)
+            if self.pos < self.quiet_until:      # still the voice's own sound or its echo (trim_head)
+                self.pos += len(fr)
+                continue
             if self.utt is None:
                 if speech:
                     self.utt = list(self.pre) + [fr]
@@ -238,6 +242,31 @@ class UtteranceTranscriber:
             trace(TRACE["sid"], "decode", a=round(self.utt_start / float(SAMPLE_RATE), 2),
                   b=round(end_pos / float(SAMPLE_RATE), 2), ms=int((time.time() - t0) * 1000), early=True,
                   quiet_ms=int(self.silence * 1000), text=text)
+
+    def trim_head(self, at):
+        """The open utterance from `at` (seconds on this clock) on: what came before is dropped,
+        and so is the utterance if no speech is left. Voice mode taking the mic back: its start
+        was the voice's own sound and the room's echo of it, the rest the user's (switch)."""
+        np = self.np
+        cut = int(at * SAMPLE_RATE)
+        self.quiet_until = max(self.quiet_until, cut)     # audio from before it, still to come: not speech
+        self.pre = []
+        if self.utt is None:
+            return
+        drop = 0
+        while drop < len(self.utt) and self.utt_start + (drop + 1) * self.frame <= cut:
+            drop += 1
+        if not drop:
+            return
+        frames = self.utt[drop:]
+        floor = max(self.min_rms, self.noise * self.NOISE_MULT)
+        voiced = sum(self.FRAME for fr in frames if float(np.sqrt(np.mean(fr * fr))) > floor)
+        self._early = self.early = None
+        self._partial, self._partial_at = "", 0.0
+        if not voiced:
+            self.utt, self.silence, self.voiced = None, 0.0, 0.0
+            return
+        self.utt, self.utt_start, self.voiced = frames, self.utt_start + drop * self.frame, voiced
 
     def take_early(self):
         """The open utterance's early words, once: (start, end, text, audio), or None."""
@@ -1868,6 +1897,26 @@ class Channel(object):
         take = getattr(self._stream, "take_early", None)
         return take() if take is not None and self.error is None else None
 
+    def keep_after(self, wall):
+        """Voice mode taking the mic back (switch): the utterance in progress kept from `wall`
+        (time.time()) on, open, instead of dropped whole. The mic's samples so far (queued) came
+        by last_audio, so `wall` is that far back on its clock, audio waiting to be heard (in the
+        queue, or a room) and all. False with no transcriber of its own to trim: flush() then."""
+        trim = getattr(self._stream, "trim_head", None)
+        if trim is None or self.error is not None or self.last_audio is None:
+            return False
+        came, n = self.last_audio, self.queued      # in this order: a block between them only cuts later
+        self.pump()
+        try:
+            self._emit_all(self._stream.drain())
+            # its transcriber's clock: what it has (pos, carry), then what came and waits (queued - pumped)
+            end = (self._stream.pos + len(self._stream.carry) + n - self.pumped) / float(SAMPLE_RATE)
+            trim(end - (came - wall))
+            self._release(force=True)
+        except Exception as exc:
+            self._fail(exc)
+        return True
+
     def flush(self):
         """Close the utterance in progress now, e.g. when dictation starts or
         stops, so its words land on the right side. Main thread only."""
@@ -2110,6 +2159,7 @@ class VoiceIO(object):
     # measured): it gets this much more, so a cold start never trips it.
     STUCK_COLD = 8.0
     DUCK_MAX = 3.0        # paused under the user's voice this long, nothing decided (overlap.MAX_DUCK is 1.6 s): on
+    ECHO_TAIL = 0.35      # after its last sound, the room's echo of it (the app's GUARD): what the mic hears later is theirs
     LEAK_EVERY = 1.0      # on headphones: how often it looks whether the output still is them
     SETTINGS_EVERY = 0.5  # how often it looks whether Settings changed the voice (one stat)
 
@@ -2142,6 +2192,7 @@ class VoiceIO(object):
         self.echo_hold = False    # this answer: the mic held while it speaks (echo_heard)
         self._hold_turn = None    # ...the answer's turn, as the app wrote it: a sentence of another ends it
         self._played_at = None    # the last step's time, while a sentence played
+        self.quiet_since = time.time()     # when its sound last stopped (nothing playing or to play), or None
         self._turn_of = {}    # a sentence's turn, as the app wrote it (the trace's)
 
     def start(self, seq, mics):
@@ -2381,6 +2432,10 @@ class VoiceIO(object):
             if self.current is not None and loading:
                 self.since = now                     # it waits for the voice: its time starts once it can play
             sounding = self.current is not None and playing and not loading and self.ducked is None
+            if self.current is not None or self._queue:
+                self.quiet_since = None
+            elif self.quiet_since is None:
+                self.quiet_since = now
             if sounding and self._played_at is not None:
                 self.played += now - self._played_at
             self._played_at = now if sounding else None
@@ -3715,17 +3770,25 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
 
     def switch(mode):
         """Voice mode between listening and holding. An utterance open across the
-        switch is Claude's own voice from the speakers, or words from before a
-        mute: it is dropped. A turn the user started before the hold keeps its
+        switch is dropped as far as it is Claude's own voice from the speakers (to its
+        last sound and the echo after), or words from before a mute; listening again,
+        what they began saying after the voice's sound is theirs, kept. A turn the user started before the hold keeps its
         words (Turns.resume), and closes as any turn does from here: words the user
         said are never dropped, and voice mode asks them as it said it would."""
         if dictation["mode"] == "voice":
             for c in mics():
                 c.flush()           # Claude takes the floor: what they were saying began before it, theirs
+        # Listening again: the voice's sound and its echo are over at `after`. What they began saying
+        # since is theirs, kept open; it was dropped whole with the start, the voice's last sound, and
+        # who answered right as it ended lost their first words (an AI caller run, 2026-10-31).
+        quiet = getattr(voice["io"], "quiet_since", None) if mode == "voice" and dictation["mode"] == "hold" else None
+        after = quiet + VoiceIO.ECHO_TAIL if quiet is not None else None
+        after = after if after is not None and after <= time.time() else None
         dictation["mode"] = "hold"
         events.voice_span(True)
         for c in mics():
-            c.flush()
+            if after is None or not c.keep_after(after):
+                c.flush()
             c.voice_mode(mode == "voice")
         if mode == "voice":
             if voice["turns"] is None:

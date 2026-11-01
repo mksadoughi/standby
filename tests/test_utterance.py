@@ -138,5 +138,35 @@ tr.feed(speech(1.0)); tr.feed(noise(0.5)); tr.feed(np.zeros(0, "float32"))
 check("  early words never taken before the close: counted as lost", tr.early_lost == 1 and tr.take_early() is None,
       tr.early_lost)
 
+print("=== listening again after the voice: the open utterance from its last sound and echo on ===")
+# Voice mode takes the mic back (switch): the voice's own sound ran on into what the user began saying
+# right as it ended, one utterance, and all of it was dropped as the voice's (an AI caller run, 10/31).
+calls.clear()
+tr = sb.UtteranceTranscriber(None, decode=fake)
+tr.feed(noise(1.0)); tr.feed(speech(1.0)); tr.feed(speech(1.0, amp=0.3))   # its voice, then theirs, no gap
+tr.trim_head(2.0)
+check("trim_head: the open utterance now starts where the voice's sound and echo ended",
+      tr.utt is not None and abs(tr.utt_start / SR - 2.0) < 0.031 and abs(tr.voiced - 1.0) < 0.05,
+      (tr.utt_start / SR, tr.voiced))
+tr.feed(noise(1.0))
+out = tr.drain()
+check("  and closes as theirs, from there: nothing of the voice's in it",
+      len(out) == 1 and abs(out[0][0] - 2.0) < 0.031 and abs(len(out[0][3]) / SR - (out[0][1] - out[0][0])) < 0.031,
+      [(o[0], o[1]) for o in out])
+tr = sb.UtteranceTranscriber(None, decode=fake)
+tr.feed(noise(1.0)); tr.feed(speech(1.0))
+tr.trim_head(2.5)                                  # its echo not over yet where the audio heard so far ends
+check("  all of it the voice's: dropped, nothing open", tr.utt is None)
+tr.feed(speech(0.5))                               # still its echo: audio from before the cut, just come
+check("  audio from before the cut, come since, is never speech", tr.utt is None)
+tr.feed(speech(1.0)); tr.feed(noise(1.0))
+out = tr.drain()
+check("  what they say after it is an utterance of its own, from the cut on",
+      len(out) == 1 and out[0][0] >= 2.5 - 0.001, [(o[0], o[1]) for o in out])
+tr = sb.UtteranceTranscriber(None, decode=fake)
+tr.feed(noise(1.0)); tr.feed(speech(1.0)); tr.feed(noise(0.3))
+tr.trim_head(2.05)
+check("  nothing but quiet after the cut: no utterance left", tr.utt is None)
+
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
 sys.exit(1 if fails else 0)
