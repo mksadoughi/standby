@@ -923,6 +923,26 @@ test('Connecting says why it waits: Standby opening, then the voice’s first do
   seen.more(null)
 })
 
+for (const [first, words] of [[true, 'The first call takes a little longer'], [false, 'Taking a little longer than usual']] as const)
+  test('Connecting a while on the voice\u2019s hello says so in words: ' + words, async ($, on) => {
+    const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, waitMore: true }
+    const clock = mock.clock(on)
+    fakeApp(on, [], seen)
+    await $.command.run({ command: 'standby', args: '' })
+    seen.idle = false; seen.live = { kind: 'call', session: 'c1', started: 1, phase: 'listening', ...(first ? { first: true } : {}) }
+    expect((await $.command.run({ command: 'standby', args: 'call' })).text).toBe('On a call. Talk; real work comes here.')
+    let band = await bandOf($)
+    expect(await textOn(band, 'Connecting .')).toBeDefined()
+    expect(await textOn(band, words)).toBeUndefined()                           // a moment: just the dots
+    await clock.advance(5000); await settle()
+    band = await bandOf($)
+    expect(await textOn(band, words)).toMatchObject({ props: { dimColor: true } })   // the app's first call, or a later slow one
+    seen.more([{ call: 'state', session: 'c1', phase: 'speaking' }]); await settle()
+    band = await bandOf($)
+    expect(await textOn(band, words)).toBeUndefined()                           // its hello: on the call
+    seen.more(null)
+  })
+
 test('End while connecting: the call is ended as soon as it starts, Ending meanwhile', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, holdPath: '/api/lite/call' }
   mock.clock(on)

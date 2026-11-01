@@ -3244,6 +3244,7 @@ MSG["on_delivered"], MSG["on_dropped"] = card_delivered, card_dropped
 # progress back (lite_progress), and the voice says how it ended when the conversation is quiet.
 
 LITE_CALLS = {}           # live call session -> {cc, cwd, running, doing, said, turn}
+LITE_CALLS_MADE = [0]     # calls started since the app opened: its first loads the voice, so it's slower
 HANDOFF_TAG = "[HANDOFF]"                     # standby-agent's answer for work the session does
 CANCEL_RE = re.compile(r"\[CANCEL\s*#?(\d+)\]")    # the voice stops a task of the call's, by its number
 
@@ -3579,8 +3580,9 @@ def lite_call(b):
     if r.get("error"):
         return r
     sid = r["id"]
+    LITE_CALLS_MADE[0] += 1
     LITE_CALLS[sid] = {"cc": cc, "cc_pid": _cc_pid(cc), "cwd": folder, "running": False, "doing": "", "said": "", "turn": None, "gist": None,
-                       "fresh": fresh, "voice": voice, "since": time.time(),
+                       "fresh": fresh, "voice": voice, "since": time.time(), "first": LITE_CALLS_MADE[0] == 1,
                        "visuals_at_start": visuals_on()}    # what its voice was told of visuals as it started
     started = session_info(sid).get("started") or time.time()
     # Bound like a Lite meeting ("lite:<cc>"), as a call: the card (keep or forget) is served as theirs.
@@ -4329,7 +4331,7 @@ def lite_call_live(cc):
             # name: the session's own (its /rename, else its title), so the band says which session the call is with
             return dict({"kind": "call", "session": sid, "name": cc_title(cc), "started": session_info(sid).get("started"),
                          "muted": bool(st.get("muted")), "phase": st.get("state") or "off"}, **access(sid, "mic"),
-                        **({"waiting": True} if st.get("waiting") else {}))
+                        **({"waiting": True} if st.get("waiting") else {}), **({"first": True} if c.get("first") else {}))
     return None
 
 

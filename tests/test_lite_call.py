@@ -161,6 +161,8 @@ _title, ui.cc_title = ui.cc_title, lambda cc: "Planner" if cc == CC else ""
 check("  the band names the session the call is with, by its own name", (ui.lite_call_live(CC) or {}).get("name") == "Planner",
       ui.lite_call_live(CC))
 ui.cc_title = _title
+check("  the app's first call says so to the band (its voice loads: it takes a little longer)",
+      (ui.lite_call_live(CC) or {}).get("first") is True, ui.lite_call_live(CC))
 answers.append("Hey, what are we working on?")
 check("  that first turn goes to the voice as it is (what to pick up is in the session's summary), nothing handed on",
       ui.ask_spoken(sid, ui.LITE_OPENING, None, None) == "Hey, what are we working on?"
@@ -1142,6 +1144,7 @@ check("end of a call that has ended: said so", "error" in ui.LITE_POST["/api/lit
 r = ui.LITE_POST["/api/lite/call"]({"cc": CC, "cwd": work})
 check("the next call: a voice of its own, from nothing earlier (the session's summary says what it did)",
       "from" not in talks[-1]["voice"] and talks[-1]["voice"].get("handoff") is True, talks[-1]["voice"])
+check("  and not the app's first", ui.LITE_CALLS[r["session"]].get("first") is False, ui.LITE_CALLS[r["session"]])
 ui.lite_ended(r["session"])
 
 # ---------------------------------------------------------------- the voice ends the call

@@ -526,7 +526,11 @@ async function startCall($) {
   S.starting = null
   if (r.already) { $.ui.invalidate('ui.render'); return 'You\u2019re already on this call. To end it, say goodbye or use /standby end.' }
   // still Connecting until the voice is ready: its greeting starts, or they speak first (or a while passes)
-  if (!cancelled) S.starting = { kind: 'call', since, voice: true, until: Date.now() + VOICE_READY_MS }
+  if (!cancelled) {
+    const s = S.starting = { kind: 'call', since, voice: true, until: Date.now() + VOICE_READY_MS }
+    void $.clock.sleep(Math.max(0, since + SLOW_CONNECT_MS - Date.now()))
+      .then(() => { if (S.starting === s) { s.slow = true; $.ui.invalidate('ui.render') } }).catch(() => {})
+  }
   S.call = { session: r.session }
   S.caption = ''
   S.callState = { phase: 'listening', since: Date.now(), working: false, workingSince: 0, doing: '', notice: '', retrying: 0, waiting: false }
@@ -585,6 +589,7 @@ function setupCancelled($, kind) {
 }
 
 const VOICE_READY_MS = 45000            // the most Connecting waits for the voice's greeting before showing the call
+const SLOW_CONNECT_MS = 5000           // Connecting this long on the voice's hello: the band says it's slow, in words
 
 // The band says what's happening while a call or listening starts, from the click on: connecting, with
 // moving dots and the seconds, until it's live; or why it couldn't, for a few seconds
@@ -819,8 +824,11 @@ async function band($, e, next) {
       ...keyset([['end', 'e', 'end', 'cancelStart']], [['end', 'End', 'cancelStart', true]])])
     // why it's slow, when that's known, dim, under it: Standby opening, or its voice's first download
     const prep = call && S.starting.voice && S.callState && S.callState.preparing
+    // or, Connecting a while on the voice's hello: the app's first call loads its voice (the user, 2026-11-01)
+    const waited = call && S.starting.voice && S.starting.slow
     const why = S.starting.launching ? 'Opening Standby'
-      : prep ? 'First time: ' + prep.charAt(0).toLowerCase() + prep.slice(1) : ''
+      : prep ? 'First time: ' + prep.charAt(0).toLowerCase() + prep.slice(1)
+        : waited ? (live && live.first ? 'The first call takes a little longer' : 'Taking a little longer than usual') : ''
     // waiting on Standby's setup window (a first call or meeting): where to go, dim, under it
     if (!S.starting.setup) return why ? Box({ flexDirection: 'column', rowGap: 0, children: [top, ...below(why)] }) : top
     return Box({ flexDirection: 'column', rowGap: 0, children: [top,
