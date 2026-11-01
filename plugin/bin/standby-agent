@@ -3223,6 +3223,8 @@ _FATE, _FATE_LOCK = {}, threading.Lock()      # {question id: "kept" | "dropped"
 VISUAL_DECIDE = 120.0                         # an answer neither kept nor dropped this long: never drawn
 VISUAL_NOT_DRAWN = ("Not shown: you asked for a visual on only part of their words, and they went on, so it wasn't "
                     "drawn: %s. If it still helps, ask for it again.")
+# One that failed to draw: the voice may have said it's up, so its next turn is told, as when visuals are off
+VISUAL_FAILED = "Not shown: the visual you asked for couldn't be drawn (%s): %s. If it still helps, ask for it again."
 
 
 def note_fate(ident, fate):
@@ -3250,9 +3252,9 @@ def answer_fate(ident, wait=None):
         time.sleep(0.05)
 
 
-def draw_visual(session, ident, k, what, parent, model):
+def draw_visual(session, ident, k, what, parent, model, told=None):
     """One visual: its file says drawing now, then what the side copy made (a fork of the voice's conversation
-    `parent`, tool-less and never kept), or why not. Counted in Usage as its own kind."""
+    `parent`, tool-less and never kept), or why not, also to told(why). Counted in Usage as its own kind."""
     path = os.path.join(SPOOL, "%s.v%d.json" % (ident, k))
     t0 = time.time()
     try:
@@ -3267,6 +3269,8 @@ def draw_visual(session, ident, k, what, parent, model):
             _visual_write(path, {"state": "failed", "t": time.time(), "what": what, "why": why})
         except OSError:
             pass
+        if told:
+            told(why)
     if not parent or not os.path.exists(CLAUDE):
         return failed("no voice conversation to draw from")
     argv = [CLAUDE, "-p", VISUAL_PROMPT % what, "--resume", parent, "--fork-session", "--no-session-persistence",
@@ -3887,7 +3891,8 @@ class Voice(object):
             self.remember(session, VISUAL_NOT_DRAWN % "; ".join(asks))
             return
         for k, what in enumerate(asks, 1):
-            threading.Thread(target=draw_visual, name="visual", args=(session, ident, k, what, parent, model),
+            told = lambda why, _w=what: self.remember(session, VISUAL_FAILED % (why, _w))
+            threading.Thread(target=draw_visual, name="visual", args=(session, ident, k, what, parent, model, told),
                              daemon=True).start()
 
     def _committed(self, session):

@@ -20,6 +20,8 @@ if "--help" in sys.argv:
     sys.exit(0)
 if "--fork-session" in sys.argv and "--no-session-persistence" in sys.argv and "--input-format" not in sys.argv:   # a visual's side copy
     open(seen, "a").write(json.dumps({"kind": "visual", "argv": sys.argv, "pid": os.getpid()}) + "\\n")
+    if "a chart that breaks" in sys.argv[sys.argv.index("-p") + 1]:      # a side copy that comes back empty
+        print(json.dumps({"result": ""})); sys.exit(0)
     time.sleep(2.0)                                   # drawing takes a while; the voice never waits for it
     print(json.dumps({"result": "```html\\n<div data-size=\\"small\\"><h1>Release</h1><script src=\\"https://x.test/a.js\\"></script>"
                                 "<ol class=\\"steps\\" id=\\"r\\"><li>Build</li><li>Test</li></ol><script>sb.steps(\\"#r\\")</script></div>\\n```",
@@ -58,6 +60,8 @@ while True:
         if kind == "voice" and "yes, put it up" in text.split("They said:")[-1]:     # their yes, and work handed on
             emit({"type": "result", "is_error": False,
                   "result": "Here it is. [SHOW VISUAL] [DEEP] Draw the release flow."}); continue
+        if kind == "voice" and "chart of the outage" in text.split("They said:")[-1]:     # a visual that won't draw
+            emit({"type": "result", "is_error": False, "result": "Here it is. [VISUAL: a chart that breaks]"}); continue
         if kind == "voice" and "how the release goes" in text.split("They said:")[-1]:     # words, a visual, words
             emit({"type": "result", "is_error": False,
                   "result": "Here's how it goes. [VISUAL: the release steps, build then test] Build first, then test."}); continue
@@ -642,6 +646,19 @@ try:
           not os.path.exists(os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".v1.json"))
           and "Not shown: you asked for a visual on only part of their words" in texts("voice", TALK)[-1],
           texts("voice", TALK)[-1][-300:])
+    # One that fails to draw: the voice may have said it's up, so its next turn is told (as with visuals off)
+    ids = []
+    ask("[VOICE] put up a chart of the outage", ident=ids)
+    open(os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".k"), "w").close()   # committed
+    vfile = os.path.join(root, "agent", "spool", (ids[-1] if ids else "none") + ".v1.json")
+    deadline = time.time() + 10
+    while time.time() < deadline and not (os.path.exists(vfile) and json.load(open(vfile)).get("state") == "failed"):
+        time.sleep(0.05)
+    ask("[VOICE] what time is it there")
+    check("  a visual that fails to draw: its next turn is told, with why, so it never says one is up",
+          os.path.exists(vfile) and json.load(open(vfile)).get("state") == "failed"
+          and "Not shown: the visual you asked for couldn't be drawn (nothing came back): a chart that breaks"
+          in texts("voice", TALK)[-1], texts("voice", TALK)[-1][-300:])
     json.dump({"call_visuals": False}, open(os.path.join(root, "config.json"), "w"))
     ids, n = [], len([l for l in open(seen) if '"kind": "visual"' in l])
     got = ask("[VOICE] show me how the release goes", ident=ids)
