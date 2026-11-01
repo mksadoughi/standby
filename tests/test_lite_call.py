@@ -95,7 +95,11 @@ ui.transport.LocalTransport.agent_run = lambda self, args, input=None, timeout=1
 real_begin_ask, real_run_ask = ui._begin_ask, ui._run_ask
 begun = []
 ui._begin_ask = lambda sid, q, voice=False, own=False: begun.append((q, own))
-ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None, commit=None: (asked.append(q), answers.pop(0))[1]
+import re  # noqa: E402
+NOW_LINE = re.compile(r"^\[NOW\] [^\n]*\n", re.M)
+sent = []                                      # each turn as the voice got it; asked: the same without its [NOW] line
+ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None, commit=None: (
+    sent.append(q), asked.append(NOW_LINE.sub("", q)), answers.pop(0))[2]
 chat = []
 ui.append_chat = lambda *a, **k: chat.append((a, k))
 real_voice_action = ui.voice_action
@@ -182,6 +186,27 @@ check("  their own question still is", theirs and theirs.get("question") == "wha
 answers.append("Sure.")
 ui.ask_spoken(sid, "okay so where were we", None, None)
 check("  given once: the next turn is only their words", asked[-1] == "okay so where were we", asked[-1:])
+check("  and the time, last of what comes before their words: [NOW] and the clock",
+      re.match(r"\[NOW\] \d\d:\d\d:\d\d\nokay so where were we$", sent[-1]) is not None, sent[-1:])
+
+# The turn's clock: TASKS gives clock times (so its lines stay the same until a task changes); [NOW] says the
+# time and how long ago each listed task was asked, has run or ended, worked out on each turn
+T0 = 1_700_000_000.0
+now_c = {"tasks": {
+    "1": {"id": "1", "state": "running", "asked": T0, "since": T0 + 20, "last": T0 + 200, "seen": False},
+    "2": {"id": "2", "state": "stalled", "asked": T0 + 60, "since": T0 + 60, "last": T0 + 120, "seen": False},
+    "3": {"id": "3", "state": "done", "asked": T0, "since": T0 + 230, "ended": T0 + 230, "seen": True},
+    "4": {"id": "4", "state": "sent", "asked": T0 + 236, "since": T0 + 236, "last": T0 + 236, "seen": False},
+    "5": {"id": "5", "state": "queued", "asked": T0 + 200, "since": T0 + 210, "last": T0 + 200, "seen": False},
+    "6": {"id": "6", "state": "failed", "since": T0 - 3600, "ended": T0 - 3600, "seen": True}}}
+note = ui._lite_now_note(now_c, now=T0 + 240)
+check("[NOW]: the clock, then each task's age as a voice says it",
+      note == "[NOW] %s. #1 asked 4 min ago, running for 3 min; #2 asked 3 min ago, no step for 2 min; #3 done 10 s ago; "
+      "#4 asked 4 s ago, not started yet; #5 asked 40 s ago, waiting its turn." % time.strftime("%H:%M:%S", time.localtime(T0 + 240)), note)
+check("  only the tasks TASKS shows: one that ended long ago and was told is left out", "#6" not in note, note)
+check("  no tasks: just the clock", ui._lite_now_note({}, now=T0) == "[NOW] " + time.strftime("%H:%M:%S", time.localtime(T0)))
+check("  spans: seconds, minutes, then hours", (ui._ago(0), ui._ago(59.4), ui._ago(60), ui._ago(3599), ui._ago(3600 * 2 + 300))
+      == ("0 s", "59 s", "1 min", "59 min", "2 h 5 min"))
 info = json.loads((ui.SESSIONS / sid / "agent.json").read_text())
 check("  bound to the session, so its card follows", info.get("agent") == "lite:" + CC
       and info.get("kind") == "call" and info.get("copy") is True
@@ -827,6 +852,9 @@ time.sleep(0.3)
 answers.append("The wait's over.")
 ui.ask_spoken(sid, "so is it done?", None, None)
 vs.st = {"state": "listening", "you": "", "claude": ""}
+check("  back from a pause, the turn still leads with [RESUMED] (the agent reads it first); [NOW] comes after it",
+      ui.LITE_RESUMED in sent[-1] and not sent[-1].startswith("[NOW]")
+      and sent[-1].index("[NOW]") > sent[-1].index(ui.LITE_RESUMED), sent[-1])
 check("  they speak first on Resume: their turn carries the task and the [RESUMED] line, once; the bell is gone",
       ui.LITE_RESUMED + "\nso is it done?\n[RESULT message] Deeper side: The wait is over." in asked[-1]
       and not ui.voice_status(sid).get("waiting"), asked[-1])

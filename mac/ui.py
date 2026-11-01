@@ -3311,7 +3311,7 @@ def _lite_task(c, kind, what, state, source="voice"):
     """A new task on the call: its id is the call's own number for it (#n)."""
     c["handed"] = c.get("handed", 0) + 1
     now = time.time()
-    t = {"id": "%d" % c["handed"], "what": " ".join(str(what or "").split()), "state": state, "since": now,
+    t = {"id": "%d" % c["handed"], "what": " ".join(str(what or "").split()), "state": state, "since": now, "asked": now,
          "last": now, "doing": "", "result": "", "seen": False, "source": source, "kind": kind}
     c.setdefault("tasks", {})[t["id"]] = t
     return t
@@ -3387,6 +3387,36 @@ def _lite_tasks_file(sid, c):
         (SESSIONS / sid / "tasks.txt").write_text(lite_tasks_text(c) + "\n" if c.get("tasks") else "")
     except OSError:
         pass
+
+
+def _ago(secs):
+    """A span as a voice says it: "40 s", "4 min", "1 h 5 min"."""
+    secs = max(0, int(round(secs)))
+    if secs < 60:
+        return "%d s" % secs
+    if secs < 3600:
+        return "%d min" % (secs // 60)
+    return "%d h %d min" % (secs // 3600, secs % 3600 // 60)
+
+
+def _lite_now_note(c, now=None):
+    """The turn's clock, for the voice: the time now, and how long ago each task TASKS lists was asked, has run
+    or ended. TASKS gives clock times, so its lines stay the same until a task changes; the voice was never told
+    the time, so it couldn't say how long ago anything was. On every turn of theirs, in the turn itself (never
+    the prompt, which stays cached), so it costs no wake-up of its own."""
+    now = now or time.time()
+    parts = []
+    for t in lite_tasks(c, now):
+        st, asked = t["state"], "asked %s ago" % _ago(now - t.get("asked", t["since"]))
+        if st == "running":
+            parts.append("#%s %s, running for %s" % (t["id"], asked, _ago(now - t["since"])))
+        elif st == "stalled":
+            parts.append("#%s %s, no step for %s" % (t["id"], asked, _ago(now - t["last"])))
+        elif st in LITE_ENDED:
+            parts.append("#%s %s %s ago" % (t["id"], st, _ago(now - t.get("ended", t["since"]))))
+        else:                                      # sent, or queued in the session
+            parts.append("#%s %s, %s" % (t["id"], asked, "not started yet" if st == "sent" else "waiting its turn"))
+    return "[NOW] %s%s" % (time.strftime("%H:%M:%S", time.localtime(now)), ". " + "; ".join(parts) + "." if parts else "")
 
 
 def _lite_tasks_note(sid, c):
@@ -3686,6 +3716,9 @@ def lite_ask(sid, question, on_event, on_queued, heard=None, commit=None):
     if c.pop("rang", False):                       # they're back from a pause where something waited
         notes.append(LITE_RESUMED)
         rang = True
+    # the time, and how long ago each task was: every turn, last of the notes (a turn back from a pause still
+    # leads with [RESUMED], which the agent reads first)
+    notes.append(_lite_now_note(c))
     typed_rows = list(c.get("typed") or [])
     typed = _lite_typed_words(sid, c)              # what they typed or pasted in the chat: their words too
     if typed:

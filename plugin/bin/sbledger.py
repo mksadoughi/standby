@@ -24,7 +24,7 @@ RESUMED_TAG = "[RESUMED]"
 CUT = " [cut here]"
 _RESULT = re.compile(r"^\[RESULT(?: ([a-z]+))?\]\s*(.*)$", re.S)     # told alone (the Mac's _lite_tell): no [END RESULT]
 # Notes the Mac folded into a turn's words: facts of their own here, never their words
-_FOLDED = re.compile(r"\[RESULT(?: ([a-z]+))?\]\s*.*?\n\[END RESULT\]\n?|\[SUMMARY\].*?\[END SUMMARY\]\s*|^\[(?:SESSION|TASKS)\][^\n]*\n?",
+_FOLDED = re.compile(r"\[RESULT(?: ([a-z]+))?\]\s*.*?\n\[END RESULT\]\n?|\[SUMMARY\].*?\[END SUMMARY\]\s*|^\[(?:SESSION|TASKS|NOW)\][^\n]*\n?",
                      re.S | re.M)
 _HEARD = re.compile(r'^\s*\(They (?:went on before hearing your answer\.|cut in while you were saying: ".*?")\)\s*', re.S)
 

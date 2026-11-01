@@ -123,6 +123,10 @@ def said(question, heard, cut=False):
 check("a question's block: their words as THEM, with the Mac's notes and the cut-off note out",
       sbledger.asked_block('(They went on before hearing your answer.) [RESULT done] built\n[END RESULT]\nok, next')
       == "THEM: ok, next" and sbledger.folded("[RESULT done] built\n[END RESULT]\nok") == ["[RESULT done] built\n[END RESULT]"])
+check("  the turn's clock ([NOW]) is a fact of its own, never their words",
+      sbledger.asked_block("[NOW] 18:06:12. #2 asked 4 min ago, running for 40 s.\nhow's it going") == "THEM: how's it going"
+      and sbledger.folded("[NOW] 18:06:12. #2 asked 4 min ago, running for 40 s.\nhow's it going")
+      == ["[NOW] 18:06:12. #2 asked 4 min ago, running for 40 s."])
 check("  a result told alone is a RESULT, never their words", sbledger.asked_block("[RESULT done] The film is built.")
       == "RESULT (done): The film is built.")
 check("  a reply they heard part of: YOU, cut where it stopped; one they heard none of: no line",
