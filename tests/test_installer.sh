@@ -229,7 +229,7 @@ CC_VERSION=2.1.299 run 9
 check "  2.1.299 itself: fine" "grep -q 'Claude Code: 2.1.299' $T/out.9 && grep -q 'type /standby in Claude Code' $T/out.9"
 check "re-run does not duplicate the PATH line" "[[ \$(grep -c '.local/bin' $H/.zshrc) -eq 1 ]]"
 check "re-run: the speech model is here, not fetched again" \
-  "! grep -q 'fetching the speech model' $T/out.2 && grep -q 'speech model: Small, English' $T/out.2 && [[ \$(wc -l < $H/hf.args) -eq 2 ]]"
+  "! grep -q 'fetching the speech model' $T/out.2 && grep -q 'speech model: Small, English' $T/out.2 && [[ \$(grep -c '^mlx-community/parakeet' $H/hf.args) -eq 2 ]]"
 check "re-run keeps the migrated config" "! grep -q devbox.example.com $H/.standby/config.json && grep -q '\"mode\": \"local\"' $H/.standby/config.json"
 check "a first install says nothing of asking again" "! grep -q 'permissions once more' $T/out.1"
 check "  nor a rebuild with nothing changed (the same app: macOS keeps its permissions)" "! grep -q 'permissions once more' $T/out.2"
