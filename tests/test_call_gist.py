@@ -9,6 +9,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -214,7 +215,10 @@ ui.visual_where = lambda sid: "off"           # no visuals here: off from the ca
 ui.visuals_on = lambda: False
 
 ui.lite_publish = lambda cc, ev: None
-ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None, commit=None: (ui.PENDING.pop(sid, None), asked.append(q), answers.pop(0))[2]
+# each turn as the voice got it, without the [NOW] line every turn carries (the time: test_lite_call checks it)
+NOW_LINE = re.compile(r"^\[NOW\] [^\n]*\n", re.M)
+ui._run_ask = lambda sid, q, voice=False, on_event=None, on_queued=None, heard=None, commit=None: (
+    ui.PENDING.pop(sid, None), asked.append(NOW_LINE.sub("", q)), answers.pop(0))[2]
 os.environ["FAKE_REPLY"] = "Gist two: the changelog is next."
 t0 = time.time()
 r = ui.LITE_POST["/api/lite/call"]({"cc": CC})
