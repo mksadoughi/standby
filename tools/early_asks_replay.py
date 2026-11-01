@@ -187,7 +187,8 @@ def prove(calls, is_words, limit, verbose=False):
         turns = list(turns_of(path).values())[:limit or None]
         if not turns:
             continue
-        sdir = os.path.join(root, "sessions", "talk-replay")
+        sid = "talk-replay-%d" % calls.index(path)          # a folder of its own: nothing of the last call's in it
+        sdir = os.path.join(root, "sessions", sid)
         os.makedirs(sdir, exist_ok=True)
         rows = os.path.join(sdir, "dictation.jsonl")
         open(rows, "w").close()
@@ -214,7 +215,7 @@ def prove(calls, is_words, limit, verbose=False):
             return "A%d." % k
 
         spk = Speaker()
-        vs = voice.VoiceSession("talk-replay", pathlib.Path(sdir), ask=ask,
+        vs = voice.VoiceSession(sid, pathlib.Path(sdir), ask=ask,
                                 cancel=lambda *a, **k: None, speaker=spk, log=lambda m: None)
         vs.GUARD = 0.02
         vs.start()
@@ -272,9 +273,32 @@ def prove(calls, is_words, limit, verbose=False):
                 bad.append(("said", call, [k for k, t in enumerate(turns) if t["end"][1] == words], round(at, 2)))
             else:
                 spoken.add(i)
+        def what(words):
+            """Where words that are no turn's came from, as a shape: a pause's early question (turn, pause),
+            or two turns' words joined (more to a question, or carried after a cut), or neither."""
+            for k, t in enumerate(turns):
+                for j, pa in enumerate(t["pauses"]):
+                    if pa[1] == words:
+                        return "pause %d of turn %d (its end: %s)" % (j, k, "the same words" if t["end"][1] == words
+                                                                      else "other words")
+            for k in range(1, len(turns)):
+                if (words or "").startswith(turns[k - 1]["end"][1]) and turns[k]["end"][1] in (words or ""):
+                    return "turns %d and %d joined" % (k - 1, k)
+            return "none of the turns' words (%d words)" % len((words or "").split())
+
+        def where(words, at):
+            """Every turn the words are a pause or the end of, with when that turn ended against `at` (s)."""
+            out = []
+            for k, t in enumerate(turns):
+                tag = ("end" if t["end"][1] == words else "") + ("".join(" p%d" % j for j, pa in enumerate(t["pauses"])
+                                                                         if pa[1] == words))
+                if tag:
+                    out.append("t%d %s (ended %+.2f s)" % (k, tag.strip(), (ends[k] - at) if k in ends else float("nan")))
+            return ", ".join(out) or what(words)
+
         for words, at, go in acted:
             if go and turn_of(words, at) is None:
-                bad.append(("acted", call, [k for k, t in enumerate(turns) if t["end"][1] == words], round(at, 2)))
+                bad.append(("acted", call, where(words, at)))
         lost = [i for i, t in enumerate(turns) if is_words(t["end"][1]) and i not in spoken]
         if slow:
             print("    (turns whose answer took over 20 s in this replay: %s)" % slow)
