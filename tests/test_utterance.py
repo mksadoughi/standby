@@ -89,7 +89,9 @@ print("\n=== voice mode: the words at a short pause, decoded early ===")
 calls = []
 tr = sb.UtteranceTranscriber(None, decode=fake)
 tr.end_silence, tr.early_after = 0.45, 0.2
-tr.feed(speech(1.0)); tr.feed(noise(0.15))
+# the room first, as a mic hears it before anyone speaks: the noise floor is the quietest moment of the last
+# while (1de4a2c), so speech from the very first sample made its own quieter dips "quiet"
+tr.feed(noise(0.5)); tr.feed(speech(1.0)); tr.feed(noise(0.15))
 check("  no early decode before 0.2 s of quiet", calls == [] and tr.take_early() is None, calls)
 tr.feed(noise(0.1))
 e = tr.take_early()
