@@ -403,11 +403,36 @@ signing_identity() {
   SIGN_LEAF="$(printf '%s' "$SIGN_ID" | tr 'A-F' 'a-f')"     # as the requirement names it
   [[ -n "$SIGN_ID" ]]
 }
+# Before macOS 27, codesign finds an identity only in a keychain on the user's search list, --keychain or not
+# ("no identity found" on a fresh Mac). So Standby's keychain is on that list just while an app is signed, and
+# taken off right after, also when the install stops in between; whatever else is on the list stays as it is.
+search_list() { security list-keychains -d user 2>/dev/null | sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//'; }
+SIGN_LISTED=""
+keychain_on() {
+  local p list=()
+  while IFS= read -r p; do
+    [[ "$p" == "$SIGN_KC" ]] && return 0       # on it already: left there
+    [[ -n "$p" ]] && list+=("$p")
+  done < <(search_list)
+  SIGN_LISTED=1
+  trap keychain_off EXIT; trap 'exit 130' INT; trap 'exit 143' TERM HUP
+  security list-keychains -d user -s ${list[@]+"${list[@]}"} "$SIGN_KC" >>"$ROOT/signing.log" 2>&1 || true
+}
+keychain_off() {
+  local p list=()
+  [[ -n "$SIGN_LISTED" ]] || return 0
+  while IFS= read -r p; do [[ -n "$p" && "$p" != "$SIGN_KC" ]] && list+=("$p"); done < <(search_list)
+  security list-keychains -d user -s ${list[@]+"${list[@]}"} >>"$ROOT/signing.log" 2>&1 || true
+  SIGN_LISTED=""
+  trap - EXIT INT TERM HUP
+}
 # Signed with that identity, or ad hoc as py2app left it.
 sign_app() {
   [[ -n "$SIGN_ID" ]] || return 0
+  keychain_on
   codesign --force --deep --sign "$SIGN_ID" --keychain "$SIGN_KC" "$1" >>"$ROOT/signing.log" 2>&1 ||
     warn "could not sign $(basename "$1") with Standby's own certificate: macOS will ask again after the next reinstall"
+  keychain_off
 }
 # What went into an app: the same, and the app already there is kept as it is.
 build_key() { { cat "$@" 2>/dev/null || true; } | shasum | cut -d' ' -f1; }    # a file not there (no icon) counts as empty

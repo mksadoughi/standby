@@ -58,7 +58,28 @@ cat > "$B/iconutil" <<'EOF'
 #!/bin/bash
 touch "${@: -1}"
 EOF
+# The real codesign, noting the keychain search list each time it signs with Standby's keychain. Told to, it
+# adds a keychain to that list meanwhile (the user's own change), or stops the install right there.
+cat > "$B/codesign" <<EOF
+#!/bin/bash
+if [[ " \$* " == *" --keychain "* ]]; then
+  security list-keychains -d user | tr -d '\n' >> "$T/sign.lists"; echo >> "$T/sign.lists"
+  if [[ -f "$T/user-adds" ]]; then
+    l=(); while IFS= read -r p; do l+=("\$p"); done < <(security list-keychains -d user | sed -e 's/^ *"//' -e 's/"\$//')
+    security list-keychains -d user -s "\${l[@]}" "$H/My Keys/later.keychain-db"
+  fi
+  [[ -f "$T/stop-signing" ]] && kill -TERM \$PPID
+fi
+exec /usr/bin/codesign "\$@"
+EOF
 chmod +x "$B"/*
+# The user's own search list, a path with a space on it (in this HOME only, never the real one).
+mkdir -p "$H/Library/Preferences" "$H/Library/Keychains" "$H/My Keys"
+for k in "$H/Library/Keychains/login.keychain-db" "$H/My Keys/team.keychain-db" "$H/My Keys/later.keychain-db"; do
+  HOME="$H" security create-keychain -p x "$k" >/dev/null 2>&1
+done
+HOME="$H" security list-keychains -d user -s "$H/Library/Keychains/login.keychain-db" "$H/My Keys/team.keychain-db"
+LIST_BEFORE="$(HOME="$H" security list-keychains -d user)"
 echo 'def from_pretrained(name): return None' > "$T/stubs/parakeet_mlx/__init__.py"
 # The speech model: a stand-in Hugging Face that notes what was asked for and writes
 # a file where the real one would, under the throwaway HOME. Never a real download.
@@ -194,6 +215,8 @@ check "both apps signed with a certificate of this Mac's own, so their identity 
   "[[ \"\$DR_APP\" == 'identifier \"dev.standby.app\" and certificate leaf = H\"'* && \"\$DR_DICT\" == 'identifier \"dev.standby.dictation\" and certificate leaf = H\"'* ]] && codesign --verify \"$H/Applications/Standby.app\" && grep -q \"a code-signing certificate of this Mac's own\" $T/out.1"
 check "  kept in its own keychain under ~/.standby, owner-only, never in the login keychain's list" \
   "[[ -f $H/.standby/signing/standby.keychain-db && \$(mode_of $H/.standby/signing) == 700 && \$(mode_of $H/.standby/signing/password) == 600 ]] && ! security list-keychains -d user | grep -q '$H'"
+check "  on the user's search list just while each app is signed (before macOS 27 codesign finds it nowhere else), the list as it was after" \
+  "[[ \$(grep -c . $T/sign.lists) -eq 2 && \$(grep -c 'My Keys/team.keychain-db.*standby.keychain-db' $T/sign.lists) -eq 2 && \"\$(HOME=$H security list-keychains -d user)\" == \"\$LIST_BEFORE\" ]]"
 APP_INODE="$(ls -i "$H/Applications/Standby.app/Contents/Info.plist" | awk '{print $1}')"
 run 2; rc=$?
 check "re-run succeeds (update in place)" "[[ $rc -eq 0 ]]"
@@ -240,6 +263,18 @@ check "  nor a rebuild with nothing changed (the same app: macOS keeps its permi
 run 3; rc=$?
 check "an app that changed: rebuilt, the same identity, so nothing is asked again" \
   "[[ $rc -eq 0 ]] && ! grep -q 'permissions once more' $T/out.3 && codesign --verify \"$H/Applications/Standby.app\" && [[ \"\$(codesign -d -r- \"$H/Applications/Standby.app\" 2>&1 | sed -n 's/^designated => //p')\" == \"\$DR_APP\" ]]"
+# The user adds a keychain while an app is signed: theirs stays, only Standby's is taken off.
+"$REALPY" -c "import plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,'rb')); d['OldKey']=2; plistlib.dump(d, open(p,'wb'))" \
+  "$H/Applications/Standby.app/Contents/Info.plist"
+touch "$T/user-adds"; run 3b; rc=$?; rm -f "$T/user-adds"
+check "  a keychain the user adds while signing stays on their list, only Standby's is taken off" \
+  "[[ $rc -eq 0 ]] && HOME=$H security list-keychains -d user | grep -q 'My Keys/later.keychain-db' && HOME=$H security list-keychains -d user | grep -q 'My Keys/team.keychain-db' && ! HOME=$H security list-keychains -d user | grep -q standby.keychain-db"
+HOME="$H" security list-keychains -d user -s "$H/Library/Keychains/login.keychain-db" "$H/My Keys/team.keychain-db"
+"$REALPY" -c "import plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,'rb')); d['OldKey']=3; plistlib.dump(d, open(p,'wb'))" \
+  "$H/Applications/Standby.app/Contents/Info.plist"
+touch "$T/stop-signing"; run 3c; rc=$?; rm -f "$T/stop-signing"
+check "  an install stopped while signing still takes Standby's keychain off the list" \
+  "[[ $rc -eq 143 && \"\$(HOME=$H security list-keychains -d user)\" == \"\$LIST_BEFORE\" ]]"
 # One installed before, signed ad hoc: moving it to the certificate is a new app to macOS, once.
 codesign --force --sign - "$H/Applications/Standby.app" >/dev/null 2>&1
 run 5; rc=$?
