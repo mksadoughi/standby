@@ -321,6 +321,9 @@ def fake_ask(question, on_event, on_queued, heard=None):
     heards.append(heard)
     qid = "q%d" % len(asked)
     on_queued(qid)
+    if mode.get("quiet"):                      # the voice chose to say nothing: only the signal, no words
+        mode["quiet"] -= 1
+        return "[QUIET]"
     if slow:
         on_event({"kind": "delta", "text": "Let me look into it. "})
         end = time.time() + 5
@@ -1038,6 +1041,48 @@ check("while it thinks, words at a pause judged to go on change nothing: no cut,
       len(asked) == 3 and "q3" not in cancelled and h.status()["state"] == "thinking", (asked, cancelled, h.status()))
 mode["think"] = 0
 h.stop()
+recorder["on"] = False
+
+# An early answer that only says nothing (asked at a pause, the voice took them to be going on) isn't its answer
+# to their whole turn: once the turn ends on those words, the turn is asked again, and that answer is said (a
+# minute's talk ended in silence, its hand-off unsent: talk-20261101-192602).
+recorder["on"] = True
+threading.Thread(target=fake_recorder, daemon=True).start()
+asked.clear(); cancelled.clear()
+spk6, said6 = FakeSpeaker(), []
+g = voice.VoiceSession("m1", sdir, ask=fake_ask, cancel=cancelled.append, speaker=spk6, log=said6.append)
+g.GUARD = 0.1
+g.start()
+
+
+def grow(**kw):
+    with open(rows_path, "a") as fh:
+        fh.write(json.dumps(dict(kw, seq=g.seq)) + "\n")
+
+
+words = "And you also think about it in the meantime."
+mode["quiet"] = 1
+grow(turn=0, early_ask=True, text=words, why="no punctuation")
+check("an early answer that says nothing: nothing said while they may go on",
+      wait(lambda: asked == [words], 2) and (time.sleep(0.4) or True) and spk6.said == [], (asked, spk6.said))
+grow(turn=0, end_turn=True, text=words, spoke_until=time.time() - 0.5)
+check("  the turn ends on those words: it is asked again, and that answer is said",
+      wait(lambda: asked == [words, words] and spk6.said == ["Orion is the routing cache.", "It replaced Redis in Q2."], 4),
+      (asked, spk6.said))
+check("  the log says why", any("the early answer was to say nothing: the turn is asked again" in m for m in said6),
+      said6[-4:])
+check("  one timing line for the turn: the answer's",
+      wait(lambda: any("voice timing:" in m for m in said6), 3) and sum("voice timing:" in m for m in said6) == 1
+      and "Claude's first word -" not in [m for m in said6 if "voice timing:" in m][0],
+      [m for m in said6 if "voice timing:" in m])
+check("  (listening again)", wait(lambda: g.status()["state"] == "listening", 10), g.status())
+mode["quiet"] = 1
+grow(turn=1, end_turn=True, text="Let me think about that for a second.", spoke_until=time.time() - 0.5)
+time.sleep(0.8)        # on purpose: an ask again would have gone in this time
+check("a turn not asked early that the voice says nothing to: asked once, its choice",
+      asked == [words, words, "Let me think about that for a second."] and spk6.said[2:] == [], (asked, spk6.said))
+mode["quiet"] = 0
+g.stop()
 recorder["on"] = False
 
 # No cap (10/25): early questions go however many were dropped; each turn's line says what came of them.

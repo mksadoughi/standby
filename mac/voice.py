@@ -71,6 +71,7 @@ _WRITTEN = re.compile(r"(?m)^[ \t]*(?:-{3,}|`{3})|\[(?:DEEP|HANDOFF)\]")
 # with no deltas (one that was only a signal: the agent's stream had nothing to send) is said from
 # its answer, so they must go here too ("[QUIET]" said as a call's greeting).
 _MARK = re.compile(r"\[(?:QUIET|END|CANCEL[^\]]*)\]")
+QUIET = "[QUIET]"     # the voice's whole reply when it chooses to say nothing
 # A call voice's tool named in its words ("mcp__voice__stay_quiet" as a greeting): never said. First, before
 # its underscores read as emphasis.
 _TOOL = re.compile(r"\bmcp__\w+:?")
@@ -986,7 +987,12 @@ class VoiceSession(object):
                         continue
                     if self._opening is not None:
                         self._no_opening()                # their turn came first: it is the conversation
-                    self._converse(question, row.get("spoke_until"), ask=self._take_early(question))
+                    if self._converse(question, row.get("spoke_until"), ask=self._take_early(question)) == "quiet early":
+                        # Asked at a pause, the voice may say nothing to wait for more; that isn't its answer to
+                        # their whole turn (a minute's talk ended in silence, its hand-off unsent:
+                        # talk-20261101-192602). The turn is asked once more, as any turn is.
+                        self.log("voice %d: the early answer was to say nothing: the turn is asked again" % self.seq)
+                        self._converse(question, row.get("spoke_until"))
                     if self._stop.is_set():
                         return
                 elif row.get("text") and not row.get("likely_turn") and not row.get("early_ask"):
@@ -1642,8 +1648,15 @@ class VoiceSession(object):
                 break
             time.sleep(0.02 if phase == "thinking" else 0.04)
         self._pending.extendleft(reversed(later))
-        self._timing(seen, spoke_until, got, early=(seen - q.started) if ask is not None else None,
-                     started=q.started)
+        # An early answer that only chose to say nothing, while nothing came after it: the turn is asked again
+        # (_run), and that answer's timing is the turn's
+        quiet_early = (end == "answered" and ask is not None and not later and not q.spoken and not q.deep
+                       and not q.actions and (got.get("answer") or "").strip() == QUIET)
+        if quiet_early:
+            self._trace("early", step="quiet", words=question)
+        else:
+            self._timing(seen, spoke_until, got, early=(seen - q.started) if ask is not None else None,
+                         started=q.started)
         if gaps:
             worst = max(gaps, key=sum)
             self.log("voice gaps: %d between sentences, longest %.2fs (%.2fs waiting for Claude's words,"
@@ -1685,3 +1698,4 @@ class VoiceSession(object):
         else:
             self._write("voice")
             self.state = "listening"
+        return "quiet early" if quiet_early else end
