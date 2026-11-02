@@ -46,6 +46,7 @@ test_sources               py    par
 test_agent_session_name    py    par  
 test_speech_model          py    par  
 test_voice_agent           py    par  
+test_voice_renew           py    par
 test_local_mode            py    par  
 test_meeting_capture       py    par  
 test_channel_mainthread    py    par  

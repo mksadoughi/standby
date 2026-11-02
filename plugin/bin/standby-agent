@@ -1300,6 +1300,12 @@ def call_opening(session):
 VOICE_GIST_CHARS = 8000           # up to 1000 words: what a call's Claude Code session has been working on
 VOICE_SUFFIX = " · voice"         # how an agent's voice is named ("Planner · voice"): never an agent itself
 VOICE_COMPACT = "100k"            # Claude Code's lowest auto-compact window: the voice stays small
+# Claude Code compacts on its own only as a turn needs it, and that turn waits: 35 s of silence mid-call, every-pause
+# early asks having filled the voice's conversation in half an hour (talk-20261101-192602). So a call's voice is
+# compacted ahead of that, past VOICE_RENEW_AT tokens, at a quiet moment (no turn for VOICE_RENEW_QUIET), and a
+# question that comes meanwhile stops it at once (the conversation is as it was) and is answered: never a wait.
+VOICE_RENEW_AT = 50000
+VOICE_RENEW_QUIET = 2.0
 
 
 def voice_meta(session):
@@ -2358,6 +2364,7 @@ class ClaudeSession(object):
             return None
 
     INTERRUPTED = 2   # rc for a turn stopped on purpose by should_interrupt
+    context = 0       # tokens in its conversation, as its last turn read them
     HELD = 3          # rc for a turn not sent: the conversation is open in another Claude Code
     SIGNIN = 4        # rc for a turn ended because Claude Code cannot sign in
 
@@ -2570,6 +2577,9 @@ class ClaudeSession(object):
                     notify("delta", delta["text"])
             elif kind == "result":
                 self._count(ev, label)
+                use = ev.get("usage") or {}
+                self.context = sum(use.get(k) or 0 for k in (
+                    "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens")) or self.context
                 final = ev.get("result")
                 if isinstance(final, str) and final.strip():
                     out = final.strip()
@@ -4205,6 +4215,14 @@ class Voice(object):
                 cur = current_session()
                 if cur in _CALLS and ledger_call(cur):   # a turn committed: the head moves, the spare follows it
                     watch_record(cur, live_voice_model(self.model))
+                elif self._renew_due(cur):
+                    with self.cv:
+                        self.busy = True
+                    try:
+                        self._renew(cur)
+                    finally:
+                        with self.cv:
+                            self.busy = False
                 if _SPARES and self.idle():           # voice mode is over: no Claude Code kept waiting for it
                     spare_retire(())
                 continue
@@ -4335,6 +4353,31 @@ class Voice(object):
             return any(n.endswith(".vq") for n in os.listdir(SPOOL))
         except OSError:
             return False
+
+    def _renew_due(self, session):
+        """A call's voice whose conversation is past VOICE_RENEW_AT, at a quiet moment: nothing asked or under
+        way for VOICE_RENEW_QUIET, and not tried since its last turn."""
+        engine = _LIVE_SESSION.get((session, "voice"))
+        if (engine is None or isinstance(engine, VoiceTurn) or not engine.alive() or engine.context < VOICE_RENEW_AT
+                or getattr(engine, "renew_tried", None) == self.last_used):
+            return False
+        with self.cv:
+            quiet = not self.tasks and not self.busy and time.time() - self.last_used >= VOICE_RENEW_QUIET
+        return quiet and is_talk(session) and not self._asked()
+
+    def _renew(self, session):
+        """Compact the call's voice now, while nobody waits for it: a question stops it, and it's tried again at
+        the next quiet moment."""
+        engine = _LIVE_SESSION.get((session, "voice"))
+        engine.renew_tried, was, t0 = self.last_used, engine.context, time.time()
+        text, rc = engine.ask("/compact", LISTEN_TIMEOUT, should_interrupt=self._asked, label="renew")
+        if rc == 0:
+            engine.context = 0
+        how = {0: "compacted", ClaudeSession.INTERRUPTED: "stopped for a question"}.get(rc, "failed: %s" % text[:200])
+        sys.stderr.write("voice: %s's voice at %d tokens: %s in %.1fs\n" % (session, was, how, time.time() - t0))
+        sys.stderr.flush()
+        sbtrace.event(session, "voice_renew", tokens=was, ms=int((time.time() - t0) * 1000),
+                      outcome="compacted" if rc == 0 else "stopped" if rc == ClaudeSession.INTERRUPTED else "failed")
 
     def _brief(self, session):
         """Voice mode opened: the voice catches up now, before the first words.
