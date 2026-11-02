@@ -157,6 +157,69 @@ ui.lite_ended(r["session"])
 check("  Quit stops it: no sound, the app is going", heard() == [])
 ui.QUITTING.clear()
 
+# ---------------------------------------------------------------- message: news for a paused call
+import threading  # noqa: E402
+r = ui.lite_call({"cc": CC})
+heard()
+psid = r["session"]
+pvoice = types.SimpleNamespace(muted=True, status=lambda: {"state": "muted"})
+ui.VOICE[psid] = pvoice
+ui._lite_word = lambda sid, c, news, resumed, typed, again=False: {"key": ui._lite_news_key(news), "typed": typed}
+ui._lite_typed_words = lambda sid, c: ""
+ui.LITE_QUIET_STEP = 0.02
+pc = ui.LITE_CALLS[psid]
+
+
+def news(text):
+    pc.setdefault("inbox", []).append({"text": text, "at": time.time(), "seen": False, "source": "session"})
+    ui._lite_announce(psid)                     # one teller a call: a second piece of news joins the running one
+
+
+def told():
+    """The teller done, as after Resume: what waited was said, and its pause's mark gone with it."""
+    ui.LITE_CALLS.pop(psid, None)
+    settle(lambda: not any(t.name == "lite-tell" for t in threading.enumerate()))
+    for m in pc.get("inbox", []):
+        m["seen"] = True
+    pc.pop("rang", None)
+    pc["telling"] = False
+    ui.LITE_CALLS[psid] = pc
+
+
+def settle(pred, secs=3):
+    end = time.time() + secs
+    while time.time() < end and not pred():
+        time.sleep(0.02)
+    return pred()
+
+
+news("The tests pass.")
+check("a paused call: the first news rings once (message), as the red dot lights",
+      settle(lambda: played == ["message"]) and pc.get("rang"), (played, pc.get("rang")))
+news("And the build is green.")
+time.sleep(0.3)
+check("  more in the same pause: no second ring", heard() == ["message"])
+told()
+news("One more thing.")
+check("  the next pause's first news rings again", settle(lambda: played == ["message"]) and heard() == ["message"])
+told()
+pvoice.muted = False
+ui._lite_user_busy = lambda sid: True           # they're talking: the news waits for a quiet moment
+news("Unpaused news.")
+time.sleep(0.3)
+check("  not paused (the voice is live): never a ring, the voice says it", heard() == [] and not pc.get("rang"))
+told()
+pvoice.muted = True
+ui.set_settings({"call_sounds": False})
+news("With the sounds off.")
+time.sleep(0.3)
+check("  Call sounds off: no ring", heard() == [])
+ui.set_settings({"call_sounds": True})
+ui.LITE_CALLS.pop(psid, None)                   # the call is over: its teller stops
+live[0] = None
+time.sleep(0.1)
+heard()
+
 # ---------------------------------------------------------------- message: a meeting's summary
 MID = "meeting-20261101-1100"
 (ui.SESSIONS / MID).mkdir(parents=True)

@@ -3644,15 +3644,17 @@ CALL_SOUNDS = Path(__file__).resolve().parent / "sounds"     # made in the apps'
 QUITTING = threading.Event()                   # Quit: a call it stops ends with no sound, the app is going
 
 
-def call_sound(moment):
+def call_sound(moment, paused=None):
     """Settings > Sound, "Call sounds": a soft sound at a call's edges, once, on the system output. incoming
     (Claude asks to call), connecting (before the recorder opens the mic, seconds later), ending (once the call
     has stopped, after its last word) and message (something arrived off a call: a meeting's summary, Claude
-    asking to listen). Never while a call or meeting is live, so the mic and its echo cancelling never hear one.
-    Not made (a checkout never installed): no sound."""
+    asking to listen, and news for a paused call: `paused`, its session). Never while a call or meeting is
+    live, so the mic and its echo cancelling never hear one, but for a paused call's news: they aren't hearing
+    the voice then. Not made (a checkout never installed): no sound."""
     if not get_settings()["call_sounds"] or QUITTING.is_set():
         return
-    if moment != "ending" and live_session():
+    live = live_session()
+    if moment != "ending" and live and not (paused and live == paused and call_muted(paused)):
         return
     path = CALL_SOUNDS / (moment + ".wav")
     if path.is_file() and sound.play(str(path)):
@@ -4155,6 +4157,8 @@ def _lite_tell(sid):
         quiet = None
         while sid in LITE_CALLS and _lite_untold(c, sid):
             if call_muted(sid):
+                if not c.get("rang"):
+                    call_sound("message", paused=sid)      # once a pause: they aren't hearing the voice
                 c["rang"], quiet = True, None      # the red dot shows: they'll know it's there
                 waiting, _m = _lite_pick(_lite_untold(c, sid))
                 ahead = c.get("preword")
