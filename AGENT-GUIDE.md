@@ -145,9 +145,12 @@ is a letter, typed alone followed by Enter. In VS Code and the desktop app they 
 - What the user types in the chat during the call is passed to the voice too.
 - Pause silences the voice and holds what it would say; the session's work goes on. A red dot on Resume means
   something is waiting. End asks once to confirm. The voice can also end the call when the user says goodbye.
-- The call can be shown in Standby's full window (the conversation, Pause, End) or put away in the **mini window**,
-  a small round window in the corner of the screen, above every app. Clicking the mini window pauses or resumes the
-  call; pointing at it shows Full window, Settings and End; double-clicking opens the full window.
+- The call can be shown in Standby's full window (the conversation, Pause, End) or in the **mini window**,
+  a small round window in the corner of the screen, above every app. A call opens in the mini window unless the
+  user's setting says the full window or nothing (`call_opens`). Clicking the mini window pauses or resumes the
+  call; pointing at it shows Hide, Full window, Visuals, Settings and End; double-clicking opens the full window.
+  Hide puts it away for that call and the call goes on; `/standby window`, the band, or asking the voice for a
+  visual brings it back.
 - After the call, the band shows a short summary with **Add to Claude Code** (a quiet note to this session with what
   it didn't know yet) or **Forget**.
 

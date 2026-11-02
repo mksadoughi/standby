@@ -27,6 +27,7 @@ message handler, window.webkit.messageHandlers.sb.postMessage({...}):
   {type: "expand"}         open the main window
   {type: "end"}            end the call, as the menu's End
   {type: "settings", pane} Standby's Settings, on that pane ("call")
+  {type: "hide"}           the mini window goes and the call goes on (its Hide button)
 and back, on the page's globals: edge(h, v), hover(on), and from the menu
 say(text).
 
@@ -891,8 +892,8 @@ class Presence(object):
         return bool(w.isVisible()) and not bool(w.isMiniaturized())
 
     def orb_asked(self):
-        """Has the user sent what is live to the orb (Mini window, the corner button, Cmd+M)?
-        Until then there is no orb: a meeting or a call starting never brings it up."""
+        """Is what's live sent to the orb (a call's start, as Settings says; Mini window, the corner button,
+        Cmd+M), and not hidden since? Until then there is no orb, and a meeting never has one."""
         asked = getattr(self.hooks, "orb_asked", None)
         return True if asked is None else bool(asked())
 
@@ -950,6 +951,14 @@ class Presence(object):
             self.into_companion()
             return True
         return False
+
+    def hide_mini(self):
+        """The mini window's Hide: it goes, and the call goes on. For this call only (the app's hide_orb):
+        the band, /standby window or the voice bring it back."""
+        hide = getattr(self.hooks, "hide_orb", None)
+        if hide is not None:
+            hide()
+        self.update()
 
     def to_corner(self):
         """The header's ⇲: what Cmd+M does while a session is live. With
@@ -1044,6 +1053,8 @@ class Presence(object):
             self.show_live()
         elif kind == "settings":
             self.open_settings("call" if m.get("pane") == "call" else None)
+        elif kind == "hide":
+            self.hide_mini()
         elif kind == "end":
             if self.hooks.live_kind() == "talk":   # the mini window's End: as the menu's End Call
                 self._chose("stop")

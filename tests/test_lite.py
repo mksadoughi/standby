@@ -382,6 +382,11 @@ check("  Claude starting calls and listening without asking: off by default, on 
       named["auto_accept"]["value"] == "off" and named["auto_accept"]["choices"] == ["on", "off"]
       and ui.set_named("auto_accept", "on")["value"] == "on" and ui.get_settings()["auto_accept"] is True
       and ui.set_named("auto_accept", "off")["value"] == "off")
+check("  what opens when a call starts: the mini window unless set, and set by name",
+      named["call_opens"]["value"] == "mini" and named["call_opens"]["choices"] == ["mini", "full", "nothing"]
+      and ui.set_named("call_opens", "Full")["value"] == "full" and ui.get_settings()["call_opens"] == "full"
+      and "call_opens can be mini, full, nothing." == ui.set_named("call_opens", "both").get("error")
+      and ui.set_named("call_opens", "mini")["value"] == "mini", named.get("call_opens"))
 check("  a number in range only", ui.set_named("ai_update", "500").get("error") and ui.set_named("ai_update", "20")["value"] == "20")
 ui.set_named("transcript", "ask"); ui.set_named("talk_over", "off"); ui.set_named("ai_update", "10")
 ui.addmac.save(ui.SESSIONS / SID, dict(ui.addmac.bound(ui.SESSIONS / SID), ended_at=time.time()))

@@ -202,16 +202,25 @@ check("  the corner button: nothing", p.to_corner() is False and pill.visible is
 check("  close: the window just goes, no orb, the meeting records on",
       p.closing() is False and win.native.up is False and pill.visible is False and touched() == [])
 win.native.up = True
-# A call starts with the window closed (from Claude Code): no orb, until the user sends it there.
+# A call nobody sent to the mini window (When a call starts, open: Nothing, or it was hidden): no orb until it's asked for.
 hooks.kind, win.native.up = "talk", False
 p.update()
-check("a call starts, Standby's window closed: the orb stays hidden (never sent to it)", pill.visible is False)
+check("a call not sent to the mini window, Standby's window closed: the orb stays hidden", pill.visible is False)
 win.native.up = True
 check("  close, never sent to the orb: the window just goes, still no orb",
       p.closing() is False and win.native.up is False and pill.visible is False)
 win.native.up = True
 check("  minimise (Cmd+M): sent to the orb, the window goes and the orb carries it",
       p.minimise() is True and hooks.asked is True and win.native.up is False and pill.visible is True)
+# Hide (its button, or Escape when it has the keyboard): the mini window goes, the call goes on
+hooks.hide_orb = lambda: setattr(hooks, "asked", False)
+p._message({"type": "hide"})
+check("  Hide: the mini window goes and the call goes on (nothing ended)", pill.visible is False and hooks.asked is False
+      and hooks.kind == "talk" and touched() == [], touched())
+hooks.asked = True                         # brought back (the band, the voice showing a visual)
+p.update()
+check("  brought back: up again", pill.visible is True)
+del hooks.hide_orb
 p.open_main()
 del hooks.orb_asked, hooks.ask_orb
 hooks.kind = None

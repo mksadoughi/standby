@@ -103,7 +103,7 @@ const ORB_CHECKS = `
   ok("  its top row: the call's session, then the icons under it", (h => h.includes('<span class="nmrow"><span class="dot"></span><span class="nm">') && h.includes('id="ctm"') && h.indexOf("nmrow") < h.indexOf('class="btns"'))(els.ctls.innerHTML)
      && els.ctls.classList.contains("card"), els.ctls.innerHTML.slice(0, 300));
   const words = () => [...els.ctls.innerHTML.matchAll(/<button[^>]*title="([^"]*)"/g)].map(x => x[1]);
-  ok("  four icons, each named in its tip: Full window, Visuals, Settings, End (no Pause, no Mini window: a click on it pauses)", JSON.stringify(words()) === '["Full window","Visuals on","Settings","End"]'
+  ok("  five icons, each named in its tip: Hide, Full window, Visuals, Settings, End (no Pause, no Mini window: a click on it pauses)", JSON.stringify(words()) === '["Hide the window. The call goes on","Full window","Visuals on","Settings","End"]'
      && !/<button[^>]*>[A-Za-z]/.test(els.ctls.innerHTML) && !shown().includes("More"), words());
   ok("  End is the red hang-up phone, its word in the tip", els.ctls.innerHTML.includes('<button class="hang" title="End" aria-label="End" onclick="end()"><svg'), els.ctls.innerHTML);
   ok("  the pill's glass runs on under the orb to its centre (its inner end hidden): it slides out of the mini window",
@@ -112,6 +112,10 @@ const ORB_CHECKS = `
   ok("  Settings opens Standby's Settings on its Call pane", JSON.stringify(posts) === '[{"type":"settings","pane":"call"}]', posts);
   posts = []; end(); full();
   ok("  End ends the call through the panel (as End Call); Full window opens Standby's window", posts.map(m => m.type).join() === "end,expand", posts);
+  posts = []; hideMini();
+  ok("  Hide: the panel hides the mini window (the call goes on)", JSON.stringify(posts) === '[{"type":"hide"}]', posts);
+  posts = []; (docOn.keydown || []).forEach(f => f({ key: "Escape" })); (docOn.keydown || []).forEach(f => f({ key: "a" }));
+  ok("  Escape hides it too, when it has the keyboard; other keys do nothing", JSON.stringify(posts) === '[{"type":"hide"}]', posts);
   open = false; render();
   ok("  left: the pill rolls back under the orb, its glass with it", !els.rail.classList.contains("out") && (m => m.glass === null && m.under)(last("orb")), last("orb"));
   STATE = LIVE({ voice: { state: "listening", holding: true } });

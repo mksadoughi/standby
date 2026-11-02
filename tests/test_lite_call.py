@@ -145,6 +145,8 @@ check("Claude Code signed out: no call, and the words say what to do",
       ui.LITE_POST["/api/lite/call"]({"cc": CC, "signed_in": False}) == {"error": "Claude Code isn't signed in: run /login"}
       and not ui.LITE_CALLS)
 check("  Standby never asks Claude Code itself", not hasattr(ui, "cc_signed_in"))
+start_log = []
+start_real_log, ui.log = ui.log, lambda m: (start_log.append(m), start_real_log(m))
 r = ui.LITE_POST["/api/lite/call"]({"cc": CC, "cwd": work})
 sid = r.get("session")
 v = (talks[-1]["voice"] or {}) if talks else {}
@@ -229,11 +231,28 @@ check("asked again by the same session: the same call, said to be the one alread
       ui.LITE_POST["/api/lite/call"]({"cc": CC}) == {"session": sid, "already": True})
 check("  another session while it's on: busy", "busy" in ui.LITE_POST["/api/lite/call"]({"cc": "other-session-1"}))
 was = live[0]; live[0] = sid
-check("  no floating orb for it (the band in Claude Code says it): the companion sees nothing live",
-      ui.CompanionHooks().live_kind() is None)
+check("  the mini window opens by itself (When a call starts, open: Mini window, the default)",
+      sid in ui.LITE_ORB and ui.CompanionHooks().live_kind() == "talk" and "call start: the mini window" in start_log, start_log[-4:])
+ui.CompanionHooks().hide_orb()
+check("  its Hide: no mini window for this call, and the call goes on",
+      sid not in ui.LITE_ORB and ui.CompanionHooks().live_kind() is None and sid in ui.LITE_CALLS
+      and "mini window: hidden, the call goes on" in start_log)
 ui.LITE_ORB.add(sid)
-check("    until it's sent to the orb (minimize to orb): then the orb carries it", ui.CompanionHooks().live_kind() == "talk")
-ui.LITE_ORB.discard(sid); live[0] = was
+check("    until it's asked for again (the band's Mini window, the voice showing a visual)", ui.CompanionHooks().live_kind() == "talk")
+# Full window: Standby's window at the call, as /standby window opens it; Nothing: neither
+real_open_window, opened = ui.open_window, []
+ui.open_window = lambda b: (opened.append(b), {"ok": True})[1]
+for what, want in (("full", [{"cc": CC}]), ("nothing", [])):
+    ui.LITE_ORB.discard(sid); opened.clear()
+    check("  call_opens %s: saved, and what opens" % what, ui.set_settings({"call_opens": what}).get("ok")
+          and ui.get_settings()["call_opens"] == what and (ui.call_opens(CC, sid) or True)
+          and opened == want and sid not in ui.LITE_ORB, (opened, ui.get_settings()["call_opens"]))
+check("  a choice it doesn't have isn't saved", ui.set_settings({"call_opens": "both"}).get("ok")
+      and ui.get_settings()["call_opens"] == "nothing")
+ui.set_settings({"call_opens": "mini"})
+ui.open_window = real_open_window
+ui.LITE_ORB.add(sid); live[0] = was
+ui.log = start_real_log
 answers.append("Hi.")
 ui.ask_spoken(sid, ui.LITE_OPENING + " This is the test, one, two, three.", None, None)
 check("  the greeting's hidden marker, carried onto the first words: never theirs, never shown",
@@ -1145,6 +1164,7 @@ r = ui.LITE_POST["/api/lite/call"]({"cc": CC, "cwd": work})
 check("the next call: a voice of its own, from nothing earlier (the session's summary says what it did)",
       "from" not in talks[-1]["voice"] and talks[-1]["voice"].get("handoff") is True, talks[-1]["voice"])
 check("  and not the app's first", ui.LITE_CALLS[r["session"]].get("first") is False, ui.LITE_CALLS[r["session"]])
+check("  hiding was for that call: the next one opens the mini window again", r["session"] in ui.LITE_ORB)
 ui.lite_ended(r["session"])
 
 # ---------------------------------------------------------------- the voice ends the call

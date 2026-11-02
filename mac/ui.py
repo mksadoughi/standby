@@ -589,7 +589,8 @@ def drop_chat_row(sid, row, text=None):
 TALK_OVER_MIC = "Needs the Mac's default microphone (Settings > Recording)"
 DEFAULTS = {"push_lines": 10, "speakers": True, "capture": "auto",
             "remember_voices": True, "lite_transcript": "ask",
-            "auto_stop_min": 15, "auto_accept": False, "call_visuals": True}
+            "auto_stop_min": 15, "auto_accept": False, "call_visuals": True, "call_opens": "mini"}
+CALL_OPENS = ("mini", "full", "nothing")   # what opens as a call starts: the mini window, Standby's window, or neither
 VOICE_EFFORTS = ("auto", "low", "medium", "high")   # the voice's thinking (Settings > Call); auto: Claude Code's own
 VOICE_EFFORT_DEFAULT = "high"   # Sonnet's best, explicit: never silently Claude Code's own (the user, 2026-11-01)
 LITE_PASSES = ("ask", "live")     # a meeting from Claude Code: its transcript with each prompt, or pushed as it goes
@@ -691,6 +692,7 @@ def get_settings():
             "auto_accept": bool(cfg.get("auto_accept", DEFAULTS["auto_accept"])),
             # a call's visual card: off, the voice is never asked for one and nothing is made (standby-agent reads it)
             "call_visuals": bool(cfg.get("call_visuals", DEFAULTS["call_visuals"])),
+            "call_opens": cfg.get("call_opens") if cfg.get("call_opens") in CALL_OPENS else DEFAULTS["call_opens"],
             "lite_transcript": cfg.get("lite_transcript") if cfg.get("lite_transcript") in LITE_PASSES else DEFAULTS["lite_transcript"],
             "auto_stop_min": _auto_stop_min(cfg),
             "voices": sorted(read_json(VOICES).get("voices", {})),
@@ -872,6 +874,8 @@ def set_settings(b):
                 cfg["auto_accept"] = bool(b["auto_accept"])
             if "call_visuals" in b:
                 cfg["call_visuals"] = bool(b["call_visuals"])
+            if b.get("call_opens") in CALL_OPENS:
+                cfg["call_opens"] = b["call_opens"]
             if b.get("lite_transcript") in LITE_PASSES:
                 cfg["lite_transcript"] = b["lite_transcript"]
             if "auto_stop_min" in b:
@@ -937,6 +941,8 @@ def _named_settings():
         ("talk_over", "talk over the voice to interrupt it", onoff(st["talk_over"]), list(ON_OFF), "talk_over"),
         ("speakers", "tell the speakers apart", onoff(st["speakers"]), list(ON_OFF), "speakers"),
         ("remember_voices", "remember voices, yours and the ones you name", onoff(st["remember_voices"]), list(ON_OFF), "remember_voices"),
+        ("call_opens", "what opens when a call starts: the mini window, the full window, or nothing", st["call_opens"],
+         list(CALL_OPENS), "call_opens"),
         ("auto_accept", "Claude starts calls and listening without asking", onoff(st["auto_accept"]), list(ON_OFF), "auto_accept"),
         ("visuals", "a small card showing what goes with what the voice says, on calls", onoff(st["call_visuals"]), list(ON_OFF), "call_visuals"),
         ("ai_update", "sentences between the meeting agent's updates", str(st["push_lines"]), ["1 to 200"], "push_lines"),
@@ -3604,8 +3610,25 @@ def lite_call(b):
         vs.open_with(LITE_OPENING)                 # the voice says hello first
     threading.Thread(target=_lite_watch, args=(sid,), name="lite-call", daemon=True).start()
     messenger().lite_session(cc, folder)           # listed in Standby's past meetings and calls
+    call_opens(cc, sid)
     log("lite: call %s for Claude Code session %s" % (sid, cc))
     return {"session": sid}
+
+
+def call_opens(cc, sid):
+    """What opens as a call starts (Settings > When a call starts, open): the mini window (the call sent to it,
+    as Mini window does), Standby's window at the call (as /standby window does), or nothing."""
+    what = get_settings()["call_opens"]
+    if what == "mini":
+        LITE_ORB.add(sid)
+        p = MINI_WINDOW.get("presence")
+        if p is not None:
+            window.on_main(p.update)
+    elif what == "full":
+        r = open_window({"cc": cc})
+        if r.get("error"):
+            log("call start: Standby's window didn't open: %s" % r["error"])
+    log("call start: %s" % {"mini": "the mini window", "full": "Standby's window", "nothing": "nothing opens"}[what])
 
 
 def _lite_watch(sid):
@@ -5671,14 +5694,22 @@ class CompanionHooks(object):
         if not sid:
             return None
         if sid in LITE_CALLS and sid not in LITE_ORB:
-            return None                  # a call from Claude Code: its band says it; the orb only when asked for
+            return None                  # a call from Claude Code not sent to the orb (Nothing at its start, or hidden)
         return read_json(SESSIONS / sid / "meta.json").get("kind") or "meeting"
 
     def orb_asked(self):
-        """The orb only once the user sends a call to it (Mini window, the corner button,
-        Cmd+M): a call starting never brings it up, and a meeting never has one."""
+        """The orb only for a call sent to it: as it starts (Settings > When a call starts, open: Mini window),
+        or by the user (Mini window, the corner button, Cmd+M), until its Hide. A meeting never has one."""
         sid = _live_now()
         return bool(sid) and sid in LITE_ORB
+
+    def hide_orb(self):
+        """The mini window's Hide: this call has no mini window until it's asked for again (the band, /standby
+        window, the voice showing a visual). The next call follows the setting again."""
+        sid = _live_now()
+        if sid in LITE_ORB:
+            LITE_ORB.discard(sid)
+            log("mini window: hidden, the call goes on")
 
     def ask_orb(self):
         """Minimised to the orb (Cmd+M, the corner button): the orb carries this call from now on.
@@ -7284,6 +7315,8 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
   </nav>
   <div class="setmain" id="setmain">
     <div class="pane on" data-p="call"><div class="sec">
+      <div class="field"><label>When a call starts, open<span class="mx-help" tabindex="0" title="Hide it any time with its Hide button; the call goes on. Bring it back from the band, with /standby window, or by asking the voice. Hiding lasts for that call only." aria-label="About what opens when a call starts" onclick="event.preventDefault()"></span></label><input type="hidden" id="s_opens">
+        <div class="seg" id="openseg"><button type="button" data-o="mini" onclick="setOpens('mini')">Mini window</button><button type="button" data-o="full" onclick="setOpens('full')">Full window</button><button type="button" data-o="nothing" onclick="setOpens('nothing')">Nothing</button></div></div>
       <div class="field"><label>Voice mode model</label><select id="s_vmodel" data-save><option value="haiku">Haiku</option>
         <option value="sonnet">Sonnet · Recommended</option><option value="opus">Opus</option></select>
         <div class="hint" id="s_vmodelnote" hidden></div></div>
@@ -7491,6 +7524,8 @@ async function pollSpeech(){clearTimeout(speechT);try{paintSpeech(await api("/ap
 const EFFHINT={low:"Answers fastest.",medium:"Thinks a little before answering.",high:"Most careful, slower to answer."};let EFFINH="";
 function setEffort(e,quiet){$("s_veffort").value=e;document.querySelectorAll("#effseg button").forEach(b=>b.classList.toggle("on",b.dataset.e===e));
   $("s_effhint").textContent=EFFHINT[e]||("Following your Claude Code\u2019s setting"+(EFFINH?" ("+EFFINH[0].toUpperCase()+EFFINH.slice(1)+")":"")+" until you pick one.");if(!quiet)autosave()}
+// Settings > When a call starts, open: the mini window (the default), Standby's window, or nothing
+function setOpens(o,quiet){$("s_opens").value=o;document.querySelectorAll("#openseg button").forEach(b=>b.classList.toggle("on",b.dataset.o===o));if(!quiet)autosave()}
 function setCapture(c,quiet){$("s_capture").value=c;document.querySelectorAll("#capseg button").forEach(b=>b.classList.toggle("on",b.dataset.c===c));
   setHelp("s_caphint",CAPHINT[c]||"");$("micf").style.display=c==="meeting"?"none":"";if(!quiet)autosave()}
 async function openPrompt(){const r=await api("/api/prompt");if(r.error){toast(r.error);return}PR=r;$("ptext").value=r.prompt;
@@ -7677,7 +7712,7 @@ async function openSettings(pane){if(!SETWIN&&window.pywebview&&pywebview.api&&p
     try{const r=await pywebview.api.open_settings(typeof pane==="string"?pane:null);if(r&&r.ok)return}catch(e){}}
   return showSettings(pane)}
 async function showSettings(pane){const r=await api("/api/settings"),s=r.settings;
-  $("s_vmodel").value=s.voice_model||"sonnet";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"high",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
+  $("s_vmodel").value=s.voice_model||"sonnet";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"high",true);setOpens(s.call_opens||"mini",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
   $("s_remember").checked=!!s.remember_voices;
   // Talking over Claude (the duplex engine): from the next voice mode; a quiet line when the mic chosen can't
   $("s_autoaccept").checked=!!s.auto_accept;$("s_visuals").checked=s.call_visuals!==false;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}
@@ -7705,7 +7740,7 @@ function watchModel(){loadModels();
 function markModels(off){["s_vmodel"].forEach(id=>{for(const o of $(id).options){o.dataset.label=o.dataset.label||o.textContent;
   o.disabled=off.includes(o.value);o.textContent=o.disabled?o.dataset.label.split(" (")[0]+" (not available)":o.dataset.label}})}
 function formSettings(){return {voice_model:$("s_vmodel").value,voice_effort:$("s_veffort").value,voice_effort:$("s_veffort").value,
-  push_lines:$("s_push").value,lite_transcript:$("s_litepass").value,speakers:$("s_speakers").checked,remember_voices:$("s_remember").checked,talk_over:$("s_talkover").checked,auto_accept:$("s_autoaccept").checked,call_visuals:$("s_visuals").checked,capture:$("s_capture").value,mic_device:$("s_mic").value,
+  push_lines:$("s_push").value,lite_transcript:$("s_litepass").value,speakers:$("s_speakers").checked,remember_voices:$("s_remember").checked,talk_over:$("s_talkover").checked,auto_accept:$("s_autoaccept").checked,call_visuals:$("s_visuals").checked,call_opens:$("s_opens").value||"mini",capture:$("s_capture").value,mic_device:$("s_mic").value,
   speech_model:SPEECHSET?($("s_speech").value||undefined):undefined,english_only:$("s_english").checked}}
 let VOICES=null;
 const Q={premium:"Premium",enhanced:"Enhanced",standard:"Standard"};
