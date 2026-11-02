@@ -145,3 +145,4 @@ test_log_privacy           py    par
 test_home_start            py    par  
 test_voice_replay          py    ondemand   # the voice's replay: the gate for its prompt, effort or model; live Claude, its own login
 test_caller                py    ondemand   # the AI caller: whole calls with no one on them, scored; live Claude, its own token
+test_caller_guard          py    par

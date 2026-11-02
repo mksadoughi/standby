@@ -3,7 +3,8 @@
 (tests/caller/scenarios/*.json): its lines are spoken with macOS's `say` into a file, fed to Standby as its
 mic, and Standby's voice is played to a file; a real Claude Code with the plugin is on the call, so the voice,
 its hand-offs and its cards are the real ones. Each run is scored and kept with the call's trace.
-On demand only, never in a normal test run (tests/suites.txt group "ondemand").
+On demand only, never in a normal test run (tests/suites.txt group "ondemand"), and never while the user has a
+call or meeting live: it doesn't start then, and a run stops itself the moment one starts (user_live).
 
     python3 tests/caller/caller.py setup            its own Standby folder and Claude Code, the plugin
     python3 tests/caller/caller.py list             the scenarios
@@ -358,6 +359,57 @@ class Stack(object):
                     os.killpg(p.pid, signal.SIGKILL)
 
 
+# ---------------------------------------------------------------- the user's own calls come first
+
+def user_live():
+    """What the user's own Standby has live (a call or a meeting, or one starting), in words, else None. A run is a
+    second Standby with its own speech model, voice and Claude Code: on top of a live call it stalled the user's
+    recorder 48 s and broke the call (2026-11-01). Their app's /api/state, read with its own token; with no app
+    up, a recorder of theirs still running counts as live."""
+    try:
+        with open(os.path.join(REAL_ROOT, "ui.port")) as fh:
+            port = int(fh.read().strip())
+        with open(os.path.join(REAL_ROOT, "ui.token")) as fh:
+            token = fh.read().strip()
+        req = urllib.request.Request("http://127.0.0.1:%d/api/state" % port, headers={"X-Standby-Token": token})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            st = json.loads(r.read().decode("utf-8"))
+        if st.get("live"):
+            return "a call or meeting is live (%s)" % st["live"]
+        if st.get("starting"):
+            return "a call or meeting is starting"
+        return None
+    except (OSError, ValueError):
+        pass
+    mine = subprocess.run(["pgrep", "-f", os.path.join(REAL_ROOT, "code", "mac") + "/standby[.]py run"],
+                          capture_output=True, text=True).stdout.split()
+    return "their recorder is running (pid %s)" % mine[0] if mine else None
+
+
+class UserGuard(object):
+    """While a run goes: the user's Standby looked at every few seconds, and the run stopped the moment a call or
+    meeting of theirs is live (its timings would be the load's anyway)."""
+    EVERY = 5.0
+
+    def __init__(self, stack, log):
+        self.stack, self.log, self.why = stack, log, None
+        self.done = threading.Event()
+        self.thread = threading.Thread(target=self._watch, name="user-guard", daemon=True)
+        self.thread.start()
+
+    def _watch(self):
+        while not self.done.wait(self.EVERY):
+            why = user_live()
+            if why:
+                self.why = why
+                self.log("  the user's Standby: %s. This run stops now." % why)
+                self.stack.stop()
+                return
+
+    def end(self):
+        self.done.set()
+
+
 def wait(cond, secs, every=0.2):
     end = time.time() + secs
     while time.time() < end:
@@ -699,6 +751,7 @@ def run_one(path, echo=None, do_transcribe=True, log=print, settings=None):
     stack = Stack(run_dir, audio_dir, echo or sc.get("echo"), log=log, window=sc.get("window", "mini"))
     call = Call(stack, audio, log=log)
     result = None
+    guard = UserGuard(stack, log)
     try:
         call.prepare(sc.get("steps", []))
         stack.start()
@@ -716,6 +769,8 @@ def run_one(path, echo=None, do_transcribe=True, log=print, settings=None):
         quiet = float(sc.get("after_greeting_s", 1.5))
         wait(lambda: not call.speaking() and time.time() - max([call.started] + [e["t"] for e in call.voice]) >= quiet, 30)
         for s in sc.get("steps", []):
+            if guard.why:
+                raise RuntimeError("stopped for the user's own call or meeting")
             call.step(s)
         time.sleep(2)
         call.pump()
@@ -723,7 +778,10 @@ def run_one(path, echo=None, do_transcribe=True, log=print, settings=None):
         log("  run stopped: %s" % exc)
         result = {"error": str(exc)}
     finally:
+        guard.end()
         stack.stop()
+    if guard.why:                                            # stopped for the user's call: nothing here is a result
+        result = {"error": "stopped: the user's Standby: %s" % guard.why, "user_live": guard.why}
     try:                                                     # the app's log: in serve mode, its own output
         with open(os.path.join(run_dir, "app.out"), errors="replace") as fh:
             ui_lines = fh.read().splitlines()
@@ -759,6 +817,8 @@ def main(argv=None):
     r.add_argument("--audio", default="loopback", choices=["loopback"])
     r.add_argument("--no-transcribe", action="store_true")
     r.add_argument("--repeat", type=int, default=1, help="run each scenario this many times")
+    r.add_argument("--wait-quiet", action="store_true",
+                   help="with a call or meeting of the user's live, wait for it to end instead of not running")
     r.add_argument("--config", action="append", metavar="KEY=VALUE",
                    help="a setting for this batch, into its config.json: voice.tools=true")
     a = ap.parse_args(argv)
@@ -779,7 +839,22 @@ def main(argv=None):
         return 1
     setup(log=lambda m: None)
     pick = [f for f in files if not a.names or os.path.splitext(os.path.basename(f))[0] in a.names] * max(1, a.repeat)
-    results = [run_one(f, a.echo, not a.no_transcribe, settings=a.config) for f in pick]
+    # A stop (^C, kill) still takes the test's Standby down with it (run_one's finally): never left running
+    signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
+    results = []
+    for f in pick:
+        why = user_live()
+        if why and a.wait_quiet:
+            print("The user's Standby: %s. Waiting until it's over." % why)
+            while user_live():
+                time.sleep(15)
+        elif why:
+            print("The user's Standby: %s. No run while it is (--wait-quiet waits for it to end)." % why)
+            return 3
+        results.append(run_one(f, a.echo, not a.no_transcribe, settings=a.config))
+        if results[-1].get("user_live"):
+            print("Stopped for the user's call or meeting: the rest of the batch isn't run.")
+            return 3
     print("\n%d of %d passed" % (sum(1 for r in results if r.get("passed")), len(results)))
     return 0 if all(r.get("passed") for r in results) else 1
 
