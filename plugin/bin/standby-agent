@@ -1809,11 +1809,11 @@ def live_voice_model(started_with):
 
 
 # The voice's thinking effort (Settings > Voice, "Thinking": config.json agent.voice_effort, low, medium or high;
-# unset, high, Sonnet's best on the replays and no slower there (the user, 2026-11-01), passed as such so the voice
-# never silently follows Claude Code's setting; "auto", Claude Code's own). Read once a call and kept for it, its turns
+# unset, low, the fastest to answer (the user, 2026-11-01), passed as such so the voice never silently follows
+# Claude Code's setting; "auto", Claude Code's own). Read once a call and kept for it, its turns
 # and its forks alike: a change mid-call would miss the prompt cache, so it takes effect from the next call.
 VOICE_EFFORTS = ("low", "medium", "high")
-VOICE_EFFORT_DEFAULT = "high"
+VOICE_EFFORT_DEFAULT = "low"
 _VOICE_EFFORT = {}
 
 

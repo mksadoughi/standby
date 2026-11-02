@@ -39,7 +39,7 @@ too.
   tells the voice when something matters, and the voice decides what to say. It always says a few words when it
   takes something deeper, and when you ask several things at once, it answers what's quick and takes the rest
   deeper in the same turn.
-- **The voice runs on Sonnet at High thinking** by default.
+- **The voice runs on Sonnet at Low thinking** by default, the fastest to answer. A level you chose stays yours.
 - **The voice knows how long ago** each task was asked or finished, and says it the way a person would.
 - **A call opens with a short hello,** nothing more. Its voice starts fresh each time, from your session's summary.
 - **Connecting** that takes more than a few seconds says why.

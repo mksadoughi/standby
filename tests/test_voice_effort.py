@@ -1,6 +1,6 @@
 """The voice's thinking (Settings > Voice, "Thinking"): --effort on the voice's Claude Code only, from config.json
 agent.voice_effort, read once a call and kept for its turns and forks alike (a change mid-call would miss the prompt
-cache); unset, high (Sonnet's best, passed explicitly, never Claude Code's own by default); "auto", no --effort, as
+cache); unset, low (the fastest to answer, passed explicitly, never Claude Code's own by default); "auto", no --effort, as
 Claude Code is set; never on the meeting agent; never where this Claude Code has no
 --effort. Settings saves it and Claude Code can set it by name. A stand-in Claude only."""
 import agentpath  # noqa: E402,F401  (first: never the real ~/.standby, see agentpath.guard)
@@ -42,7 +42,7 @@ def argv(session, kind="voice", turn=False):
 
 
 config()
-check("unset: --effort high, passed explicitly, never Claude Code's own", effort(argv("talk-20261101-090000")) == "high")
+check("unset: --effort low, passed explicitly, never Claude Code's own", effort(argv("talk-20261101-090000")) == "low")
 config(voice_effort="auto")
 check("auto: no --effort, the voice as Claude Code is set", effort(argv("talk-20261101-093000")) is None)
 config(voice_effort="low")
@@ -53,7 +53,7 @@ check("  changed mid-call: that call keeps low, its turns and forks too (its pro
 check("  the next call: high", effort(argv("talk-20261101-110000")) == "high")
 check("never the meeting agent", effort(argv("talk-20261101-120000", kind="meeting")) is None)
 config(voice_effort="xhigh")
-check("a value Settings doesn't offer: high", effort(argv("talk-20261101-130000")) == "high")
+check("a value Settings doesn't offer: low", effort(argv("talk-20261101-130000")) == "low")
 config(voice_effort="medium")
 agent._CAPS.clear(); agent._CAPS.update(agent.claude_caps()); agent._CAPS["effort"] = False
 check("a Claude Code without --effort: none passed", effort(argv("talk-20261101-140000")) is None)
@@ -65,15 +65,21 @@ sys.path.insert(0, "mac")
 import ui  # noqa: E402
 ui.log = lambda m: None
 config()
-check("Settings: High by default, whatever Claude Code has (here low)",
-      ui.get_settings()["voice_effort"] == "high" and ui.get_settings()["voice_effort_inherit"] == "low")
+with open(os.path.join(home, ".claude", "settings.json"), "w") as fh:
+    json.dump({"effortLevel": "high"}, fh)
+check("Settings: Low by default, whatever Claude Code has (here high)",
+      ui.get_settings()["voice_effort"] == "low" and ui.get_settings()["voice_effort_inherit"] == "high")
+config(voice_effort="high")
+check("  High chosen before the default moved: still High", ui.get_settings()["voice_effort"] == "high")
+config()
 check("  Medium saved as the agent's voice_effort; auto kept as auto",
       ui.set_settings({"voice_effort": "medium"})["settings"]["voice_effort"] == "medium"
       and json.load(open(os.path.join(root, "config.json")))["agent"]["voice_effort"] == "medium"
       and ui.set_settings({"voice_effort": "auto"})["settings"]["voice_effort"] == "auto"
       and json.load(open(os.path.join(root, "config.json")))["agent"]["voice_effort"] == "auto")
 check("  anything else: ignored", ui.set_settings({"voice_effort": "max"})["settings"]["voice_effort"] == "auto")
-check("  the page's fallback is High", 'setEffort(s.voice_effort||"high",true)' in ui.PAGE)
+check("  the page's fallback is Low, its hint says it's the default", 'setEffort(s.voice_effort||"low",true)' in ui.PAGE
+      and 'low:"Answers fastest. The default."' in ui.PAGE)
 named = {x["name"]: x for x in ui.settings_named()["settings"]}
 check("  by name from Claude Code: voice_thinking, auto, low, medium or high",
       named["voice_thinking"]["choices"] == ["auto", "low", "medium", "high"]

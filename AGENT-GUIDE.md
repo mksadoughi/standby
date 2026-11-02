@@ -194,7 +194,7 @@ List them with `mcp__standby__settings` or `/standby settings`; change one only 
 | `english_only` | `on`, `off` | from the Mac's language |
 | `voice` | `automatic` or one of Standby's voices | `automatic` |
 | `voice_model` | `haiku`, `sonnet`, `opus` | `sonnet` |
-| `voice_thinking` | `auto` (as Claude Code is set), `low`, `medium`, `high` | `high` |
+| `voice_thinking` | `auto` (as Claude Code is set), `low`, `medium`, `high` | `low` |
 | `model` | `haiku`, `sonnet`, `opus` (Standby's own meeting agent) | `opus` |
 | `talk_over` | `on`, `off` (interrupt the voice on laptop speakers) | `off` |
 | `speakers` | `on`, `off` (label speakers) | `on` |

@@ -594,7 +594,7 @@ DEFAULTS = {"push_lines": 10, "speakers": True, "capture": "auto",
             "call_sounds": True}
 CALL_OPENS = ("mini", "full", "nothing")   # what opens as a call starts: the mini window, Standby's window, or neither
 VOICE_EFFORTS = ("auto", "low", "medium", "high")   # the voice's thinking (Settings > Voice); auto: Claude Code's own
-VOICE_EFFORT_DEFAULT = "high"   # Sonnet's best, explicit: never silently Claude Code's own (the user, 2026-11-01)
+VOICE_EFFORT_DEFAULT = "low"    # the fastest to answer, explicit: never silently Claude Code's own (the user, 2026-11-01)
 LITE_PASSES = ("ask", "live")     # a meeting from Claude Code: its transcript with each prompt, or pushed as it goes
 VOICES = ROOT / "voices.json"
 # the speech model being downloaded, if one is: {"key", "state", "done", "total", "error"}.
@@ -940,7 +940,7 @@ def _named_settings():
         ("voice", "the voice Standby speaks in", voice_now,
          ["automatic"] + [v["name"] for v in vs.get("standby", []) + vs.get("voices", [])], "voice"),
         ("voice_model", "the model the voice talks with", st["voice_model"], list(MODEL_NAMES), "voice_model"),
-        ("voice_thinking", "how hard the voice thinks before it answers, from the next call (high unless set; auto: as Claude Code is set)",
+        ("voice_thinking", "how hard the voice thinks before it answers, from the next call (low unless set; auto: as Claude Code is set)",
          st["voice_effort"], list(VOICE_EFFORTS), "voice_effort"),
         ("model", "the model of Standby's meeting agent", st["model"], list(MODEL_NAMES), "model"),
         ("talk_over", "talk over the voice to interrupt it", onoff(st["talk_over"]), list(ON_OFF), "talk_over"),
@@ -7565,7 +7565,7 @@ async function pollSpeech(){clearTimeout(speechT);try{paintSpeech(await api("/ap
   if(SPEECH&&SPEECH.download&&SPEECH.download.state==="downloading"&&settings.open)speechT=setTimeout(pollSpeech,1000)}
 // Settings > Voice, Thinking: the call's voice's effort, from the next call. Not picked yet: as Claude Code is set
 // (the default until it's measured), said in the hint, nothing lit
-const EFFHINT={low:"Answers fastest.",medium:"Thinks a little before answering.",high:"Most careful, slower to answer."};let EFFINH="";
+const EFFHINT={low:"Answers fastest. The default.",medium:"Thinks a little before answering.",high:"Most careful, slower to answer."};let EFFINH="";
 function setEffort(e,quiet){$("s_veffort").value=e;document.querySelectorAll("#effseg button").forEach(b=>b.classList.toggle("on",b.dataset.e===e));
   $("s_effhint").textContent=EFFHINT[e]||("Following your Claude Code\u2019s setting"+(EFFINH?" ("+EFFINH[0].toUpperCase()+EFFINH.slice(1)+")":"")+" until you pick one.");if(!quiet)autosave()}
 // Settings > General, When a call starts, open: the mini window (the default), Standby's window, or nothing
@@ -7756,7 +7756,7 @@ async function openSettings(pane){if(!SETWIN&&window.pywebview&&pywebview.api&&p
     try{const r=await pywebview.api.open_settings(typeof pane==="string"?pane:null);if(r&&r.ok)return}catch(e){}}
   return showSettings(pane)}
 async function showSettings(pane){const r=await api("/api/settings"),s=r.settings;
-  $("s_vmodel").value=s.voice_model||"sonnet";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"high",true);setOpens(s.call_opens||"mini",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
+  $("s_vmodel").value=s.voice_model||"sonnet";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"low",true);setOpens(s.call_opens||"mini",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
   $("s_remember").checked=!!s.remember_voices;
   // Talking over Claude (the duplex engine): from the next voice mode; a quiet line when the mic chosen can't
   $("s_autoaccept").checked=!!s.auto_accept;$("s_visuals").checked=s.call_visuals!==false;$("s_callsounds").checked=s.call_sounds!==false;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}

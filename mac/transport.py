@@ -96,7 +96,7 @@ def agent_settings(cfg=None):
     a = dict(cfg.get("agent") or {})
     a["mode"] = "local"
     a.setdefault("model", "opus")             # what an agent with no model of its own, or a meeting with no agent, runs on
-    a.setdefault("voice_model", "sonnet")      # the voice, at high thinking: Haiku answered too little (2026-11-01)
+    a.setdefault("voice_model", "sonnet")      # the voice, at low thinking: Haiku answered too little (2026-11-01)
     return a
 
 
