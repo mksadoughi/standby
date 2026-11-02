@@ -13,6 +13,13 @@ def mic_status():
     return _os.mic_status()
 
 
+def mic_status_fresh():
+    """The same, asked by a new process of Standby's: the OS's answer now, where this process may
+    still be told what it was first told. None when it can't be asked."""
+    fresh = getattr(_os, "mic_status_fresh", None)
+    return fresh() if fresh else _os.mic_status()
+
+
 def ask_mic(answered):
     """The OS's own microphone prompt: answered(granted) once the user chooses (at once when
     it asked before)."""

@@ -2363,16 +2363,28 @@ FOLDERS_PANE = "x-apple.systempreferences:com.apple.preference.security?Privacy_
 _MIC_CHECK = {}                   # what macOS says of the mic, kept 2 s (the band asks every few seconds)
 
 
-def mic_access():
+def mic_access(fresh=False):
     """What macOS says of Standby and the mic: "authorized", "denied", "restricted",
     "undetermined", or None. Asks nothing. A test (no devices) is "authorized"; tests of
-    the band put a stand-in here."""
+    the band put a stand-in here. This process can go on being told "undetermined" after an
+    Allow it didn't ask for (a sound played brought the prompt up): then a new process of
+    Standby's is asked, its answer kept once it has one (asked again every 10 s until then), and
+    asked again when fresh (a call or meeting about to start)."""
     if os.environ.get("STANDBY_NO_DEVICES"):
         return "authorized"
     at, status = _MIC_CHECK.get("status", (0.0, None))
     if time.time() - at > 2.0:
         status = permissions.mic_status()
         _MIC_CHECK["status"] = (time.time(), status)
+    if status == "undetermined":
+        at, now = _MIC_CHECK.get("fresh", (0.0, None))
+        if fresh or (now in (None, "undetermined") and time.time() - at > 10.0):
+            now = permissions.mic_status_fresh()
+            _MIC_CHECK["fresh"] = (time.time(), now)
+            if now not in (None, "undetermined"):
+                log("mic: macOS says %s (this process is still told undetermined)" % now)
+        if now not in (None, "undetermined"):
+            status = now
     return status
 
 
@@ -4729,7 +4741,7 @@ def setup_states(steps):
     mine = lambda what: bool(build) and (g.get(what) or {}).get("build") == build
     out = {}
     if firstuse.MIC in steps:
-        out[firstuse.MIC] = firstuse.mic_state(mic_access(), mine("mic"))
+        out[firstuse.MIC] = firstuse.mic_state(mic_access(fresh=True), mine("mic"))      # never a reading from before
     if firstuse.SOUND in steps:
         out[firstuse.SOUND] = firstuse.sound_state(_sound_state(), stale=sound_why() == "stale")
     return out
@@ -4906,6 +4918,7 @@ def _mic_answered(granted):
     """macOS's answer to the setup window's Allow Microphone: kept for this build, as a mic heard
     is (this process may go on being told "not asked yet")."""
     _MIC_CHECK.pop("status", None)
+    _MIC_CHECK.pop("fresh", None)
     if granted:
         app.note_grant("mic")
     log("setup: the microphone %s" % ("allowed" if granted else "refused"))

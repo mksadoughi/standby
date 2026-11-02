@@ -115,6 +115,30 @@ ui.window = types.SimpleNamespace(titlebar=lambda native, on_fullscreen=None: ob
 ui._working_screen = lambda: (0, 0, 1440, 900)
 real_states = ui.setup_states
 check("a test (no devices): all allowed, so no other suite is ever held", real_states(["mic", "sound"]) == ALL)
+# The mic allowed by an Allow this process didn't ask for (the ring's sound brought macOS's prompt up): this process
+# goes on being told "undetermined", so a start asks a new process of Standby's, now, before holding (VM, 2026-11-02:
+# the setup window opened for a mic allowed 25 s before). Undecided there too: the window asks, as before.
+told = {"here": "undetermined", "fresh": "authorized", "asked": 0}
+def fresh_read():
+    told["asked"] += 1
+    return told["fresh"]
+real_perms, real_nodev = ui.permissions, os.environ.pop("STANDBY_NO_DEVICES", None)
+ui.permissions = types.SimpleNamespace(mic_status=lambda: told["here"], mic_status_fresh=fresh_read)
+ui._MIC_CHECK.clear()
+try:
+    check("the mic allowed outside this process (told undetermined here): allowed, from a new process, no window",
+          real_states(["mic"]) == {"mic": "allowed"} and told["asked"] == 1, (real_states(["mic"]), told))
+    n = told["asked"]
+    ui.mic_access(); ui.mic_access()
+    check("  kept once known: the band's reads ask no new process", told["asked"] == n, told)
+    told["fresh"] = "undetermined"
+    check("  a start asks again, never a reading from before: undecided there too, the window asks",
+          real_states(["mic"]) == {"mic": "ask"} and told["asked"] == n + 1, (told, ui._MIC_CHECK))
+finally:
+    ui.permissions = real_perms
+    ui._MIC_CHECK.clear()
+    if real_nodev is not None:
+        os.environ["STANDBY_NO_DEVICES"] = real_nodev
 STATES = {"mic": "ask", "sound": "ask"}
 ui.setup_states = lambda steps: {k: STATES[k] for k in steps}
 asked, opened, started = [], [], []

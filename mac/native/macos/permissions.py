@@ -20,6 +20,26 @@ def mic_status():
         return None
 
 
+_FRESH = ("import AVFoundation as A; print({0: 'undetermined', 1: 'restricted', 2: 'denied', 3: 'authorized'}"
+          ".get(int(A.AVCaptureDevice.authorizationStatusForMediaType_(A.AVMediaTypeAudio))))")
+
+
+def mic_status_fresh():
+    """macOS's answer now, from a process that has never asked: this one goes on being told "undetermined"
+    after an Allow it didn't ask for itself (the ring's sound brought macOS's prompt up; the setup window then
+    opened for a mic allowed 25 s before, VM 2026-11-02). A child of Standby is Standby to macOS, as the
+    recorder is. None when it can't tell."""
+    import subprocess
+    import sys
+    try:
+        r = subprocess.run([sys.executable, "-c", _FRESH], stdin=subprocess.DEVNULL, capture_output=True,
+                           text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = (r.stdout or "").strip()
+    return out if out in ("undetermined", "restricted", "denied", "authorized") else None
+
+
 def ask_mic(answered):
     """AVFoundation's prompt, as Standby: answered(granted) on the user's choice. Only on the
     user's click (Standby's setup window)."""
