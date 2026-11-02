@@ -688,8 +688,8 @@ class VoiceSession(object):
             self.speaker.bind(self.seq)
         if hasattr(self.speaker, "open"):           # Standby's voice loads now, while the user speaks
             self.speaker.open()
-        self._write("voice")
-        self.state = "listening"
+        self._write("hold" if self.muted else "voice")      # paused while it connected: it stays paused
+        self.state = "muted" if self.muted else "listening"
         from native import qos
         self._held = qos.hold("Standby: a call's voice")      # no App Nap for the app while a call is live
         threading.Thread(target=self._run, name="voice-%s" % self.sid, daemon=True).start()
@@ -1627,7 +1627,9 @@ class VoiceSession(object):
                 self.state, self.claude = "speaking", self.speaker.current
                 got.setdefault("audio", self.speaker.started_at or time.time())
             elif q.worker.is_alive() or q.held:
-                self.state = "thinking"
+                # paused while it works out its reply (or work handed on runs): it says paused, as every surface
+                # draws it; shown as thinking, the pause looked unheard and the next click resumed (the user, 2026-11-01)
+                self.state = "muted" if self.muted else "thinking"
                 if not got["delta"] and not self.step and now - seen >= self.SLOW_ANSWER:
                     self.step = "Still waiting for Claude"      # not a dead mic: Claude has not answered yet
             if flushed and phase in ("thinking", "speaking") and not q.held and not self.speaker.busy:

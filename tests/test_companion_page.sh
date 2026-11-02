@@ -50,6 +50,13 @@ eval(require("fs").readFileSync(process.argv[2], "utf8") + `
   state = { ...state, voice: { state: "muted", muted: true } };
   c = await after();
   ok("  paused: a click goes on with the call", c.some(x => x[0] === "/api/voice" && x[1].action === "unmute" && x[1].from === "mini window"), c);
+  // Pause in every state of the call's voice (the user, 2026-11-01): thinking, handing off, connecting too
+  for (const st of ["thinking", "listening", "starting"]) {
+    state = { ...state, voice: { state: st } };
+    c = await after();
+    ok("  " + st + ": a click pauses it", c.some(x => x[0] === "/api/voice" && x[1].action === "mute" && x[1].from === "mini window")
+       && !c.some(x => x[0] === "/api/voice" && x[1].action === "start"), c);
+  }
   const bad = out.filter(x => !x[1]);
   for (const [k, v, d] of out) console.log("  " + k.padEnd(62) + (v ? "OK" : "FAIL  " + JSON.stringify(d)));
   await new Promise(r => setImmediate(r));       // a rejection about to land, before the exit

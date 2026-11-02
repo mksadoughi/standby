@@ -457,7 +457,8 @@ async function orb() {
   if (C && C.claude_error && !vs) return post({ type: "expand" });   // Claude can't be reached: Standby says why, and how
   // A click pauses the call (muted, so the user can type to Claude Code) or goes on; End is
   // deliberate, a button beside it.
-  if (vs && vs !== "starting") return mute(!(vs === "muted" || now().v.muted));
+  // any state of the call's voice, connecting too (the user, 2026-11-01): Pause is never out of reach
+  if (vs && (vs !== "starting" || VOICE.includes(now().v.state))) return mute(!(vs === "muted" || now().v.muted));
   if (vs || busy) return;
   busy = "start"; render();
   try {

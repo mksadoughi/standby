@@ -900,6 +900,30 @@ test('Connecting: after Accept, the moving dots and End, until the call is live'
   seen.more(null)
 })
 
+test('Connecting: Pause is there once the call is up, and pausing shows the call paused', async ($, on) => {
+  const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, holdPath: '/api/lite/call', waitMore: true }
+  fakeApp(on, [], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await $.tool.call({ tool: 'mcp__standby__call' } as any)
+  await settle()
+  let band = await bandOf($)
+  expect(await band.find({ key: 'mute' })).toBeUndefined()                      // no call yet: nothing to pause, End stops it
+  seen.idle = false; seen.live = { kind: 'call', session: 'c1', started: 1 }
+  seen.release(); await settle()
+  band = await bandOf($)
+  const connecting = async (b: any) => (await textOn(b, 'Connecting .')) || (await textOn(b, 'Connecting . .')) || (await textOn(b, 'Connecting . . .'))
+  expect(await connecting(band)).toBeDefined()                                  // up, the voice's hello not yet said
+  expect(await band.find({ key: 'mute' })).toBeDefined()
+  await band.press({ key: 'mute' } as any)                                      // Pause is never out of reach on a call
+  expect(seen.posts.find((p: any) => p.path === '/api/lite/mute').body).toEqual({ session: 'c1', muted: true })
+  seen.live = { ...seen.live, muted: true }                                     // the app: paused
+  seen.more([{ call: 'state', session: 'c1', phase: 'muted' }]); await settle()
+  band = await bandOf($)
+  expect(await connecting(band)).toBeUndefined()
+  expect(await textOn(band, 'Paused · on a call with Claude')).toBeDefined()
+  seen.more(null)
+})
+
 test('Connecting says why it waits: Standby opening, then the voice’s first download, and nothing once it’s ready', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [], idle: true, down: true, slowOpen: true, waitMore: true }
   mock.clock(on)

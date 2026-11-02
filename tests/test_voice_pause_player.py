@@ -88,11 +88,14 @@ def recorder():
 
 ANSWER = ["First, the cache.", "Second, the queue.", "Third, the fares.", "Fourth, the tests.", "Fifth, the end."]
 asked, cancelled = [], []
+slow = {"on": False, "go": threading.Event()}          # a reply still being worked out, until "go"
 
 
 def ask(question, on_event, on_queued, heard=None):
     asked.append(question)
     on_queued("q%d" % len(asked))
+    if slow["on"]:
+        slow["go"].wait(10)
     for s in ANSWER:                                     # the whole answer at once, as a quick voice gives it
         on_event({"kind": "delta", "text": s + " "})
     return " ".join(ANSWER)
@@ -151,9 +154,43 @@ check("  nothing of it is said again", said() == [REPORT], said())
 vs.mute(False)
 check("  unpaused: listening", wait(lambda: vs.status()["state"] == "listening", 2), vs.status())
 
+# ---------------------------------------------------------------- while it thinks (the three moving dots)
+# The pause must show at once on every surface (they draw the session's state): shown as thinking, it looked
+# unheard and the next click resumed (the user, 2026-11-01). Its reply, when it comes, is never said.
+with eng.lock:
+    eng.started = []
+slow["on"] = True
+row(turn=1, end_turn=True, text="And the fares?")
+check("a question it's still working out: thinking", wait(lambda: vs.status()["state"] == "thinking", 3), vs.status())
+vs.mute(True)
+check("  paused while it thinks: paused at once, not thinking", wait(lambda: vs.status()["state"] == "muted", 0.3)
+      and vs.status()["muted"], vs.status())
+slow["go"].set()
+check("  its reply comes and is kept unsaid; still paused", wait(lambda: vs._q is None, 3) and said() == []
+      and vs.status()["state"] == "muted", (said(), vs.status()))
+vs.mute(False)
+time.sleep(Engine.SAY)
+check("  resumed: listening, and that reply is never said", vs.status()["state"] == "listening" and said() == [],
+      (said(), vs.status()))
+slow["on"] = False
+
 on["rec"] = False
 vs.stop()
 vio.stop()
+
+# ---------------------------------------------------------------- connecting
+# Paused while the call connects (its voice not yet on): it comes up paused, the mic held, never listening.
+sdir3 = root / "sessions" / "talk-3"
+sdir3.mkdir(parents=True)
+vs3 = voice.VoiceSession("talk-3", sdir3, ask=ask, cancel=cancelled.append, speaker=voice.RecorderSpeaker(sdir3),
+                         log=logged.append)
+check("connecting: the voice says so", vs3.status()["state"] == "starting")
+vs3.mute(True)
+vs3.start()
+check("  paused while it connected: it comes up paused, the mic held",
+      vs3.status()["state"] == "muted" and (sdir3 / "dictate").read_text().split()[0] == "hold",
+      (vs3.status(), (sdir3 / "dictate").read_text() if (sdir3 / "dictate").exists() else None))
+vs3.stop()
 
 # What they'd heard at a cut: from the sound the engine played of the sentence (heard()), taken when the voice
 # ducks or stops for them, before anything is dropped; the app uses it for that sentence, else the old guess.

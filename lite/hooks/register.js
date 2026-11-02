@@ -423,6 +423,7 @@ async function mute($) {
   const live = S.st && S.st.live
   if (!live || live.kind !== 'call') return 'No call is live.'
   const r = await app($, '/api/lite/mute', { session: live.session, muted: !live.muted })
+  if (!r.error && S.starting && S.starting.voice) S.starting = null      // paused while connecting: the call's own row, paused
   await refresh($)
   return r.error || (live.muted ? 'Unmuted.' : 'Muted.')
 }
@@ -817,11 +818,13 @@ async function band($, e, next) {
   // a short line that then goes: declined, no answer, added, a start that failed
   if (S.flash) return line([...mark, fixed(S.flash.mark, S.flash.color ? { color: S.flash.color } : { dimColor: true }),
     fit(S.flash.text, S.flash.color ? {} : { dimColor: true })])
-  // connecting (or starting to listen), until it's live; End stops it
+  // connecting (or starting to listen), until it's live; End stops it. A call that's up (waiting on the voice's
+  // hello) can be paused too: Pause is never out of reach on a call (the user, 2026-11-01)
   if (S.starting && !S.ending) {
-    const call = S.starting.kind === 'call'
+    const call = S.starting.kind === 'call', up = call && S.starting.voice && live && live.kind === 'call'
     const top = line([...mark, fixed(call ? '◉' : '●', { color: call ? MARK : 'red' }), ...slow(call ? 'Connecting' : 'Starting to listen', S.starting.since),
-      ...keyset([['end', 'e', 'end', 'cancelStart']], [['end', 'End', 'cancelStart', true]])])
+      ...keyset([...(up ? [['mute', 'p', 'pause', 'mute']] : []), ['end', 'e', 'end', 'cancelStart']],
+        [...(up ? [['mute', 'Pause', 'mute', true]] : []), ['end', 'End', 'cancelStart', true]])])
     // why it's slow, when that's known, dim, under it: Standby opening, or its voice's first download
     const prep = call && S.starting.voice && S.callState && S.callState.preparing
     // or, Connecting a while on the voice's hello: the app's first call loads its voice (the user, 2026-11-01)
