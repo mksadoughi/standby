@@ -124,7 +124,16 @@ srcs = [{"kind": "mic", "name": "MacBook Pro Microphone", "ok": False, "cause": 
          "detail": "Allow Standby in System Settings > Privacy & Security > Microphone. It records by itself once allowed."},
         {"kind": "meeting", "name": "Zoom", "state": "recording"}]
 check("/api/live passes the mic's state on as it is (the meeting's own check doesn't touch it)",
-      ui.with_screen_why(srcs) == srcs, ui.with_screen_why(srcs))
+      ui.with_sound_why(srcs) == srcs, ui.with_sound_why(srcs))
+# The meeting's sound refused too, by a switch an earlier build holds: that one is marked, the mic's is still as it is
+real_why, ui.sound_why = ui.sound_why, lambda: "stale"
+try:
+    both = [srcs[0], {"kind": "meeting", "name": "", "ok": False, "cause": "permission", "reason": "not allowed"}]
+    out = ui.with_sound_why(both)
+    check("  the meeting's sound refused as well: only it is marked (stale), the mic's passed on as it is",
+          out[0] == srcs[0] and "stale" not in out[0] and out[1].get("stale") is True, out)
+finally:
+    ui.sound_why = real_why
 
 print()
 print("%d failed" % len(fails) if fails else "ALL PASS")
