@@ -392,6 +392,48 @@ def pointer(p, shapes, frame):
     return d == 0.0, d
 
 
+# A button's description, as a Mac app's tooltip: after the pointer rests on it this long, under it; gone as the
+# pointer leaves or presses (the user, 2026-11-02). The page's titles show only while Standby is the active app.
+TIP_DELAY = 0.8
+TIP_GAP = 6.0
+
+
+def tip_shapes(msg):
+    """The page's {type:"hit"} tips as [(x, y, w, h, text)] in page px (y down), [] when none."""
+    out = []
+    for t in (msg.get("tips") if isinstance(msg, dict) and isinstance(msg.get("tips"), list) else []):
+        try:
+            text = " ".join(str(t["text"]).split())[:160]
+            if text:
+                out.append((float(t["x"]), float(t["y"]), float(t["w"]), float(t["h"]), text))
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return []
+    return out
+
+
+def tip_at(p, tips, frame):
+    """(text, (x, y, w, h)) of the button under the pointer, its rect on screen (y up), or None."""
+    wx, wy, _ww, wh = frame
+    for x, y, w, h, text in tips or []:
+        sx, sy = wx + x, wy + wh - y - h
+        if sx <= p[0] <= sx + w and sy <= p[1] <= sy + h:
+            return text, (sx, sy, w, h)
+    return None
+
+
+def tip_frame(button, size, screen):
+    """Where the tooltip goes (x, y, w, h on screen, y up): centred under its button, or above it when the
+    screen ends below, and never past the screen's sides."""
+    bx, by, bw, bh = button
+    tw, th = size
+    sx, sy, sw, sh = screen
+    x = min(max(bx + bw / 2.0 - tw / 2.0, sx + 4), sx + sw - tw - 4)
+    y = by - TIP_GAP - th
+    if y < sy + 4:
+        y = by + bh + TIP_GAP
+    return (x, y, tw, th)
+
+
 def poll_every(distance):
     """How soon to read the pointer again: often when it is near, rarely when far."""
     return FAST if distance <= NEAR else SLOW

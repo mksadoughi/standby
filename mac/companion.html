@@ -264,11 +264,15 @@ function render() {
     : l ? "Talk to Claude" : "";
   // The mini window's icons, each named in its tip (the user, 2026-10-27): Hide (the user, 2026-11-01), Standby's
   // window, Visuals, Settings, then End as the red hang-up phone. A click on the mini window itself pauses and resumes.
-  const B = (label, fn, svg) => `<button title="${label}" aria-label="${label}" onclick="${fn}">${svg}</button>`;
+  // Each with a short description the panel shows on hover, as a Mac app's tooltip (the user, 2026-11-02): data-tip,
+  // not title, which WebKit shows only while Standby is the active app (the mini window never makes it so)
+  const B = (label, fn, svg, tip) => `<button data-tip="${tip || label}" aria-label="${label}" onclick="${fn}">${svg}</button>`;
   const von = !C || C.visuals_on !== false;
-  const btns = !open ? "" : B(HIDE, "hideMini()", ICON.hide) + B("Full window", "full()", ICON.window) + B(von ? "Visuals on" : "Visuals off", "visualsOnOff()", von ? ICON.vis : ICON.visoff) +
-    B("Settings", "callSettings()", ICON.gear) +
-    `<button class="hang" title="End" aria-label="End" onclick="end()"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-3.2 0-6.2.9-8.6 2.6a1.6 1.6 0 0 0-.6 1.8l.7 2a1.3 1.3 0 0 0 1.6.8l3.2-1a1.3 1.3 0 0 0 .9-1.1l.2-1.6a12 12 0 0 1 5.2 0l.2 1.6a1.3 1.3 0 0 0 .9 1.1l3.2 1a1.3 1.3 0 0 0 1.6-.8l.7-2a1.6 1.6 0 0 0-.6-1.8C18.2 9.9 15.2 9 12 9z"/></svg></button>`;
+  const btns = !open ? "" : B("Hide", "hideMini()", ICON.hide, HIDE) + B("Full window", "full()", ICON.window, "Open the call in Standby’s window") +
+    B(von ? "Visuals on" : "Visuals off", "visualsOnOff()", von ? ICON.vis : ICON.visoff,
+      von ? "Visuals are on: a picture shows when one helps. Click to turn them off" : "Visuals are off. Click to show a picture when one helps") +
+    B("Settings", "callSettings()", ICON.gear, "Settings for calls") +
+    `<button class="hang" data-tip="End the call" aria-label="End" onclick="end()"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-3.2 0-6.2.9-8.6 2.6a1.6 1.6 0 0 0-.6 1.8l.7 2a1.3 1.3 0 0 0 1.6.8l3.2-1a1.3 1.3 0 0 0 .9-1.1l.2-1.6a12 12 0 0 1 5.2 0l.2 1.6a1.3 1.3 0 0 0 .9 1.1l3.2 1a1.3 1.3 0 0 0 1.6-.8l.7-2a1.6 1.6 0 0 0-.6-1.8C18.2 9.9 15.2 9 12 9z"/></svg></button>`;
   const fl = flash ? `<span class="txt">${esc(flash)}</span>` : "";
   // on a call, the session's name and how long it has run, over the icons; the time ticks in place
   const card = !!(btns && l && l.call && !flash);
@@ -339,7 +343,12 @@ function size(el, g, c, r_, top) {
   // (where .vmk sits: its centre .35 of the orb out from the orb's, .20 and .37 behind the red dot; 28 px across)
   const wt = $("cmp").classList.contains("waiting"), dx = g * (wt ? .20 : .35), dy = g * (wt ? .37 : .35);
   const mk = C && C.visual_mark ? [{ x: cx + (r_ ? dx : -dx), y: top ? cy + dy : cy - dy, r: 14 }] : [];
-  const hit = { type: "hit", areas: [{ x: cx, y: cy, r: g / 2 }].concat(pill ? [pill] : [], mk) }, hk = JSON.stringify(hit);
+  // each button's description and where it sits, for the panel's tooltip: from the pill's own place, as the
+  // button sits in it (the roll moves the two together)
+  const cr = pill && c && c.querySelectorAll ? c.getBoundingClientRect() : null;
+  const tips = cr ? [...c.querySelectorAll("button[data-tip]")].map(b => { const r = b.getBoundingClientRect();
+    return { x: Math.round(pill.x + r.left - cr.left), y: Math.round(pill.y + r.top - cr.top), w: Math.round(r.width), h: Math.round(r.height), text: b.dataset.tip } }) : [];
+  const hit = { type: "hit", areas: [{ x: cx, y: cy, r: g / 2 }].concat(pill ? [pill] : [], mk), tips }, hk = JSON.stringify(hit);
   if (hk !== lastHit) { lastHit = hk; post(hit) }
 }
 

@@ -17,7 +17,10 @@ const mk = id => (els[id] = { id, textContent: "", innerHTML: "", hidden: false,
   addEventListener(t) { (this.on = this.on || []).push(t) }, setAttribute() {}, offsetWidth: 104, getBoundingClientRect: () => ({ width: 180, height: 44, left: 10, right: 190, top: 10, bottom: 54 }),
   get firstChild() { return this.innerHTML ? {} : null },
   // the orb's window keeps its orb and the pill's rail: each its own element here
-  querySelector(sel) { return { ".talk": els.talk, ".rail": els.rail, ".ctls": els.ctls }[sel] || els.orb } });
+  querySelector(sel) { return { ".talk": els.talk, ".rail": els.rail, ".ctls": els.ctls }[sel] || els.orb },
+  // the pill's buttons, as the page drew them, each 28 px wide in a row
+  querySelectorAll(sel) { return sel === "button[data-tip]" ? [...this.innerHTML.matchAll(/<button[^>]*data-tip="([^"]*)"/g)].map((m, i) =>
+    ({ dataset: { tip: m[1] }, getBoundingClientRect: () => ({ left: 10 + 30 * i, top: 16, width: 28, height: 28 }) })) : [] } });
 ["cmp", "says", "sp", "orb", "talk", "rail", "ctls"].forEach(mk);
 // the document's own listeners, kept so a check can fire them (a press, its release)
 global.docOn = {};
@@ -102,10 +105,17 @@ const ORB_CHECKS = `
      && last("hit").areas.length === 2, [last("orb"), last("hit")]);
   ok("  its top row: the call's session, then the icons under it", (h => h.includes('<span class="nmrow"><span class="dot"></span><span class="nm">') && h.includes('id="ctm"') && h.indexOf("nmrow") < h.indexOf('class="btns"'))(els.ctls.innerHTML)
      && els.ctls.classList.contains("card"), els.ctls.innerHTML.slice(0, 300));
-  const words = () => [...els.ctls.innerHTML.matchAll(/<button[^>]*title="([^"]*)"/g)].map(x => x[1]);
-  ok("  five icons, each named in its tip: Hide, Full window, Visuals, Settings, End (no Pause, no Mini window: a click on it pauses)", JSON.stringify(words()) === '["Hide the window. The call goes on","Full window","Visuals on","Settings","End"]'
+  const words = () => [...els.ctls.innerHTML.matchAll(/<button[^>]*aria-label="([^"]*)"/g)].map(x => x[1]);
+  const tipsOf = () => [...els.ctls.innerHTML.matchAll(/<button[^>]*data-tip="([^"]*)"/g)].map(x => x[1]);
+  ok("  five icons, each named: Hide, Full window, Visuals, Settings, End (no Pause, no Mini window: a click on it pauses)", JSON.stringify(words()) === '["Hide","Full window","Visuals on","Settings","End"]'
      && !/<button[^>]*>[A-Za-z]/.test(els.ctls.innerHTML) && !shown().includes("More"), words());
-  ok("  End is the red hang-up phone, its word in the tip", els.ctls.innerHTML.includes('<button class="hang" title="End" aria-label="End" onclick="end()"><svg'), els.ctls.innerHTML);
+  ok("  each with what it does, for the panel's tooltip (no title: WebKit shows one only while Standby is active)",
+     JSON.stringify(tipsOf()) === JSON.stringify(["Hide the window. The call goes on", "Open the call in Standby\u2019s window",
+       "Visuals are on: a picture shows when one helps. Click to turn them off", "Settings for calls", "End the call"])
+     && !/<button[^>]*title=/.test(els.ctls.innerHTML), tipsOf());
+  ok("  the panel told each button's place and words with its hit shapes", (h => Array.isArray(h.tips) && h.tips.length === 5
+     && h.tips[4].text === "End the call" && h.tips.every(t => t.w > 0 && t.h > 0))(last("hit")), last("hit"));
+  ok("  End is the red hang-up phone, its word in the tip", els.ctls.innerHTML.includes('<button class="hang" data-tip="End the call" aria-label="End" onclick="end()"><svg'), els.ctls.innerHTML);
   ok("  the pill's glass runs on under the orb to its centre (its inner end hidden): it slides out of the mini window",
      (m => m.glass && m.glass.x + m.glass.w === m.w - 12 - m.glyph / 2)(last("orb")), last("orb"));
   posts = []; callSettings();

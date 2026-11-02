@@ -322,6 +322,59 @@ def _mouse():
     return p.x, p.y
 
 
+class Tip(object):
+    """A button's description over the mini window, drawn as macOS draws a tooltip (its material, its font),
+    in a window of its own: the mini window is too small for it, and never makes Standby the active app, so
+    the page's own titles never show. It takes no mouse."""
+
+    def __init__(self, level):
+        self.text, self.panel = None, None
+        self.level = level
+
+    def _build(self):
+        p = AppKit.NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
+            Foundation.NSMakeRect(0, 0, 10, 10),
+            AppKit.NSWindowStyleMaskBorderless | AppKit.NSWindowStyleMaskNonactivatingPanel, AppKit.NSBackingStoreBuffered, False)
+        p.setLevel_(self.level + 1)
+        p.setCollectionBehavior_(EVERYWHERE)
+        p.setOpaque_(False)
+        p.setBackgroundColor_(AppKit.NSColor.clearColor())
+        p.setHasShadow_(True)
+        p.setIgnoresMouseEvents_(True)
+        p.setHidesOnDeactivate_(False)
+        p.setReleasedWhenClosed_(False)
+        back = AppKit.NSVisualEffectView.alloc().initWithFrame_(Foundation.NSMakeRect(0, 0, 10, 10))
+        back.setMaterial_(getattr(AppKit, "NSVisualEffectMaterialToolTip", 17))
+        back.setState_(AppKit.NSVisualEffectStateActive)
+        back.setWantsLayer_(True)
+        back.layer().setCornerRadius_(5.0)
+        back.layer().setMasksToBounds_(True)
+        label = AppKit.NSTextField.labelWithString_("")
+        label.setFont_(AppKit.NSFont.toolTipsFontOfSize_(0))
+        label.setTextColor_(AppKit.NSColor.labelColor())
+        back.addSubview_(label)
+        p.setContentView_(back)
+        self.panel, self.label = p, label
+
+    def show(self, text, button, screen):
+        if self.panel is None:
+            self._build()
+        if text != self.text:
+            self.label.setStringValue_(text)
+        self.text = text
+        fit = self.label.fittingSize()
+        w, h = min(float(fit.width), 320.0) + 14.0, float(fit.height) + 6.0
+        self.label.setFrame_(Foundation.NSMakeRect(7, 3, w - 14, h - 6))
+        x, y, w, h = rules.tip_frame(button, (w, h), screen)
+        self.panel.setFrame_display_(Foundation.NSMakeRect(x, y, w, h), True)
+        self.panel.orderFrontRegardless()
+
+    def hide(self):
+        if self.panel is not None and self.panel.isVisible():
+            self.panel.orderOut_(None)
+        self.text = None
+
+
 def plain(body):
     """A script message (a JS object) as plain Python. It arrives as NSDictionary,
     NSNumber and NSNull, which json.dumps cannot write back to the page: through
@@ -365,7 +418,7 @@ class Companion(object):
     orb goes when the orb is moved to frame. on_message(dict) gets what the
     page posts that this class does not handle."""
     parent, glyph, glass, follow, _moving = None, None, FILL, None, 0
-    inset, hit, _hovering, _polling, _poll_gen = None, None, False, 0, 0
+    inset, hit, tips, _hovering, _polling, _poll_gen = None, None, None, False, 0, 0
     under, _glass_gen = None, 0
 
     def __init__(self, url=None, html=None, size=(180, 44), level="status", material="auto",
@@ -380,6 +433,7 @@ class Companion(object):
         self.log = log or (lambda e: None)
         self.corner = None
         self.behaviour, self.spaces, self.reported, self.missed = EVERYWHERE, 0, -1, False
+        self._tip, self._tip_state = Tip(LEVELS[level]), {"text": None, "since": 0.0, "done": False}
         rect = Foundation.NSMakeRect(0, 0, size[0], size[1])
         self.panel = CompanionPanel.alloc().initWithContentRect_styleMask_backing_defer_(
             rect, AppKit.NSWindowStyleMaskBorderless | AppKit.NSWindowStyleMaskNonactivatingPanel,
@@ -525,6 +579,7 @@ class Companion(object):
                          glass_seconds=_seconds(m, GROW), under=under if isinstance(under, dict) else None)
         elif kind == "hit":
             self.hit = rules.hit_shapes(m)        # None (null, or malformed): the whole window again
+            self.tips = rules.tip_shapes(m)
             self._pointer_tick()                  # once, now: the shapes just changed
         else:
             self.on_message(m)
@@ -621,6 +676,7 @@ class Companion(object):
     def hide(self):
         self.detach()
         self._polling = 0                       # any reading still due finds it stale, and stops
+        self._tip_hide()
         if self.panel.isVisible():
             self.panel.orderOut_(None)
 
@@ -634,6 +690,8 @@ class Companion(object):
         if gen is not None and (gen != self._polling or not self.panel.isVisible()):
             if gen == self._polling:
                 self._polling = 0
+            if not self.panel.isVisible():
+                self._tip_hide()
             return
         frame = _tuple(self.panel.frame())
         shapes = rules.hit_on_screen(self.hit, frame) if self.hit else None
@@ -645,8 +703,31 @@ class Companion(object):
         if inside != self._hovering and not pressed:
             self._hovering = inside
             self.call("hover", inside)
+        self._tip_tick(frame, pressed)
         if gen is not None:
             self.later(rules.poll_every(distance), lambda: self._pointer_tick(gen=gen))
+
+    def _tip_tick(self, frame, pressed):
+        """A button's description once the pointer has rested on it TIP_DELAY s; gone as it leaves, and on a
+        press, until the pointer moves to another button."""
+        st = self._tip_state
+        at = rules.tip_at(_mouse(), self.tips, frame) if self.tips else None
+        text = at[0] if at else None
+        if text != st["text"]:
+            st.update(text=text, since=time.time(), done=False)
+            self._tip_hide()
+        if text is None or st["done"]:
+            return
+        if pressed:
+            st["done"] = True                       # a click: as a Mac app, the tip goes, not to come back on it
+            self._tip_hide()
+        elif time.time() - st["since"] >= rules.TIP_DELAY and self._tip.text != text:
+            screen = self.panel.screen() or AppKit.NSScreen.mainScreen()
+            self._tip.show(text, at[1], _tuple(screen.visibleFrame()))
+
+    def _tip_hide(self):
+        if self._tip.text is not None:
+            self._tip.hide()
 
     def attach(self):
         """A child window (the words): from now on AppKit moves it, and hides it,

@@ -108,6 +108,7 @@ test_talk_over_note        py    par
 test_utterance             py    par  
 test_addmac                py    par  
 test_companion_rules       py    par  
+test_companion_tips        py    par
 test_setup                 py    par  
 test_config_writers        py    par
 test_port                  py    par
