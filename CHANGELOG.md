@@ -24,6 +24,10 @@ too.
   while more wait. Command-C and Command-A work inside a card.
 - **The voice's model.** Settings > Voice lets you pick the model (Haiku, Sonnet or Opus) and how much it thinks, and
   says when the model you chose isn't available and what runs instead. A model you saved stays yours.
+- **What opens when a call starts.** Settings > General picks the mini window (the default), the full window or
+  nothing.
+- **Hide.** The first button in the mini window's row puts it away for that call while the call goes on. It comes
+  back from the band, from /standby window, or when the voice shows you something.
 - **A meeting that ends outside Claude Code.** Your session is told, once.
 - **The website.** A new hero and film: a call about a landing page that changes as you talk, then a meeting about
   its launch. The site reads better on phones. It counts visits with GoatCounter, which uses no cookies and keeps no
@@ -38,15 +42,19 @@ too.
 - **The voice runs on Sonnet at High thinking** by default.
 - **The voice knows how long ago** each task was asked or finished, and says it the way a person would.
 - **A call opens with a short hello,** nothing more. Its voice starts fresh each time, from your session's summary.
+- **Connecting** that takes more than a few seconds says why.
 - **Calls speak in Alba** by default. A voice you chose stays yours.
 - **The orb and the band say what's going on.** While the session works on something you handed over, the orb shows
   it, with "Working on it" as its tip. The band says what the session is working on, and names the session the call
   is with ("On a call with Planner").
-- **The mini window.** A call put away waits in the mini window (it was called the orb). The orb shows the call's
+- **The mini window.** A call opens in the mini window by itself (before, nothing opened), and a call put away
+  waits there (it was called the orb). The orb shows the call's
   state by its motion, and the call's name and its buttons roll out when you point at it, in words: Pause (Resume,
   with a bell when something is waiting for you), End, Full window, and Mini window, the one you're in. It follows
   you to another display. Standby's window is an ordinary window now: other apps can go in front of it.
-- **Settings** opens in its own window. Settings > Usage shows input and output tokens separately.
+- **Settings** opens in its own window and is organised by what you set, as in System Settings: General, Voice,
+  Sound, Meetings, Dictation, Permissions and Usage (before: Call, Recording, Dictation, Permissions and Usage).
+  Settings > Usage shows input and output tokens separately.
 - **A meeting's sound** comes through macOS's System Audio Recording permission only. Standby never asks for screen
   recording.
 - **Your folders.** macOS never asks Standby for your Documents or project folders: a call's Claude Code is started
@@ -70,6 +78,8 @@ too.
   came back at once. If a task ends with nothing to tell, the voice says so.
 - **The voice no longer hears itself,** and background noise, outdoors or in the room, no longer counts as you
   talking. Words you start just as the voice finishes are kept.
+- **The voice keeps going when you switch mics or headphones,** and headphones you plug in are used straight away.
+- **A noise at a call's start** no longer cuts its hello.
 - **The voice says decimals** with their point.
 - **A call ends when the Claude Code it's with quits,** and a long pause no longer ends a call.
 - **Calls leave no extra conversations** in your Claude Code session list.
