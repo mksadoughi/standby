@@ -314,7 +314,8 @@ esac
 # The apps, and Claude Code's plugin, run their own copy of the code, never this checkout (mac/codecopy.py):
 # with it in ~/Documents or ~/Desktop, a rebuild cost the apps that folder (calls failed: "Operation not
 # permitted"), and every Claude Code started, Standby's own included, read the plugin there at startup, so
-# macOS asked Standby for Documents. `standby`, run from this checkout, keeps the copy up to date.
+# macOS asked Standby for Documents. `standby`, run from this checkout, keeps the copy up to date. The call
+# sounds are made there too (mac/callsounds.py, numpy only, as the icons are), and only when they aren't right.
 "$VENV/bin/python" "$REPO/mac/codecopy.py" --install "$ROOT/code" >/dev/null || warn "could not copy Standby's code to $ROOT/code"
 
 say "Claude Code plugin"

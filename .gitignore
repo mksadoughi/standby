@@ -13,3 +13,5 @@ node_modules/
 .claude/
 lite/tsconfig.json
 lite/.claude-plugin/types/
+# The call sounds: made in the apps' copy of the code (mac/callsounds.py), never committed
+mac/sounds/

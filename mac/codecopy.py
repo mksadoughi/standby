@@ -7,10 +7,12 @@ to ~/.standby/code and the apps run from there; everything they start runs from 
 
 Only the checkout it was installed from updates the copy (a teammate's worktree or a test never does): the
 `standby` command, run from that checkout, brings it up to date first, writing only what changed (by size
-and time), so Standby Dictation's CodeWatch restarts into a merge as before.
+and time), so Standby Dictation's CodeWatch restarts into a merge as before. The call sounds are made here,
+in the copy, never kept in the checkout (mac/callsounds.py: the repository holds no audio).
 
     python codecopy.py --install DEST     (install.sh: this checkout becomes the source)
 """
+import importlib.util
 import os
 import sys
 from pathlib import Path
@@ -30,6 +32,20 @@ def source(dest=CODE):
         return None
 
 
+def _sounds(src):
+    """The checkout's mac/callsounds.py, loaded, or None (none there, or it won't load)."""
+    path = Path(src) / "mac" / "callsounds.py"
+    if not path.is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("standby_callsounds", str(path))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
 def sync(src=None, dest=CODE, install=False):
     """Bring `dest` up to date with PARTS of the checkout `src`: only what changed is written (with its
     source's time, so unchanged files are never read again), what's gone is removed. Unless `install`,
@@ -40,6 +56,8 @@ def sync(src=None, dest=CODE, install=False):
     if not install and source(dest) != str(src):
         return []
     changed = []
+    sounds = _sounds(src)
+    made = {Path("mac", "sounds", name + ".wav") for name in sounds.SHA256} if sounds else set()   # the copy's own
     for part in PARTS:
         have = set()
         for d, dirs, files in os.walk(src / part):
@@ -70,9 +88,11 @@ def sync(src=None, dest=CODE, install=False):
             dirs[:] = [x for x in dirs if x not in SKIP]
             for name in files:
                 rel = (Path(d) / name).relative_to(dest)
-                if rel not in have and not name.endswith(".pyc"):
+                if rel not in have and rel not in made and not name.endswith(".pyc"):
                     os.remove(Path(d) / name)
                     changed.append(str(rel))
+    if sounds:                        # made only when missing or not as they should be: a look, most times
+        changed += ["mac/sounds/" + name for name in sounds.ensure(str(dest / "mac" / "sounds"))]
     if install:
         dest.mkdir(parents=True, exist_ok=True)
         (dest / SOURCE).write_text(str(src) + "\n")

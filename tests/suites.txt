@@ -122,6 +122,7 @@ test_core_audio_speed      py    full   # a measurement of this Mac's Core Audio
 test_watchdog              py    par
 test_agent_models          py    par
 test_lite_call             py    par
+test_call_sounds           py    par
 test_firstuse              py    par
 test_permissions           py    par
 test_visuals               py    par

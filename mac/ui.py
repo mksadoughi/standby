@@ -58,6 +58,7 @@ import firstuse  # noqa: E402  (the setup window before a first call or meeting)
 import forget  # noqa: E402  (a session gone for good: the window's delete and `standby purge`)
 import watchdog  # noqa: E402  (a freeze leaves its stack in ui.log)
 from native import qos  # noqa: E402  (a call's threads ahead of a busy Mac's other work)
+from native import sound  # noqa: E402  (the call sounds, on the system output)
 from calltrace import trace  # noqa: E402  (a call's trace.jsonl: hand-offs, pauses)
 import calltrace  # noqa: E402
 calltrace.source("app")
@@ -589,7 +590,8 @@ def drop_chat_row(sid, row, text=None):
 TALK_OVER_MIC = "Needs the Mac's default microphone (Settings > Sound)"
 DEFAULTS = {"push_lines": 10, "speakers": True, "capture": "auto",
             "remember_voices": True, "lite_transcript": "ask",
-            "auto_stop_min": 15, "auto_accept": False, "call_visuals": True, "call_opens": "mini"}
+            "auto_stop_min": 15, "auto_accept": False, "call_visuals": True, "call_opens": "mini",
+            "call_sounds": True}
 CALL_OPENS = ("mini", "full", "nothing")   # what opens as a call starts: the mini window, Standby's window, or neither
 VOICE_EFFORTS = ("auto", "low", "medium", "high")   # the voice's thinking (Settings > Voice); auto: Claude Code's own
 VOICE_EFFORT_DEFAULT = "high"   # Sonnet's best, explicit: never silently Claude Code's own (the user, 2026-11-01)
@@ -693,6 +695,7 @@ def get_settings():
             # a call's visual card: off, the voice is never asked for one and nothing is made (standby-agent reads it)
             "call_visuals": bool(cfg.get("call_visuals", DEFAULTS["call_visuals"])),
             "call_opens": cfg.get("call_opens") if cfg.get("call_opens") in CALL_OPENS else DEFAULTS["call_opens"],
+            "call_sounds": bool(cfg.get("call_sounds", DEFAULTS["call_sounds"])),     # Settings > Sound (call_sound)
             "lite_transcript": cfg.get("lite_transcript") if cfg.get("lite_transcript") in LITE_PASSES else DEFAULTS["lite_transcript"],
             "auto_stop_min": _auto_stop_min(cfg),
             "voices": sorted(read_json(VOICES).get("voices", {})),
@@ -876,6 +879,8 @@ def set_settings(b):
                 cfg["call_visuals"] = bool(b["call_visuals"])
             if b.get("call_opens") in CALL_OPENS:
                 cfg["call_opens"] = b["call_opens"]
+            if "call_sounds" in b:
+                cfg["call_sounds"] = bool(b["call_sounds"])
             if b.get("lite_transcript") in LITE_PASSES:
                 cfg["lite_transcript"] = b["lite_transcript"]
             if "auto_stop_min" in b:
@@ -945,6 +950,8 @@ def _named_settings():
          list(CALL_OPENS), "call_opens"),
         ("auto_accept", "Claude starts calls and listening without asking", onoff(st["auto_accept"]), list(ON_OFF), "auto_accept"),
         ("visuals", "a small card showing what goes with what the voice says, on calls", onoff(st["call_visuals"]), list(ON_OFF), "call_visuals"),
+        ("call_sounds", "a soft sound when a call rings, starts or ends, and when something arrives off a call",
+         onoff(st["call_sounds"]), list(ON_OFF), "call_sounds"),
         ("ai_update", "sentences between the meeting agent's updates", str(st["push_lines"]), ["1 to 200"], "push_lines"),
         ("auto_stop", "minutes with nothing said before a meeting stops itself (0: never)", str(st["auto_stop_min"]),
          ["0 to %d" % AUTO_STOP_MAX], "auto_stop_min"),
@@ -1815,6 +1822,7 @@ def mac_end(sid, now=None, background=True):
     def card():
         try:
             mac_card(sid)
+            call_sound("message")                 # its summary is there
         except Exception as exc:
             log("mac: %s's card: %r" % (sid, exc))
     if background:
@@ -3591,6 +3599,7 @@ def lite_call(b):
     if dirs:
         voice["dirs"] = dirs
     lite_gist_refresh(cc, then=lambda text: fresh.update(text=text))
+    call_sound("connecting")
     r = start_talk(workspace=folder, where="local", voice=voice)
     if r.get("error"):
         return r
@@ -3629,6 +3638,25 @@ def call_opens(cc, sid):
         if r.get("error"):
             log("call start: Standby's window didn't open: %s" % r["error"])
     log("call start: %s" % {"mini": "the mini window", "full": "Standby's window", "nothing": "nothing opens"}[what])
+
+
+CALL_SOUNDS = Path(__file__).resolve().parent / "sounds"     # made in the apps' copy of the code (callsounds.py)
+QUITTING = threading.Event()                   # Quit: a call it stops ends with no sound, the app is going
+
+
+def call_sound(moment):
+    """Settings > Sound, "Call sounds": a soft sound at a call's edges, once, on the system output. incoming
+    (Claude asks to call), connecting (before the recorder opens the mic, seconds later), ending (once the call
+    has stopped, after its last word) and message (something arrived off a call: a meeting's summary, Claude
+    asking to listen). Never while a call or meeting is live, so the mic and its echo cancelling never hear one.
+    Not made (a checkout never installed): no sound."""
+    if not get_settings()["call_sounds"] or QUITTING.is_set():
+        return
+    if moment != "ending" and live_session():
+        return
+    path = CALL_SOUNDS / (moment + ".wav")
+    if path.is_file() and sound.play(str(path)):
+        log("call sound: %s" % moment)
 
 
 def _lite_watch(sid):
@@ -4345,6 +4373,7 @@ def lite_ended(sid):
     _lite_out(c["cc"], {"call": "note", "session": sid, "text": LITE_CALL_NOTE_END})
     _lite_out(c["cc"], {"call": "state", "session": sid, "phase": "ended"})
     log("lite: call %s ended" % sid)
+    call_sound("ending")
 
 
 def lite_mute(b):
@@ -5123,6 +5152,7 @@ def lite_incoming(b):
     with _INCOMING_LOCK:
         INCOMING[r["id"]] = r
     log("lite: Claude asks to start a %s (%s): the band asks the user" % (kind, r["id"]))
+    call_sound("incoming" if kind == "call" else "message")      # a call rings; listening asks quietly
     return {"id": r["id"]}
 
 
@@ -5750,6 +5780,7 @@ class CompanionHooks(object):
 
     def stop_all(self):
         """Quit (asked first while a meeting records): nothing records once Standby is gone."""
+        QUITTING.set()
         stop_voice()
         if live_session():
             log("quit while recording: stopping the recording")
@@ -7309,7 +7340,7 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
   <nav class="setnav" id="setnav">
     <button type="button" data-p="general" onclick="setPane('general')"><span class="t"><b>General</b><small>What opens on a call, visuals, asking first</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="voice" onclick="setPane('voice')"><span class="t"><b>Voice</b><small>Who speaks, its model, how much it thinks</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-    <button type="button" data-p="sound" onclick="setPane('sound')"><span class="t"><b>Sound</b><small>Microphone, what's recorded, talking over Claude</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button type="button" data-p="sound" onclick="setPane('sound')"><span class="t"><b>Sound</b><small>Microphone, what's recorded, talking over Claude, call sounds</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="meetings" onclick="setPane('meetings')"><span class="t"><b>Meetings</b><small>The transcript, and what Claude gets</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="dictation" onclick="setPane('dictation')"><span class="t"><b>Dictation</b><small>Dictation in any app, its shortcut, word fixes</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="permissions" onclick="setPane('permissions')"><span class="t"><b>Permissions</b><small>What macOS lets Standby use, and fixing it</small></span><span class="pneed" id="permneed" hidden></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
@@ -7345,6 +7376,8 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
         </div>
       <div class="field"><label class="tgl"><input type="checkbox" id="s_talkover" data-save> Let me talk over Claude<span class="mx-help" tabindex="0" title="Echo cancelling, for laptop speakers; not needed with headphones." aria-label="About talking over Claude" onclick="event.preventDefault()"></span></label>
         <div class="hint fine" id="s_talkovernote" hidden></div></div>
+      <div class="field"><label class="tgl"><input type="checkbox" id="s_callsounds" data-save> Call sounds</label>
+        <div class="hint">A soft sound when a call rings, starts or ends, and when something arrives off a call.</div></div>
       <div class="field"><button type="button" class="btn" id="micbtn" onclick="micTest()">Test recording</button>
         <div id="mictest" class="checks"></div></div>
     </div></div>
@@ -7722,7 +7755,7 @@ async function showSettings(pane){const r=await api("/api/settings"),s=r.setting
   $("s_vmodel").value=s.voice_model||"sonnet";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"high",true);setOpens(s.call_opens||"mini",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
   $("s_remember").checked=!!s.remember_voices;
   // Talking over Claude (the duplex engine): from the next voice mode; a quiet line when the mic chosen can't
-  $("s_autoaccept").checked=!!s.auto_accept;$("s_visuals").checked=s.call_visuals!==false;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}
+  $("s_autoaccept").checked=!!s.auto_accept;$("s_visuals").checked=s.call_visuals!==false;$("s_callsounds").checked=s.call_sounds!==false;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}
   MYVOICE=s.my_voice;paintMyVoice();
   $("s_voices").innerHTML=s.voices.length?s.voices.map(esc).join(", ")+' \u00b7 <a href="#" onclick="event.preventDefault();forgetVoices()">Forget all</a>':"No remembered voices yet";$("mictest").innerHTML="";
   api("/api/prompt").then(p=>{if(!p.error)$("s_prompt").textContent=p.custom?"Customized instructions.":"Default instructions."}).catch(()=>{});
@@ -7747,7 +7780,7 @@ function watchModel(){loadModels();
 function markModels(off){["s_vmodel"].forEach(id=>{for(const o of $(id).options){o.dataset.label=o.dataset.label||o.textContent;
   o.disabled=off.includes(o.value);o.textContent=o.disabled?o.dataset.label.split(" (")[0]+" (not available)":o.dataset.label}})}
 function formSettings(){return {voice_model:$("s_vmodel").value,voice_effort:$("s_veffort").value,voice_effort:$("s_veffort").value,
-  push_lines:$("s_push").value,lite_transcript:$("s_litepass").value,speakers:$("s_speakers").checked,remember_voices:$("s_remember").checked,talk_over:$("s_talkover").checked,auto_accept:$("s_autoaccept").checked,call_visuals:$("s_visuals").checked,call_opens:$("s_opens").value||"mini",capture:$("s_capture").value,mic_device:$("s_mic").value,
+  push_lines:$("s_push").value,lite_transcript:$("s_litepass").value,speakers:$("s_speakers").checked,remember_voices:$("s_remember").checked,talk_over:$("s_talkover").checked,auto_accept:$("s_autoaccept").checked,call_visuals:$("s_visuals").checked,call_sounds:$("s_callsounds").checked,call_opens:$("s_opens").value||"mini",capture:$("s_capture").value,mic_device:$("s_mic").value,
   speech_model:SPEECHSET?($("s_speech").value||undefined):undefined,english_only:$("s_english").checked}}
 let VOICES=null;
 const Q={premium:"Premium",enhanced:"Enhanced",standard:"Standard"};

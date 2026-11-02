@@ -128,7 +128,7 @@ panes = dict(re.findall(r'<div class="pane(?: on)?" data-p="(\w+)">(.*?)(?=<div 
                         settings_page, re.S))
 order = lambda body, ids: [i for i in ids if 'id="%s"' % i in body]
 HOLDS = {"general": ["s_opens", "s_visuals", "s_autoaccept"], "voice": ["s_voice", "s_vmodel", "s_veffort"],
-         "sound": ["s_mic", "s_capture", "s_talkover", "micbtn"],
+         "sound": ["s_mic", "s_capture", "s_talkover", "s_callsounds", "micbtn"],
          "meetings": ["s_speech", "s_english", "s_speakers", "s_remember", "s_litepass", "s_push", "s_prompt"]}
 every = sum(HOLDS.values(), [])
 for name, ids in HOLDS.items():
