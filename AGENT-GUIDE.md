@@ -217,7 +217,7 @@ Settings > Usage in Standby's window shows what Standby's own models used, by mo
 | The other side of a call is missing | System Settings > Privacy & Security > Screen & System Audio Recording, under System Audio Recording Only: allow Standby |
 | "Claude can't sign in" | Run `claude`, then `/login` (or check the API key or cloud credentials Claude Code uses) |
 | "Your Mac is with …: stop it there first" | Another recording is running; stop it first |
-| The voice isn't ready | Standby's voice downloads the first time a call starts (about 240 MB); wait a minute, or try it in Standby's Settings > Call > Voice > Try |
+| The voice isn't ready | Standby's voice downloads the first time a call starts (about 240 MB); wait a minute, or try it in Standby's Settings > Voice > Try |
 | Dictation does nothing | `standby dictation` lists what's missing; the menu-bar icon has a button for each |
 | Anything else | `standby check`, `standby status`, and the logs: `~/.standby/ui.log`, `~/.standby/daemon.log`, `~/.standby/dictation.log` |
 
@@ -254,7 +254,7 @@ Then, if the user wants everything gone:
   <session>` deletes one.
 - `~/.standby/config.json` settings; `~/.standby/agent/usage.jsonl` usage counts (no meeting text).
 - Voice prints, on the Mac only: the voices the user names, and the user's own voice, which Standby learns from calls
-  to tell them apart (setting `remember_voices`; Settings > Recording has Forget for the user's voice and for all).
+  to tell them apart (setting `remember_voices`; Settings > Meetings has Forget for the user's voice and for all).
 - Standalone dictation isn't kept as a session. When it uses a running recorder, temporary audio and text files
   can remain after an interruption. Dictated questions within a meeting or call stay in that session.
 - Routine logs omit conversation text. Opt-in debug call traces contain words and replies in the session's folder.

@@ -46,7 +46,7 @@ check("  by name from Claude Code: visuals, on or off", named["visuals"]["value"
       and ui.set_named("visuals", "off")["value"] == "off" and ui.get_settings()["call_visuals"] is False
       and ui.set_named("visuals", "on")["value"] == "on", named.get("visuals"))
 page = ui.PAGE
-check("  the switch in Settings > Call, saved with the rest", 'id="s_visuals" data-save' in page and "call_visuals:$(\"s_visuals\").checked" in page
+check("  the switch in Settings > General, saved with the rest", 'id="s_visuals" data-save' in page and "call_visuals:$(\"s_visuals\").checked" in page
       and "Show visuals during calls" in page)
 
 print("the spool into the call")

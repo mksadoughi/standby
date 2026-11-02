@@ -1,4 +1,4 @@
-"""The voice's thinking (Settings > Call, "Thinking"): --effort on the voice's Claude Code only, from config.json
+"""The voice's thinking (Settings > Voice, "Thinking"): --effort on the voice's Claude Code only, from config.json
 agent.voice_effort, read once a call and kept for its turns and forks alike (a change mid-call would miss the prompt
 cache); unset, high (Sonnet's best, passed explicitly, never Claude Code's own by default); "auto", no --effort, as
 Claude Code is set; never on the meeting agent; never where this Claude Code has no

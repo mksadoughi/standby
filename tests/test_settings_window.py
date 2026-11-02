@@ -1,6 +1,6 @@
 """Settings in a window of its own: one, made the first time it's opened, brought to the front after,
 hidden (never destroyed) when it's closed, where it was left; the mini window's Settings opens it on the
-Call section and leaves the call where it is. pywebview and the window calls are fakes: nothing is shown."""
+General section and leaves the call where it is. pywebview and the window calls are fakes: nothing is shown."""
 import agentpath  # noqa: E402,F401  (first: never the real ~/.standby, see agentpath.guard)
 import os, sys, tempfile, threading, types
 from pathlib import Path
@@ -60,10 +60,10 @@ def from_a_thread(fn, *a):
 check("no app window (Standby without one): Settings says so, opens nothing",
       from_a_thread(ui.open_settings_window).get("error") and not made)
 ui.APP_WINDOW["win"] = FakeWindow("Standby", "/")
-r = from_a_thread(ui.open_settings_window, "call")
-check("the first open makes the one Settings window, on the Call section",
+r = from_a_thread(ui.open_settings_window, "general")
+check("the first open makes the one Settings window, on the General section",
       r == {"ok": True} and len(made) == 1 and made[0].title == "Standby Settings"
-      and made[0].url.startswith("http://127.0.0.1:%d/settings?token=%s" % (ui.PORT, ui.TOKEN)) and made[0].url.endswith("&pane=call"), (r, made))
+      and made[0].url.startswith("http://127.0.0.1:%d/settings?token=%s" % (ui.PORT, ui.TOKEN)) and made[0].url.endswith("&pane=general"), (r, made))
 win = made[0]
 check("  as wide as the main window, a little shorter, never too small to lay out",
       (win.kw["width"], win.kw["height"], win.kw["min_size"]) == (500, 640, (400, 480)), win.kw)
@@ -76,8 +76,10 @@ r = from_a_thread(ui.open_settings_window)
 check("a second open: no copy, the same window in front, at the list, its values fresh",
       r == {"ok": True} and len(made) == 1 and win.shown == 1 and fronted[-1] is win.native and win.js[-1] == "showSettings(null)",
       (r, len(made), win.shown, win.js))
+from_a_thread(ui.open_settings_window, "general")
+check("  from the mini window again: on the General section", win.js[-1] == 'showSettings("general")', win.js)
 from_a_thread(ui.open_settings_window, "call")
-check("  from the mini window again: on the Call section", win.js[-1] == 'showSettings("call")', win.js)
+check("  an old section's name (Call, before General): the list", win.js[-1] == "showSettings(null)", win.js)
 from_a_thread(ui.open_settings_window, "../../etc")
 check("  a section it doesn't have: the list", win.js[-1] == "showSettings(null)", win.js)
 
@@ -85,7 +87,7 @@ done = threading.Event()
 real_open = ui.open_settings_window
 ui.open_settings_window = lambda pane=None: (done.set(), real_open(pane))[1]
 try:
-    r = ui.CompanionHooks().open_settings("call")
+    r = ui.CompanionHooks().open_settings("general")
 finally:
     ui.open_settings_window = real_open
 check("the mini window's Settings (from the main thread): the Settings window, never the main one",
@@ -115,6 +117,30 @@ check("  in the window, the list has no Back and Esc stays (closing is the windo
       '$("setback").style.display=SETWIN?"none":""' in page and "else if(!SETWIN)settings.close()" in page and "if(SP" in page)
 check("every way in goes through openSettings: the window first, the page's dialog only without it",
       "pywebview.api.open_settings(" in page and "return showSettings(pane)}" in page)
+
+# The areas, named for what you set (General first, as in System Settings), and what each holds, in order
+import re
+nav = re.findall(r'<nav class="setnav".*?</nav>', settings_page, re.S)[0]
+check("Settings' list: General, Voice, Sound, Meetings, Dictation, Permissions, Usage, as the page's panes are named",
+      re.findall(r'data-p="(\w+)" onclick', nav) == list(ui.SETTINGS_PANES)
+      == ["general", "voice", "sound", "meetings", "dictation", "permissions", "usage"], re.findall(r'data-p="(\w+)" onclick', nav))
+panes = dict(re.findall(r'<div class="pane(?: on)?" data-p="(\w+)">(.*?)(?=<div class="pane(?: on)?" data-p=|<div class="err" id="serr")',
+                        settings_page, re.S))
+order = lambda body, ids: [i for i in ids if 'id="%s"' % i in body]
+HOLDS = {"general": ["s_opens", "s_visuals", "s_autoaccept"], "voice": ["s_voice", "s_vmodel", "s_veffort"],
+         "sound": ["s_mic", "s_capture", "s_talkover", "micbtn"],
+         "meetings": ["s_speech", "s_english", "s_speakers", "s_remember", "s_litepass", "s_push", "s_prompt"]}
+every = sum(HOLDS.values(), [])
+for name, ids in HOLDS.items():
+    body = panes.get(name, "")
+    check("  %s holds %s, in that order, and nothing of another's" % (name, ", ".join(ids)),
+          order(body, every) == ids and [i for i in every if 'id="%s"' % i in body] == ids,
+          [i for i in every if 'id="%s"' % i in body])
+check("  General opens first; one-section panes have no heading; Meetings' two are headed",
+      '<div class="pane on" data-p="general">' in settings_page and "<h4>" not in panes["general"] + panes["voice"] + panes["sound"]
+      and re.findall(r"<h4>([^<]*)</h4>", panes["meetings"]) == ["Transcript", "What Claude gets"])
+check("  the headings sit on their rows, and sections are parted by space, not a line",
+      ".pane .sec>h4{margin:0}.pane .sec>h4+.field{padding-top:8px}.pane .sec+.sec{margin-top:26px}" in settings_page)
 
 if fails:
     print("FAILURES: %s" % fails)

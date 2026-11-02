@@ -565,7 +565,7 @@ class Engine(threading.Thread):
 
     @staticmethod
     def chosen():
-        """Settings > Speech, as it is now: each load reads it, so a new choice
+        """Settings > Meetings, Speech model, as it is now: each load reads it, so a new choice
         is used from the next dictation that loads the model."""
         import speechmodel
         return speechmodel.for_load(config.load_config(), log)
@@ -591,7 +591,7 @@ class Engine(threading.Thread):
             if job == self.STOP:
                 self.model = None
                 return
-            if self.model_name is None:            # Settings > Speech: the recorder's, if a meeting records
+            if self.model_name is None:            # Settings > Meetings, Speech model: the recorder's, if a meeting records
                 if job is None and self.recorder.folder() is not None:
                     continue                       # a warm-up: nothing to load here
                 if job is not None and self._through_recorder(*job):

@@ -282,7 +282,7 @@ eval(require("fs").readFileSync(process.env.UI_PAGE_JS, "utf8") + `
   ok("models: one not available is disabled and says so", vs2.disabled && vs2.textContent === "Sonnet (not available)", vs2);
   ok("  the others as they were", !vhk.disabled && vhk.textContent === "Haiku \u00b7 Recommended");
   markModels([]);
-  // Settings > Recording > Speech model: the size, English only, a download's progress.
+  // Settings > Meetings > Speech model: the size, English only, a download's progress.
   el("s_english").checked = true; setSpeech("small", true);
   ok("speech: Small, English: its hint", el("s_speech").value === "small" && el("s_speechhint").title.includes("Least memory"),
     el("s_speechhint").title);
@@ -333,8 +333,8 @@ eval(require("fs").readFileSync(process.env.UI_PAGE_JS, "utf8") + `
   let shut = 0; settings.close = () => { shut++ };
   setHome();
   ok("settings: the sections listed, titled Settings", el("setmain").hidden === true && el("setnav").hidden === false && el("settitle").textContent === "Settings");
-  setPane("recording");
-  ok("  a section opens in place (its rows from the page)", el("setmain").hidden === false && el("setnav").hidden === true && SETP === "recording");
+  setPane("meetings");
+  ok("  a section opens in place (its rows from the page)", el("setmain").hidden === false && el("setnav").hidden === true && SETP === "meetings");
   setBack();
   ok("  back: to the list, Settings still open", el("setnav").hidden === false && SETP === null && shut === 0);
   setBack();

@@ -3909,7 +3909,7 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
                 import speechvad
                 Channel.speech_vad = speechvad.load(log=log)
             voice["turns"].resume(time.time())
-        # Settings > Voice, "Let me talk over Claude", read at each voice mode: a change
+        # Settings > Sound, "Let me talk over Claude", read at each voice mode: a change
         # applies from the next one, not mid-conversation.
         if voice["io"] is None and not voice["half"]:
             open_voice_io()
@@ -4365,7 +4365,7 @@ def cmd_setup(args):
     devices = sd.query_devices()
 
     mode = args.mode
-    # As Settings > Recording: Automatic is the default.
+    # As Settings > Sound, Record: Automatic is the default.
     if not mode:
         print("Record:")
         print("  1) Automatic           your mic, and the sound your Mac plays (a call, a")

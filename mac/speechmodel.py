@@ -1,4 +1,4 @@
-"""Which speech model the recorder and dictation use: Settings > Recording, Small,
+"""Which speech model the recorder and dictation use: Settings > Meetings, Small,
 Standard or Large, and "I speak English only".
 
 Measured on an M4 Pro, 48 GB: on a speaker across a

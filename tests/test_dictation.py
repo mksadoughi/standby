@@ -656,7 +656,7 @@ check("  the recording passed this user's only, and nothing left behind",
 rec.stop()
 (root / "daemon.ready").unlink()
 text, err = say(eng, np.zeros(16000, "float32"))
-check("no meeting: decoded here, loading the model Settings > Speech chose",
+check("no meeting: decoded here, loading the model Settings > Meetings chose",
       text == "MODEL heard 16000 samples on asr" and [n for n, _ in loads] == [speechmodel.MODELS[speechmodel.chosen({})][0]],
       (text, loads))
 rec = Recorder()

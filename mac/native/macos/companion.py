@@ -26,7 +26,7 @@ message handler, window.webkit.messageHandlers.sb.postMessage({...}):
   {type: "menu", x, y}     the native menu, at that point of the page
   {type: "expand"}         open the main window
   {type: "end"}            end the call, as the menu's End
-  {type: "settings", pane} Standby's Settings, on that pane ("call")
+  {type: "settings", pane} Standby's Settings, on that pane ("general")
   {type: "hide"}           the mini window goes and the call goes on (its Hide button)
 and back, on the page's globals: edge(h, v), hover(on), and from the menu
 say(text).
@@ -241,6 +241,8 @@ def home_frame(window=None):
     found, main = displays()
     return rules.home(window, found, main)
 
+
+SETTINGS_PANES = ("general", "voice", "sound", "meetings", "dictation", "permissions", "usage")    # the page's own
 
 class CompanionPanel(AppKit.NSPanel):
     """Never key unless asked: a click must leave the keyboard where it was. The one exception is a press in the
@@ -975,7 +977,7 @@ class Presence(object):
     SHOW_LIVE = "typeof mxShowLive === 'function' && mxShowLive()"
 
     def open_settings(self, pane=None):
-        """Standby's Settings, in a window of its own (the app's hook), on `pane` ("call") or at its
+        """Standby's Settings, in a window of its own (the app's hook), on `pane` ("general") or at its
         list: the call stays here, in the mini window. An app without that window: in the main one."""
         opener = getattr(self.hooks, "open_settings", None)
         if opener is not None and (opener(pane) or {}).get("ok"):
@@ -1052,7 +1054,7 @@ class Presence(object):
             # puts up a modal of its own (decided 2026-10-06).
             self.show_live()
         elif kind == "settings":
-            self.open_settings("call" if m.get("pane") == "call" else None)
+            self.open_settings(m["pane"] if m.get("pane") in SETTINGS_PANES else None)
         elif kind == "hide":
             self.hide_mini()
         elif kind == "end":

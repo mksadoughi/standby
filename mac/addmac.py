@@ -19,7 +19,7 @@ PAUSE_ENDS = 2 * 3600.0           # a meeting paused this long ends by itself, a
 AGENT_FILE = "agent.json"          # in the session's folder: whose meeting it is, how it ran
 OUTBOX = ROOT / "agents" / "outbox.jsonl"
 
-# The sheet's two switches, as today's recording modes (Settings > Recording > Record).
+# The sheet's two switches, as today's recording modes (Settings > Sound > Record).
 MODES = {(True, True): "auto", (True, False): "meeting", (False, True): "mic"}
 
 

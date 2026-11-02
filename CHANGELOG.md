@@ -19,10 +19,10 @@ too.
 - **Settings > Permissions.** What macOS lets Standby and Standby Dictation use, shown live, with one way to fix
   each.
 - **Pictures on a call.** Claude can show what it's talking about, such as a diagram or a formula. It appears as a
-  card above the mini window and in the main window, sandboxed, and you can turn it off in Settings > Call.
+  card above the mini window and in the main window, sandboxed, and you can turn it off in Settings > General.
 - **Choices on a card.** Click one to answer, and your pick stays marked. New cards come in order, and › says New
   while more wait. Command-C and Command-A work inside a card.
-- **The voice's model.** Settings > Call lets you pick the model (Haiku, Sonnet or Opus) and how much it thinks, and
+- **The voice's model.** Settings > Voice lets you pick the model (Haiku, Sonnet or Opus) and how much it thinks, and
   says when the model you chose isn't available and what runs instead. A model you saved stays yours.
 - **A meeting that ends outside Claude Code.** Your session is told, once.
 - **The website.** A new hero and film: a call about a landing page that changes as you talk, then a meeting about

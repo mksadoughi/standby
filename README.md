@@ -51,7 +51,7 @@ The installer sets everything up and downloads the models once. After that, its 
 
 Speech-to-text, speaker labels and the voice all run on your Mac, so Claude gets your words as text, never audio.
 The call's quick replies run on Sonnet by default. You can switch them to Haiku, the lightest model, in
-Settings > Call. The heavier work you hand your session counts there, as usual. Settings > Usage shows exactly what
+Settings > Voice. The heavier work you hand your session counts there, as usual. Settings > Usage shows exactly what
 Standby used.
 
 ## Use it
@@ -107,7 +107,7 @@ This deletes your meetings and calls too; copy `~/.standby/sessions` first to ke
 - **Text to Claude**: a meeting's transcript and what you say on a call go to your own Claude Code, which talks to
   its model provider as it always does.
 - **Voice prints** stay on your Mac: the voices you name, and your own voice, which Standby learns from your calls to
-  tell you apart. Turn this off or forget them in Settings > Recording.
+  tell you apart. Turn this off or forget them in Settings > Meetings.
 - **What you send:** your words go to your Claude Code as text, along with anything you paste or attach. Claude Code
   and its tools handle data their own way.
 - **Logs** keep operational diagnostics without routinely copying conversation text. Optional debug call traces

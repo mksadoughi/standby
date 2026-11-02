@@ -586,12 +586,12 @@ def drop_chat_row(sid, row, text=None):
 # ---------------------------------------------------------------- settings
 
 # Apple's echo cancellation takes the Mac's default mic only (native.duplex).
-TALK_OVER_MIC = "Needs the Mac's default microphone (Settings > Recording)"
+TALK_OVER_MIC = "Needs the Mac's default microphone (Settings > Sound)"
 DEFAULTS = {"push_lines": 10, "speakers": True, "capture": "auto",
             "remember_voices": True, "lite_transcript": "ask",
             "auto_stop_min": 15, "auto_accept": False, "call_visuals": True, "call_opens": "mini"}
 CALL_OPENS = ("mini", "full", "nothing")   # what opens as a call starts: the mini window, Standby's window, or neither
-VOICE_EFFORTS = ("auto", "low", "medium", "high")   # the voice's thinking (Settings > Call); auto: Claude Code's own
+VOICE_EFFORTS = ("auto", "low", "medium", "high")   # the voice's thinking (Settings > Voice); auto: Claude Code's own
 VOICE_EFFORT_DEFAULT = "high"   # Sonnet's best, explicit: never silently Claude Code's own (the user, 2026-11-01)
 LITE_PASSES = ("ask", "live")     # a meeting from Claude Code: its transcript with each prompt, or pushed as it goes
 VOICES = ROOT / "voices.json"
@@ -621,7 +621,7 @@ def speech_migrate():
 
 
 def speech_status(cfg=None):
-    """Settings > Speech: the choice, what it means, and whether it's here yet."""
+    """Settings > Meetings, Speech model: the choice, what it means, and whether it's here yet."""
     import speechmodel
     cfg = transport.load_config() if cfg is None else cfg
     size, english = speechmodel.choice(cfg)
@@ -700,7 +700,7 @@ def get_settings():
             "my_voice": (read_json(VOICES).get("me") or {}).get("seconds"),
             "capture": cfg.get("mode", DEFAULTS["capture"]),
             "mic_device": cfg.get("mic_device") if isinstance(cfg.get("mic_device"), str) else "",
-            # Settings > Voice, "Let me talk over Claude": the mic through echo cancellation, so
+            # Settings > Sound, "Let me talk over Claude": the mic through echo cancellation, so
             # talking over the voice stops it (voice_mode.duplex, read at each voice mode). Off,
             # the recorder still plays the voice, and the mic is held while it speaks.
             "talk_over": bool((cfg.get("voice_mode") or {}).get("duplex", False)),
@@ -3616,7 +3616,7 @@ def lite_call(b):
 
 
 def call_opens(cc, sid):
-    """What opens as a call starts (Settings > When a call starts, open): the mini window (the call sent to it,
+    """What opens as a call starts (Settings > General, When a call starts, open): the mini window (the call sent to it,
     as Mini window does), Standby's window at the call (as /standby window does), or nothing."""
     what = get_settings()["call_opens"]
     if what == "mini":
@@ -4592,7 +4592,7 @@ def main_page(settings=False):
 # opening it again brings it to the front. Neither the main window nor the mini one moves for it: a call
 # or a meeting stays where it is.
 SETTINGS_WIN = {}                  # "win": the Settings window, once made
-SETTINGS_PANES = ("call", "recording", "dictation", "permissions", "usage")
+SETTINGS_PANES = ("general", "voice", "sound", "meetings", "dictation", "permissions", "usage")
 _SETTINGS_LOCK = threading.Lock()
 
 
@@ -4607,7 +4607,7 @@ def _settings_default():
 
 
 def open_settings_window(pane=None):
-    """Standby's Settings in its own window, on `pane` ("call") or at its list: made the first time, in
+    """Standby's Settings in its own window, on `pane` ("general") or at its list: made the first time, in
     front after. {ok}, or {error} with no window to open it in (Standby running without one)."""
     pane = pane if pane in SETTINGS_PANES else None
     if APP_WINDOW.get("win") is None:
@@ -5470,7 +5470,7 @@ def take_visuals():
 
 
 def visuals_on():
-    """Settings > Call, "Show visuals during calls" (the windows' own switches show it)."""
+    """Settings > General, "Show visuals during calls" (the windows' own switches show it)."""
     return bool(transport.load_config().get("call_visuals", DEFAULTS["call_visuals"]))
 
 
@@ -5698,7 +5698,7 @@ class CompanionHooks(object):
         return read_json(SESSIONS / sid / "meta.json").get("kind") or "meeting"
 
     def orb_asked(self):
-        """The orb only for a call sent to it: as it starts (Settings > When a call starts, open: Mini window),
+        """The orb only for a call sent to it: as it starts (Settings > General, When a call starts, open: Mini window),
         or by the user (Mini window, the corner button, Cmd+M), until its Hide. A meeting never has one."""
         sid = _live_now()
         return bool(sid) and sid in LITE_ORB
@@ -7224,7 +7224,7 @@ html.lights .sethead{padding-left:84px}.sethead.scrolled{box-shadow:0 1px 0 var(
 .utab th{text-align:left;font-weight:500;color:var(--muted);padding:6px 0;border-bottom:1px solid var(--line)}
 .utab td{padding:7px 0;border-bottom:1px solid var(--line)}
 .utab th:not(:first-child),.utab td:not(:first-child){text-align:right;width:68px}     /* the same columns in both tables */
-.uempty{margin:48px 0;text-align:center}.uempty b{display:block;font-size:15px;margin-bottom:4px}.uempty span{color:var(--muted);font-size:13px}.pane .sec{border:0;padding:0}.pane .sec>h4{margin-bottom:14px}
+.uempty{margin:48px 0;text-align:center}.uempty b{display:block;font-size:15px;margin-bottom:4px}.uempty span{color:var(--muted);font-size:13px}.pane .sec{border:0;padding:0}.pane .sec>h4{margin:0}.pane .sec>h4+.field{padding-top:8px}.pane .sec+.sec{margin-top:26px}
 dialog.ask{width:400px}.ask .dhead{padding-top:20px}.ask .dbody p{margin:2px 0 6px;font-size:13px;line-height:1.5;color:var(--muted)}
 .ask .dfoot{border-top:0;padding-top:10px}.btn.destroy{background:var(--rec);border-color:var(--rec);color:#fff}
 .btn.destroy:hover:not(:disabled){background:var(--rec);opacity:.88}
@@ -7307,22 +7307,23 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
     <button type="button" class="iconbtn" id="setback" onclick="setBack()" title="Back" aria-label="Back"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
     <h3 id="settitle" tabindex="-1" autofocus>Settings</h3><span class="saved" id="ssaved">Saved</span></header>
   <nav class="setnav" id="setnav">
-    <button type="button" data-p="call" onclick="setPane('call')"><span class="t"><b>Call</b><small>The voice and its model, talking over Claude, asking first</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-    <button type="button" data-p="recording" onclick="setPane('recording')"><span class="t"><b>Recording</b><small>What's recorded, the speech model, what Claude gets</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button type="button" data-p="general" onclick="setPane('general')"><span class="t"><b>General</b><small>What opens on a call, visuals, asking first</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button type="button" data-p="voice" onclick="setPane('voice')"><span class="t"><b>Voice</b><small>Who speaks, its model, how much it thinks</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button type="button" data-p="sound" onclick="setPane('sound')"><span class="t"><b>Sound</b><small>Microphone, what's recorded, talking over Claude</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button type="button" data-p="meetings" onclick="setPane('meetings')"><span class="t"><b>Meetings</b><small>The transcript, and what Claude gets</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="dictation" onclick="setPane('dictation')"><span class="t"><b>Dictation</b><small>Dictation in any app, its shortcut, word fixes</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="permissions" onclick="setPane('permissions')"><span class="t"><b>Permissions</b><small>What macOS lets Standby use, and fixing it</small></span><span class="pneed" id="permneed" hidden></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
     <button type="button" data-p="usage" onclick="setPane('usage')"><span class="t"><b>Usage</b><small>Calls to Claude over time, by model and kind</small></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
   </nav>
   <div class="setmain" id="setmain">
-    <div class="pane on" data-p="call"><div class="sec">
+    <div class="pane on" data-p="general"><div class="sec">
       <div class="field"><label>When a call starts, open<span class="mx-help" tabindex="0" title="Hide it any time with its Hide button; the call goes on. Bring it back from the band, with /standby window, or by asking the voice. Hiding lasts for that call only." aria-label="About what opens when a call starts" onclick="event.preventDefault()"></span></label><input type="hidden" id="s_opens">
         <div class="seg" id="openseg"><button type="button" data-o="mini" onclick="setOpens('mini')">Mini window</button><button type="button" data-o="full" onclick="setOpens('full')">Full window</button><button type="button" data-o="nothing" onclick="setOpens('nothing')">Nothing</button></div></div>
-      <div class="field"><label>Voice mode model</label><select id="s_vmodel" data-save><option value="haiku">Haiku</option>
-        <option value="sonnet">Sonnet · Recommended</option><option value="opus">Opus</option></select>
-        <div class="hint" id="s_vmodelnote" hidden></div></div>
-      <div class="field"><label>Thinking<span class="mx-help" tabindex="0" title="How much the call's voice thinks before it answers. Low answers fastest; High is more careful but takes longer to start speaking. From the next call." aria-label="About thinking" onclick="event.preventDefault()"></span></label><input type="hidden" id="s_veffort">
-        <div class="seg" id="effseg"><button type="button" data-e="low" onclick="setEffort('low')">Low</button><button type="button" data-e="medium" onclick="setEffort('medium')">Medium</button><button type="button" data-e="high" onclick="setEffort('high')">High</button></div>
-        <div class="hint" id="s_effhint"></div></div>
+      <div class="field"><label class="tgl"><input type="checkbox" id="s_visuals" data-save> Show visuals during calls<span class="mx-help" tabindex="0" title="When it helps, or when you ask, a small card above the mini window shows a list, a diagram or numbers that go with what the voice says. An extra Claude call makes it, beside the voice, so the voice never waits. Off: none are made." aria-label="About visuals during calls" onclick="event.preventDefault()"></span></label>
+        <div class="hint">A small card above the mini window, when a picture helps.</div></div>
+      <div class="field"><label class="tgl"><input type="checkbox" id="s_autoaccept" data-save> Let Claude start calls and listening without asking<span class="mx-help" tabindex="0" title="The same as Always accept on Claude Code's band. Off: the band asks each time." aria-label="About starting without asking" onclick="event.preventDefault()"></span></label></div>
+    </div></div>
+    <div class="pane" data-p="voice"><div class="sec">
       <div class="field"><label>Voice<span class="mx-help" id="s_voicecredit" tabindex="0" title="" aria-label="About the voice" onclick="event.preventDefault()" hidden></span></label>
         <div class="row"><select id="s_voice" style="flex:1" onchange="pickVoice(this.value)"></select>
           <button type="button" class="btn sm" id="s_voicetry" onclick="tryVoice()">Try</button></div>
@@ -7330,17 +7331,24 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
         <div class="hint" id="s_voicehint" hidden>A Premium voice sounds much better, and it's free. <a href="#" onclick="event.preventDefault();getVoice()">Get one</a></div>
         <div class="hint" id="s_voiceprep" hidden></div>
         </div>
-      <div class="field"><label class="tgl"><input type="checkbox" id="s_autoaccept" data-save> Let Claude start calls and listening without asking<span class="mx-help" tabindex="0" title="The same as Always accept on Claude Code's band. Off: the band asks each time." aria-label="About starting without asking" onclick="event.preventDefault()"></span></label></div>
-      <div class="field"><label class="tgl"><input type="checkbox" id="s_talkover" data-save> Let me talk over Claude<span class="mx-help" tabindex="0" title="Echo cancelling, for laptop speakers; not needed with headphones." aria-label="About talking over Claude" onclick="event.preventDefault()"></span></label>
-        <div class="hint fine" id="s_talkovernote" hidden></div></div>
-      <div class="field"><label class="tgl"><input type="checkbox" id="s_visuals" data-save> Show visuals during calls<span class="mx-help" tabindex="0" title="When it helps, or when you ask, a small card above the mini window shows a list, a diagram or numbers that go with what the voice says. An extra Claude call makes it, beside the voice, so the voice never waits. Off: none are made." aria-label="About visuals during calls" onclick="event.preventDefault()"></span></label>
-        <div class="hint">A small card above the mini window, when a picture helps.</div></div>
+      <div class="field"><label>Voice mode model</label><select id="s_vmodel" data-save><option value="haiku">Haiku</option>
+        <option value="sonnet">Sonnet · Recommended</option><option value="opus">Opus</option></select>
+        <div class="hint" id="s_vmodelnote" hidden></div></div>
+      <div class="field"><label>Thinking<span class="mx-help" tabindex="0" title="How much the call's voice thinks before it answers. Low answers fastest; High is more careful but takes longer to start speaking. From the next call." aria-label="About thinking" onclick="event.preventDefault()"></span></label><input type="hidden" id="s_veffort">
+        <div class="seg" id="effseg"><button type="button" data-e="low" onclick="setEffort('low')">Low</button><button type="button" data-e="medium" onclick="setEffort('medium')">Medium</button><button type="button" data-e="high" onclick="setEffort('high')">High</button></div>
+        <div class="hint" id="s_effhint"></div></div>
     </div></div>
-    <div class="pane" data-p="recording"><div class="sec">
+    <div class="pane" data-p="sound"><div class="sec">
+      <div class="field" id="micf"><label>Microphone</label><select id="s_mic" data-save></select></div>
       <div class="field"><label>Record<span class="mx-help" id="s_caphint" tabindex="0" title="" aria-label="About Record" onclick="event.preventDefault()"></span></label><input type="hidden" id="s_capture">
         <div class="seg" id="capseg"><button type="button" data-c="auto" onclick="setCapture('auto')">Automatic</button><button type="button" data-c="mic" onclick="setCapture('mic')">Mic only</button><button type="button" data-c="meeting" onclick="setCapture('meeting')">Meeting audio only</button></div>
         </div>
-      <div class="field" id="micf"><label>Microphone</label><select id="s_mic" data-save></select></div>
+      <div class="field"><label class="tgl"><input type="checkbox" id="s_talkover" data-save> Let me talk over Claude<span class="mx-help" tabindex="0" title="Echo cancelling, for laptop speakers; not needed with headphones." aria-label="About talking over Claude" onclick="event.preventDefault()"></span></label>
+        <div class="hint fine" id="s_talkovernote" hidden></div></div>
+      <div class="field"><button type="button" class="btn" id="micbtn" onclick="micTest()">Test recording</button>
+        <div id="mictest" class="checks"></div></div>
+    </div></div>
+    <div class="pane" data-p="meetings"><div class="sec"><h4>Transcript</h4>
       <div class="field"><label>Speech model<span class="mx-help" id="s_speechhint" tabindex="0" title="" aria-label="About the speech model" onclick="event.preventDefault()"></span></label><input type="hidden" id="s_speech">
         <div class="seg" id="speechseg"><button type="button" data-z="small" onclick="setSpeech('small')">Small</button><button type="button" data-z="standard" onclick="setSpeech('standard')">Standard</button></div>
         <label class="tgl" style="margin-top:10px"><input type="checkbox" id="s_english" onchange="setSpeech()"> I speak English only</label>
@@ -7349,12 +7357,11 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
       <div class="field"><label class="tgl"><input type="checkbox" id="s_remember" data-save> Recognize voices I have named<span class="mx-help" tabindex="0" title="Voice prints stay on this Mac. Your own voice is learnt from calls, so in a room only you talk to Claude." aria-label="About voice recognition" onclick="event.preventDefault()"></span></label>
         <div class="hint" id="s_voices"></div>
         <div class="hint" id="myvoicef" hidden><span id="s_myvoice"></span><a href="#" class="dotlink" id="s_myforget" onclick="event.preventDefault();forgetMyVoice()">Forget</a></div></div>
-      <div class="field"><label>Instructions</label><div class="row"><span id="s_prompt" class="hint" style="margin:0;flex:1">What Claude is told: how to listen, when to answer, the meeting skill.</span>
-        <button type="button" class="btn" onclick="openPrompt()">View and edit…</button></div></div>
+    </div><div class="sec"><h4>What Claude gets</h4>
       <div class="field"><label>Claude Code gets the meeting<span class="mx-help" tabindex="0" title="A meeting started from Claude Code. When you ask about it: Claude reads the meeting so far when you ask. As it goes: Claude follows it all along." aria-label="About Claude Code and your meeting"></span></label><select id="s_litepass" data-save><option value="ask">When you ask about it</option><option value="live">As it goes</option></select></div>
       <div class="field"><div class="setrow"><label>Update Claude every N sentences<span class="mx-help" tabindex="0" title="Lower keeps Claude more current; higher means fewer calls." aria-label="About updates to Claude"></span></label><input id="s_push" class="num" data-save type="number" min="1" max="200"></div></div>
-      <div class="field"><button type="button" class="btn" id="micbtn" onclick="micTest()">Test recording</button>
-        <div id="mictest" class="checks"></div></div>
+      <div class="field"><label>Instructions</label><div class="row"><span id="s_prompt" class="hint" style="margin:0;flex:1">What Claude is told: how to listen, when to answer, the meeting skill.</span>
+        <button type="button" class="btn" onclick="openPrompt()">View and edit…</button></div></div>
     </div></div>
     <div class="pane" data-p="dictation"><div class="sec" id="dictsec">
       <div class="field"><label class="tgl"><input type="checkbox" id="s_dict" onchange="setDictation(this.checked)"> Dictation in any app<span class="mx-help" id="s_dictwhy" hidden tabindex="0" aria-label="" onclick="event.preventDefault()"></span></label>
@@ -7519,12 +7526,12 @@ function paintSpeech(s){SPEECH=s||SPEECH;const d=$("s_speechdl"),sp=SPEECH;if(!s
   d.textContent=t;d.hidden=!t}
 async function pollSpeech(){clearTimeout(speechT);try{paintSpeech(await api("/api/speech"))}catch(e){}
   if(SPEECH&&SPEECH.download&&SPEECH.download.state==="downloading"&&settings.open)speechT=setTimeout(pollSpeech,1000)}
-// Settings > Call, Thinking: the call's voice's effort, from the next call. Not picked yet: as Claude Code is set
+// Settings > Voice, Thinking: the call's voice's effort, from the next call. Not picked yet: as Claude Code is set
 // (the default until it's measured), said in the hint, nothing lit
 const EFFHINT={low:"Answers fastest.",medium:"Thinks a little before answering.",high:"Most careful, slower to answer."};let EFFINH="";
 function setEffort(e,quiet){$("s_veffort").value=e;document.querySelectorAll("#effseg button").forEach(b=>b.classList.toggle("on",b.dataset.e===e));
   $("s_effhint").textContent=EFFHINT[e]||("Following your Claude Code\u2019s setting"+(EFFINH?" ("+EFFINH[0].toUpperCase()+EFFINH.slice(1)+")":"")+" until you pick one.");if(!quiet)autosave()}
-// Settings > When a call starts, open: the mini window (the default), Standby's window, or nothing
+// Settings > General, When a call starts, open: the mini window (the default), Standby's window, or nothing
 function setOpens(o,quiet){$("s_opens").value=o;document.querySelectorAll("#openseg button").forEach(b=>b.classList.toggle("on",b.dataset.o===o));if(!quiet)autosave()}
 function setCapture(c,quiet){$("s_capture").value=c;document.querySelectorAll("#capseg button").forEach(b=>b.classList.toggle("on",b.dataset.c===c));
   setHelp("s_caphint",CAPHINT[c]||"");$("micf").style.display=c==="meeting"?"none":"";if(!quiet)autosave()}

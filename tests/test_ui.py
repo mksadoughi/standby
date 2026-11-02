@@ -294,7 +294,7 @@ try:
     check("Reset (System Audio Recording on for an older copy): Standby's own entry, then macOS asks again",
           r.get("state") == "asked" and (root / "tccutil").read_text().split() == ["reset", "AudioCapture", "dev.standby.app"],
           (r, (root / "tccutil").read_text() if (root / "tccutil").exists() else None))
-    # Settings > Recording > Speech model: Small or Standard, and English only.
+    # Settings > Meetings > Speech model: Small or Standard, and English only.
     sp = call("/api/settings")[1]["settings"]["speech"]
     check("speech model: this Mac's default, not downloaded yet, no download in a test",
           sp["size"] in ("small", "standard") and sp["size"] == sp["default"] and sp["ready"] is False

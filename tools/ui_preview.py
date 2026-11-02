@@ -23,7 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-STATES = ["settings", "settings-help", "settings-call", "settings-call-low", "settings-call-medium", "settings-call-high", "settings-permissions", "settings-recording", "usage", "usage-today", "usage-empty", "dictation", "dictation-shortcut", "dictation-recording", "settings-voice-prep", "settings-try-start", "settings-try-mid", "settings-try-failed", "settings-try-playing", "dictation-words", "settings-talkover", "settings-speech-dl", "settings-speech-8gb", "settings-speech-8gb-standard",
+STATES = ["settings", "settings-help", "settings-call", "settings-voice", "settings-sound", "settings-meetings", "settings-call-low", "settings-call-medium", "settings-call-high", "settings-permissions", "settings-recording", "usage", "usage-today", "usage-empty", "dictation", "dictation-shortcut", "dictation-recording", "settings-voice-prep", "settings-try-start", "settings-try-mid", "settings-try-failed", "settings-try-playing", "dictation-words", "settings-talkover", "settings-speech-dl", "settings-speech-8gb", "settings-speech-8gb-standard",
           "mx-past", "mx-row-menu", "mx-delete-ask", "mx-past-session", "mx-past-open", "mx-past-open-menu", "mx-past-empty", "mx-live", "mx-hear", "mx-hear-open", "mx-hear-off", "mx-hear-new", "mx-ask", "mx-pausing", "mx-ending", "mx-live-menu", "mx-paused", "mx-micno", "mx-soundno", "mx-soundask", "mx-spkname", "cc-live", "cc-livemenu", "cc-call", "cc-call-tasks", "cc-call-thinking", "cc-call-pausing", "cc-call-paused", "cc-call-waiting", "cc-call-working", "cc-call-visual", "cc-callmenu", "cc-callcopy", "cc-callend", "cc-ended", "cc-long", "cc-past", "cc-past-menu"]
 
 FAKE = r"""
@@ -167,7 +167,7 @@ const CHECK = { where: "this Mac", results: [
 const SETTINGS = { settings: { model: "opus", push_lines: 10,
   speakers: true, remember_voices: true, voices: ["Nadia", "Theo"], my_voice: 260, loopback: false, capture: "auto", mic_default: "AirPods Pro",
   mic_device: "", talk_over: true,
-  talk_over_note: SCENE === "settings-talkover" ? "Needs the Mac's default microphone (Settings > Recording)" : "",
+  talk_over_note: SCENE === "settings-talkover" ? "Needs the Mac's default microphone (Settings > Sound)" : "",
   // the speech model, and in settings-speech-dl, Standard on its way. An 8 GB Mac,
   // Small by its memory (settings-speech-8gb), or Standard picked there (-standard).
   speech: SCENE === "settings-speech-8gb" ? { size: "small", english_only: true, default: "small", picked: false, memory: 8,
@@ -407,26 +407,29 @@ SCENES = r"""
       if (SCENE === "mx-live-menu") { const b = document.querySelector('#mview header button[title="More"]'); mxWinMenu({ stopPropagation() {}, currentTarget: b }, "c-live-m") } }
     await wait(300); return }
   if (SCENE === "settings") { await openSettings() }
-  if (SCENE === "settings-call" || SCENE === "settings-talkover") { await openSettings(); setPane("call") }
+  if (SCENE === "settings-call" || SCENE === "settings-general") { await openSettings(); setPane("general") }
+  if (SCENE === "settings-voice") { await openSettings(); setPane("voice") }
+  if (SCENE === "settings-talkover" || SCENE === "settings-sound") { await openSettings(); setPane("sound") }
   // Thinking: not picked (as Claude Code is set, here high), then each choice
-  if (SCENE.startsWith("settings-call-")) { await openSettings(); setPane("call"); setEffort(SCENE.slice(14), true) }
+  if (SCENE.startsWith("settings-call-")) { await openSettings(); setPane("voice"); setEffort(SCENE.slice(14), true) }
   if (SCENE === "settings-permissions") { await openSettings(); setPane("permissions"); await wait(300) }
   if (SCENE === "dictation" || SCENE === "dictation-words") { await openSettings(); setPane("dictation") }
-  if (SCENE === "settings-recording" || SCENE.startsWith("settings-speech")) { await openSettings(); setPane("recording") }
+  if (SCENE === "settings-recording" || SCENE === "settings-meetings" || SCENE.startsWith("settings-speech")) { await openSettings(); setPane("meetings") }
   if (SCENE === "usage" || SCENE === "usage-empty") { await openSettings(); setPane("usage") }
   if (SCENE === "settings-help") { await openSettings(); setPane("dictation"); await wait(200); mxHelp(document.querySelector("#kholdf .mx-help")) }
   if (SCENE === "dictation-shortcut") { await openSettings(); setPane("dictation"); openShortcuts() }
   if (SCENE === "dictation-recording") { await openSettings(); setPane("dictation"); recordShortcut() }
   if (SCENE === "usage-today") { await openSettings(); setPane("usage"); await loadUsage("today") }
-  if (SCENE === "settings-voice-prep") { await openSettings(); setPane("call") }
+  if (SCENE === "settings-voice-prep") { await openSettings(); setPane("voice") }
   if (SCENE.startsWith("settings-try-")) { TRYING = 7;          // followed already: the fixture stays as it is
     if (SCENE === "settings-try-failed") TRYFAIL = { n: 7, voice: "Jean", state: "failed", error: "no connection to Hugging Face", downloaded: true };
-    await openSettings(); setPane("call") }
+    await openSettings(); setPane("voice") }
 })();
 """
 
 
 # The orb's window, then the words' window (the "words-" scenes, at /companion#words).
+SET_PANES = ("general", "voice", "sound", "meetings", "dictation", "permissions", "usage")    # the Settings window's sections
 CMP_SCENES = ["idle", "recording", "recording-roll", "recording-hover", "left-hover",
               "listening", "hearing", "thinking", "thinking-steps", "thinking-steps-hover", "holding", "speaking", "muted", "muted-waiting", "muted-waiting-hover", "voice-hover", "left-voice-hover",
               "preparing", "down", "down-hover", "micdenied", "words-micdenied", "words-speaking",
@@ -705,13 +708,13 @@ def main():
         for dark in themes:
             sfx = "-dark" if dark else ""
             if "--settings-window" in sys.argv:
-                # The Settings window, as the app opens it: its list, and a section (the mini window's: Call).
+                # The Settings window, as the app opens it: its list, and each section (--tall: each one whole)
                 set_path = out / "settings-window-page.html"
                 set_path.write_text(page(settings_window=True))
-                for name, pane in (("list", ""), ("call", "call"), ("recording", "recording")):
+                for name, pane in [("list", "")] + [(x, x) for x in SET_PANES]:
                     png = out / ("settings-window-%s%s.png" % (name, sfx))
                     url = "%s?%s" % (set_path.as_uri(), "pane=" + pane if pane else "s=list")
-                    ok = chrome.shoot(url, png, dark, size=(500, 640), settle=1.5)
+                    ok = chrome.shoot(url, png, dark, size=(500, 1120 if "--tall" in sys.argv else 640), settle=1.5)
                     print(("ok   " if ok else "FAIL ") + str(png))
                 continue
             if "--setup-window" in sys.argv:

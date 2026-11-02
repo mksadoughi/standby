@@ -1,4 +1,4 @@
-"""`standby setup` as Settings > Recording does it.
+"""`standby setup` as Settings > Sound does it.
 
 It offered mic / both (BlackHole) / system, and pinned a mic by name, defaulting
 to the MacBook's: that pin is how the user's config came to record the MacBook

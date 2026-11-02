@@ -66,7 +66,7 @@ try:
     # the dictation scene: its setup still missing a permission, so its (?) shows too
     chrome.shoot("%s?s=dictation#dictation" % html.as_uri(), out / "x.png", False, size=(500, 720), settle=3)
     sections = js('[...document.querySelectorAll(".setnav button[data-p]")].map(b => b.dataset.p)')
-    check("Settings is open, its sections listed", js('settings.open') and len(sections) == 5, sections)
+    check("Settings is open, its sections listed", js("settings.open") and sections == ["general", "voice", "sound", "meetings", "dictation", "permissions", "usage"], sections)
     clicked = []
     for sec in sections:
         helps = js("""(() => { setPane(%s); return [...document.querySelectorAll('.pane[data-p=%s] .mx-help')]

@@ -109,7 +109,7 @@ const ORB_CHECKS = `
   ok("  the pill's glass runs on under the orb to its centre (its inner end hidden): it slides out of the mini window",
      (m => m.glass && m.glass.x + m.glass.w === m.w - 12 - m.glyph / 2)(last("orb")), last("orb"));
   posts = []; callSettings();
-  ok("  Settings opens Standby's Settings on its Call pane", JSON.stringify(posts) === '[{"type":"settings","pane":"call"}]', posts);
+  ok("  Settings opens Standby's Settings on its General pane", JSON.stringify(posts) === '[{"type":"settings","pane":"general"}]', posts);
   posts = []; end(); full();
   ok("  End ends the call through the panel (as End Call); Full window opens Standby's window", posts.map(m => m.type).join() === "end,expand", posts);
   posts = []; hideMini();
@@ -186,10 +186,10 @@ const ORB_CHECKS = `
   STATE = LIVE({ voice: { state: "listening", level: 0, tasks: [{ id: "t1", state: "done" }, { id: "t2", state: "queued" }] } });
   await new Promise(r => setTimeout(r, 750)); await fresh();
   ok("  nothing running (done, or only waiting its turn): listening as before", els.cmp.className.includes("listening") && !els.cmp.className.includes("working"), els.cmp.className);
-  // Visuals: the panel's button is Settings > Call's switch, from here
+  // Visuals: the panel's button is Settings > General's switch, from here
   STATE = LIVE({ visuals_on: true }); await fresh(); calls = [];
   await visualsOnOff();
-  ok("Visuals: the panel's button turns visuals off (Settings > Call's switch), and says so",
+  ok("Visuals: the panel's button turns visuals off (Settings > General's switch), and says so",
      calls.some(c => c[0] === "/api/settings" && JSON.parse(c[1]).call_visuals === false) && C.visuals_on === false, calls);
   // the card closed, the call has visuals: a picture mark on the orb's edge, its own hit area; a click opens the card
   STATE = LIVE({ visual_mark: true, voice: { state: "listening" } }); posts = []; calls = []; await fresh();

@@ -292,7 +292,7 @@ m = speechmodel.MODELS[speechmodel.chosen(cfg)]
 if speechmodel.local(speechmodel.chosen(cfg)) is None:
     print("   fetching the speech model, %s (about %.1f GB, first time only)..." % (m.words, m.bytes / 1e9))
     speechmodel.fetch(speechmodel.chosen(cfg))
-print("   \033[32m✓\033[0m speech model: %s (%s; Settings > Recording to change it)" % (m.words, m.repo.split("/")[1]))
+print("   \033[32m✓\033[0m speech model: %s (%s; Settings > Meetings to change it)" % (m.words, m.repo.split("/")[1]))
 PYCODE
 
 say "Commands"

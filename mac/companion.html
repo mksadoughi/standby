@@ -478,12 +478,12 @@ function hideMini() { if (now().l) post({ type: "hide" }) }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !e.defaultPrevented) hideMini() });
 // The orb's picture mark: the call's visual card again, at the newest
 async function showVisuals() { const { l } = now(); if (l) { try { await api("/api/visual/show", { session: l.id }) } catch (e) {} poll(true) } }
-// Visuals: Settings > Call's "Show visuals during calls", from here (off: none are made)
+// Visuals: Settings > General's "Show visuals during calls", from here (off: none are made)
 async function visualsOnOff() { const on = !C || C.visuals_on !== false;
   try { await api("/api/settings", { call_visuals: !on }) } catch (e) {}
   if (C) C.visuals_on = !on; render() }
-// Settings: Standby's Settings, straight on its Call pane (the voice and its model)
-function callSettings() { post({ type: "settings", pane: "call" }) }
+// Settings: Standby's Settings, straight on its General pane (what opens on a call, visuals, asking first)
+function callSettings() { post({ type: "settings", pane: "general" }) }
 function say(t) { flash = t.length > 40 ? t.slice(0, 39) + "…" : t; render(); setTimeout(() => { flash = ""; render() }, 2500) }
 
 // Hover: the pill comes after 120 ms and goes 150 ms after the pointer leaves (the user, 2026-10-27: 600 was slow).

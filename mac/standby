@@ -78,7 +78,7 @@ standby - a meeting companion powered by your own Claude Code
   standby purge <session>    delete a session's audio and transcript
   standby purge --all        delete every local session
 
-What it records (Settings > Recording, or --mode):
+What it records (Settings > Sound, or --mode):
 
   auto     the default. Your mic (it follows your Mac: AirPods in, AirPods out),
            and when an app plays (a call in Zoom, Teams, Slack, Meet..., or a

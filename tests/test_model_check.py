@@ -174,7 +174,7 @@ check("  the saved choice is kept (Sonnet runs in its place, the user sees why)"
       ui.get_settings()["voice_model"] == "haiku")
 os.remove(os.path.join(root, "agent", "models.json"))
 check("  none found yet: all available", ui.models_info() == {"unavailable": []})
-# Settings > Call says it under the voice's model when the chosen one isn't available, never silent.
+# Settings > Voice says it under the voice's model when the chosen one isn't available, never silent.
 import re, shutil, subprocess  # noqa: E402
 NODE = shutil.which("node") or os.path.expanduser("~/.local/share/mise/installs/node/22.21.1/bin/node")
 fns = ui.PAGE[ui.PAGE.index("const MODELNAME="):ui.PAGE.index("function loadModels(")]

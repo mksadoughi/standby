@@ -524,7 +524,7 @@ async function mxSave(sid) { mxMenuClose(); if (window.pywebview && window.pyweb
   const a = document.createElement("a"); a.href = "/api/export/" + encodeURIComponent(sid) + "?fmt=md&token=" + encodeURIComponent(SBT); a.download = ""; document.body.appendChild(a); a.click(); a.remove() }
 function mxRenameWin(el, sid) { const was = el.textContent; mxEdit(el, was, async v => { const r = await mxGet("/api/rename", {id: sid, title: v}); if (r && r.error) toast(r.error); mxPoll() }) }
 // A meeting from Claude Code: how its session gets the meeting, chosen here for this meeting
-// (Settings > Recording has the default for new ones)
+// (Settings > Sound has the default for new ones)
 function mxPassItems(m) {
   const it = (v, words) => `<button class="mi" role="menuitemradio" aria-checked="${m.pass === v}" onclick="mxPass('${esc(m.session)}','${v}')"><span class="ck">${m.pass === v ? MXI.check : ""}</span>${words}</button>`;
   return it("ask", "Claude gets the meeting when you ask about it") + it("live", "Claude follows the meeting as it goes") + "<hr>";
@@ -777,7 +777,7 @@ function mxCallMenu(e) {
   mxMenu(e, `<button class="mi mx-tick" role="menuitemcheckbox" aria-checked="${on}" onclick="mxVisuals(${!on})">Show visuals<span class="ck">${on ? MXI.check : ""}</span></button><hr>` +
     `<button class="mi" role="menuitem" onclick="mxMenuClose();openSettings()">Settings</button>`, "mx-menu");
 }
-// Settings > Call's "Show visuals during calls", from the call: off, the voice is asked for none
+// Settings > General's "Show visuals during calls", from the call: off, the voice is asked for none
 async function mxVisuals(on) {
   mxMenuClose();
   try { await api("/api/settings", {call_visuals: on}) } catch (e) {}

@@ -1,4 +1,4 @@
-"""Settings > Speech: which speech model, by this Mac's memory and the user's
+"""Settings > Meetings, Speech model: which speech model, by this Mac's memory and the user's
 choice, pinned, from Hugging Face the first time. A made-up Hugging Face cache and a
 stand-in hf_hub_download: nothing is downloaded. Also the app's background download
 (ui.ensure_speech_model) with a stand-in fetch."""

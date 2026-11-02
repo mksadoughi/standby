@@ -151,7 +151,7 @@ check "entry point: venv packages, its own copy of the code (never the checkout)
   "$REALPY -m py_compile $E && grep -q 'site.addsitedir(\"/' $E && grep -q 'sys.path.insert(0, \"$H/.standby/code/mac\")' $E && grep -q 'venv/bin/python\"' $E && grep -q -- '--window' $E && grep -q 'ui.log' $E"
 check "installer says how to open the app" "grep -q 'open ~/Applications/Standby.app' $T/out.1"
 check "speech model: the one chosen, at its own size (not 'about 600 MB')" \
-  "grep -q 'fetching the speech model, Small, English (about 0.5 GB, first time only)' $T/out.1 && ! grep -q '600 MB' $T/out.1 && grep -q 'speech model: Small, English (parakeet-tdt_ctc-110m; Settings > Recording to change it)' $T/out.1"
+  "grep -q 'fetching the speech model, Small, English (about 0.5 GB, first time only)' $T/out.1 && ! grep -q '600 MB' $T/out.1 && grep -q 'speech model: Small, English (parakeet-tdt_ctc-110m; Settings > Meetings to change it)' $T/out.1"
 check "  from Hugging Face, pinned to the revision measured" \
   "[[ \$(grep -c '^mlx-community/parakeet-tdt_ctc-110m [a-z.]* d62547387c356a1ab6bb3d85d98b2103f655282e\$' $H/hf.args) -eq 2 ]] && grep -q ' config.json ' $H/hf.args && grep -q ' model.safetensors ' $H/hf.args"
 check "voice mode's end-of-turn model is kept, not fetched again" "grep -q 'end-of-turn model already present' $T/out.1"

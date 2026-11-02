@@ -1490,7 +1490,7 @@ class Controller(NSObject):
         self.remapped = False
         self.next_remap = 0.0
         self.unusual_keys = 0
-        self.engine = core.Engine(self.settings.get("model"),          # None: Settings > Speech
+        self.engine = core.Engine(self.settings.get("model"),          # None: Settings > Meetings, Speech model
                              float(self.settings["unload_minutes"]) * 60.0)
         self.capture = core.Capture()
         self.guard = core.MeetingGuard()

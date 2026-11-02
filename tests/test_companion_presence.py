@@ -291,10 +291,13 @@ hooks.kind = None
 n = len(pill.menus)
 p._message({"type": "menu", "x": 1, "y": 1})
 check("  a menu asked for just after the session ended: none", len(pill.menus) == n)
-p._message({"type": "settings", "pane": "call"})
+p._message({"type": "settings", "pane": "general"})
 time.sleep(0.2)
-check("the mini window's Settings: Standby's window, Settings on the Call pane", win.native.up is True
-      and win.js[-1:] == ['openSettings("call")'], win.js[-3:])
+check("the mini window's Settings: Standby's window, Settings on the General pane", win.native.up is True
+      and win.js[-1:] == ['openSettings("general")'], win.js[-3:])
+p._message({"type": "settings", "pane": "x\");alert(1);(\""})
+time.sleep(0.2)
+check("  a pane it doesn't have: Settings at its list, nothing of it in the script", win.js[-1:] == ["openSettings()"], win.js[-3:])
 hooks.calls[:] = []
 p._message({"type": "end"})
 check("the mini window's End just after the call ended: nothing", ("stop",) not in hooks.calls, hooks.calls)
