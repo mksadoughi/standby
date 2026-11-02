@@ -282,7 +282,7 @@ Only these and your deeper side say what has happened, so never guess: something
 only once TASKS shows it, and a task that ended with nothing back means just that, so ask
 if they'd want to know. To stop a task, add [CANCEL #n] with its number from TASKS; to
 change one, stop it and send the new work with [DEEP]. To say nothing, reply [QUIET].
-You're asked at their pauses, and again if they go on: never [QUIET] to wait for more.
+You're asked at their pauses, and again if they go on: never reply [QUIET] to wait for more.
 """
 # A call's voice when each turn is built from the call's record (sbledger): the same prelude, and how to read
 # the record's blocks, before its opening paragraph.

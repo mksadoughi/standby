@@ -369,7 +369,7 @@ try:
           and "last message" not in ledger)
     check("  saying nothing sits with the notes, where it's mostly used", "send the new work with [DEEP]. To say nothing, reply [QUIET]." in call)
     check("  asked at their pauses, it never says nothing to wait for more (the app asks again if they go on)",
-          "To say nothing, reply [QUIET]. You're asked at their pauses, and again if they go on: never [QUIET] to wait for more." in call)
+          "To say nothing, reply [QUIET]. You're asked at their pauses, and again if they go on: never reply [QUIET] to wait for more." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
           "Your reading and search tools are only for looking, starting where your session works and in ~/.standby, "
           "never the whole home folder." in call
