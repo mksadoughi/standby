@@ -156,8 +156,8 @@ check "speech model: the one chosen, at its own size (not 'about 600 MB')" \
 check "  from Hugging Face, pinned to the revision measured" \
   "[[ \$(grep -c '^mlx-community/parakeet-tdt_ctc-110m [a-z.]* d62547387c356a1ab6bb3d85d98b2103f655282e\$' $H/hf.args) -eq 2 ]] && grep -q ' config.json ' $H/hf.args && grep -q ' model.safetensors ' $H/hf.args"
 check "voice mode's end-of-turn model is kept, not fetched again" "grep -q 'end-of-turn model already present' $T/out.1"
-check "every package line pinned to constraints.txt, none upgrading what is there" \
-  "[[ \$(grep -c -- '-c $REPO/constraints.txt' $T/pip.args) -eq 3 ]] && ! grep -v '^install --quiet --upgrade pip wheel\$' $T/pip.args | grep -q -- '--upgrade'"
+check "every package line pinned to constraints.txt, pip and wheel too, none upgrading what is there" \
+  "[[ \$(grep -c -- '-c $REPO/constraints.txt' $T/pip.args) -eq 4 ]] && grep -qx 'install --quiet -c $REPO/constraints.txt pip wheel' $T/pip.args && ! grep -q -- '--upgrade' $T/pip.args"
 check "  constraints.txt pins every package install.sh names, mlx-audio among them" \
   "$REALPY - $REPO/constraints.txt <<'PYC'
 import re, sys
@@ -171,6 +171,8 @@ check "  said either way: installed, or a macOS voice speaks" \
 DP="$H/Applications/Standby Dictation.app/Contents"
 check "dictation app: menu-bar only, asks for the microphone and the Mac's sound, own id" \
   "$REALPY -c \"import plistlib,sys; d=plistlib.load(open('$DP/Info.plist','rb')); sys.exit(not (d['CFBundleName']=='Standby Dictation' and d['CFBundleIdentifier']=='dev.standby.dictation' and d.get('LSUIElement') is True and d.get('NSMicrophoneUsageDescription') and d.get('NSAudioCaptureUsageDescription')))\""
+check "  its version is the release's, as the plugin's manifest says it, the dictation app's too" \
+  "$REALPY -c \"import json,plistlib,sys; v=json.load(open('$REPO/lite/.claude-plugin/plugin.json'))['version']; a=plistlib.load(open('$P/Info.plist','rb')); d=plistlib.load(open('$DP/Info.plist','rb')); sys.exit(not (v and a['CFBundleShortVersionString']==a['CFBundleVersion']==v and d['CFBundleShortVersionString']==v))\""
 DE="$H/.standby/app-build/dictation/StandbyDictation.py"
 check "dictation app built in alias mode from its entry point, with icon" \
   "[[ \"\$(cat \"$DP/build.txt\")\" == '$DE|True|$ICON_DICT' ]]"

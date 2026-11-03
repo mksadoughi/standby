@@ -150,7 +150,7 @@ say "Python environment ($VENV)"
 mkdir -p "$ROOT" "$ROOT/sessions" "$ROOT/models"
 chmod 700 "$ROOT" "$ROOT/sessions"
 [[ -d "$VENV" ]] || "$PY" -m venv "$VENV"
-"$VENV/bin/pip" install --quiet --upgrade pip wheel
+"$VENV/bin/pip" install --quiet -c "$REPO/constraints.txt" pip wheel      # pip and wheel too at their pinned versions
 echo "   installing packages (a few minutes the first time)..."
 # The versions in constraints.txt, the set that works, and no --upgrade: a fresh install
 # gets exactly those, and running this again keeps what is there and adds what is missing.
@@ -437,6 +437,11 @@ sign_app() {
     warn "could not sign $(basename "$1") with Standby's own certificate: macOS will ask again after the next reinstall"
   keychain_off
 }
+# The apps' version is the release's, as the plugin's manifest says it (one version for all of Standby)
+VERSION="$("$VENV/bin/python" -c 'import json, re, sys
+v = str(json.load(open(sys.argv[1])).get("version", ""))
+print(v if re.match(r"^[0-9]+([.][0-9]+){1,2}$", v) else "0.0.0")' "$REPO/lite/.claude-plugin/plugin.json" 2>/dev/null || echo 0.0.0)"
+versioned() { sed -i '' "s/@VERSION@/$VERSION/g" "$1"; }
 # What went into an app: the same, and the app already there is kept as it is.
 build_key() { { cat "$@" 2>/dev/null || true; } | shasum | cut -d' ' -f1; }    # a file not there (no icon) counts as empty
 if signing_identity; then
@@ -478,7 +483,7 @@ WHY = "So a call can read the project you’re working on in Claude Code."
 plist = {
     "CFBundleName": "Standby", "CFBundleDisplayName": "Standby",
     "CFBundleIdentifier": "dev.standby.app",
-    "CFBundleShortVersionString": "0.9", "CFBundleVersion": "0.9",
+    "CFBundleShortVersionString": "@VERSION@", "CFBundleVersion": "@VERSION@",
     "LSMinimumSystemVersion": "14.4", "NSHighResolutionCapable": True,
     "NSMicrophoneUsageDescription":
         "Standby hears you on calls and transcribes your meetings on this Mac, so your Claude Code can follow along.",
@@ -494,6 +499,7 @@ if os.path.exists("Standby.icns"):
     opts["iconfile"] = "Standby.icns"
 setup(app=["Standby.py"], name="Standby", options={"py2app": opts})
 PYSETUP
+versioned "$BUILD/setup.py"
 if "$VENV/bin/pip" install --quiet "${PINS[@]}" py2app >"$BUILD/build.log" 2>&1 &&
    (cd "$BUILD" && "$VENV/bin/python" setup.py py2app -A >>"$BUILD/build.log" 2>&1) &&
    [[ -d "$BUILD/dist/Standby.app" ]]; then
@@ -547,7 +553,7 @@ from setuptools import setup
 plist = {
     "CFBundleName": "Standby Dictation", "CFBundleDisplayName": "Standby Dictation",
     "CFBundleIdentifier": "dev.standby.dictation",
-    "CFBundleShortVersionString": "0.9", "CFBundleVersion": "0.9",
+    "CFBundleShortVersionString": "@VERSION@", "CFBundleVersion": "@VERSION@",
     "LSMinimumSystemVersion": "14.4", "NSHighResolutionCapable": True,
     "LSUIElement": True,
     "NSMicrophoneUsageDescription":
@@ -560,6 +566,7 @@ if os.path.exists("Dictation.icns"):
     opts["iconfile"] = "Dictation.icns"
 setup(app=["StandbyDictation.py"], name="Standby Dictation", options={"py2app": opts})
 PYSETUP
+versioned "$DBUILD/setup.py"
 if (cd "$DBUILD" && "$VENV/bin/python" setup.py py2app -A >>"$BUILD/build.log" 2>&1) &&
    [[ -d "$DBUILD/dist/Standby Dictation.app" ]]; then
   WAS="$(app_mark "$DAPP")"

@@ -86,6 +86,8 @@ miniaudio==1.71
 transformers==5.19.0
 tokenizers==0.23.2
 safetensors==0.8.0
+pip==26.2.2
+wheel==0.48.0
 setuptools==84.1.0
 altgraph==0.17.5
 macholib==1.16.4

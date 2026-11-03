@@ -20,6 +20,8 @@ FluidAudio:
 - Upstream: [FluidInference/FluidAudio](https://github.com/FluidInference/FluidAudio),
   `Sources/FluidAudio/Diarizer/Nemotron3/Nemotron3StateUpdater.swift`, at commit
   [1b0ed50](https://github.com/FluidInference/FluidAudio/blob/1b0ed50d686873128a4129b3510ce3914c849bab/Sources/FluidAudio/Diarizer/Nemotron3/Nemotron3StateUpdater.swift).
+- Copyright: FluidInference and FluidAudio's contributors (its LICENSE, the plain Apache 2.0 text, names no
+  holder).
 - License: Apache License 2.0, full text in [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt).
   FluidAudio's repository carries no NOTICE file.
 - FluidAudio's code is itself a port of `SortformerModules.streaming_update_async` (batch size 1)

@@ -30,7 +30,7 @@ The installer sets everything up and downloads the models once. After that, its 
 
 ## What it needs
 
-- **A Mac**: Apple Silicon, macOS 14.4 or later, and [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 2.1.299 or later,
+- **A Mac**: Apple Silicon, macOS 14.4 or later, and [Claude Code](https://code.claude.com/docs/en/overview) 2.1.299 or later,
   signed in (`claude update` gets the latest). 16 GB of memory is best for calls.
 - **A one-time download** of about 4.5 GB (2.5 GB on an 8 GB Mac), so leave 6 GB free. The installer fetches it all,
   Standby's voice (240 MB) included.

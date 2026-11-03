@@ -186,6 +186,11 @@ config.CONFIG.unlink()
 with config.update() as cfg:
     pass
 check("no config.json and nothing to change: none written", not config.CONFIG.exists())
+config.CONFIG.write_text("{}"); os.chmod(str(config.CONFIG), 0o644)              # as an older Standby left it
+with config.update() as cfg:
+    cfg["talk_over"] = True
+check("written, it's owner-only (0600), an older one's 0644 too", (config.CONFIG.stat().st_mode & 0o777) == 0o600
+      and json.loads(config.CONFIG.read_text()).get("talk_over") is True, oct(config.CONFIG.stat().st_mode & 0o777))
 
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
 sys.exit(1 if fails else 0)

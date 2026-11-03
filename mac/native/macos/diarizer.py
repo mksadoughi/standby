@@ -114,6 +114,9 @@ class Mel(object):
 
 
 # -- the streaming state (NeMo streaming_update_async, batch 1) --------------------
+# Modified from FluidAudio's Nemotron3StateUpdater.swift at 1b0ed50 (Copyright FluidInference and FluidAudio's
+# contributors, Apache License 2.0), itself a port of NVIDIA NeMo's (Apache 2.0): rewritten from Swift in Python
+# with NumPy, the state a dictionary of arrays, the sizes module constants. THIRD_PARTY_NOTICES.md has the rest.
 
 def new_state():
     return {"cache": np.zeros((CACHE, D), np.float32), "cache_preds": np.zeros((CACHE, SPK), np.float32),

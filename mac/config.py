@@ -58,7 +58,7 @@ def _write(cfg):
             json.dump(cfg, fh, indent=2)
             fh.flush()
             os.fsync(fh.fileno())
-        os.chmod(tmp, 0o644)
+        os.chmod(tmp, 0o600)                       # owner-only, as the folder it is in
         os.replace(tmp, str(CONFIG))
     except BaseException:
         try:
