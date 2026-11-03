@@ -3654,6 +3654,7 @@ def call_opens(cc, sid):
 
 CALL_SOUNDS = Path(__file__).resolve().parent / "sounds"     # made in the apps' copy of the code (callsounds.py)
 QUITTING = threading.Event()                   # Quit: a call it stops ends with no sound, the app is going
+SOUND_WAIT = 0.5                               # the most a call sound holds its caller: it plays on a thread
 
 
 def call_sound(moment, paused=None):
@@ -3662,15 +3663,29 @@ def call_sound(moment, paused=None):
     has stopped, after its last word) and message (something arrived off a call: a meeting's summary, Claude
     asking to listen, and news for a paused call: `paused`, its session). Never while a call or meeting is
     live, so the mic and its echo cancelling never hear one, but for a paused call's news: they aren't hearing
-    the voice then. Not made (a checkout never installed): no sound."""
+    the voice then. Not made (a checkout never installed): no sound. None while the mic is undecided: playing
+    on a device that is mic and speakers in one (AirPods, a VM's) has macOS ask for the mic, before the
+    user's yes (VM 2026-11-02); the mic is asked for after Accept, as setup does. On a thread, held for at
+    most SOUND_WAIT: it starts before what follows, and a prompt never holds the caller."""
     if not get_settings()["call_sounds"] or QUITTING.is_set():
         return
     live = live_session()
     if moment != "ending" and live and not (paused and live == paused and call_muted(paused)):
         return
     path = CALL_SOUNDS / (moment + ".wav")
-    if path.is_file() and sound.play(str(path)):
-        log("call sound: %s" % moment)
+    if not path.is_file():
+        return
+
+    def play():
+        mic = mic_access(fresh=True)               # a reading from before can be stale: never one here
+        if mic not in ("authorized", "denied", "restricted"):
+            log("call sound: %s not played, the mic is %s (playing would have macOS ask for it)" % (moment, mic))
+        elif sound.play(str(path)):
+            log("call sound: %s" % moment)
+
+    t = threading.Thread(target=play, name="call-sound", daemon=True)
+    t.start()
+    t.join(SOUND_WAIT)
 
 
 def _lite_watch(sid):

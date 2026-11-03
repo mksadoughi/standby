@@ -253,11 +253,97 @@ ui.call_sound("message")
 check("not made (a checkout never installed): no sound, no error", heard() == [])
 ui.CALL_SOUNDS = SOUNDS
 
+# ---------------------------------------------------------------- the mic undecided
+# Playing where the mic and the speakers are one device (AirPods, a VM's) has macOS ask for the mic: before
+# the user's yes, the ring would bring the prompt up (VM 2026-11-02). So nothing plays until the mic is decided.
+mic, asked, logged = ["undetermined"], [], []
+real_access, real_log = ui.mic_access, ui.log
+ui.mic_access = lambda fresh=False: (asked.append(fresh), mic[0])[1]
+ui.log = lambda msg: (logged.append(msg), real_log(msg))
+r = inc({"cc": CC, "kind": "call"})
+check("the mic not decided yet: Claude asks to call, the band asks, and nothing rings", "id" in r and heard() == []
+      and any("incoming not played, the mic is undetermined" in m for m in logged), logged[-2:])
+check("  read fresh, never a reading from before (this process can be told undetermined after an Allow)",
+      asked == [True], asked)
+inc({"cc": CC, "kind": "listen"})
+ui.call_sound("connecting")
+ui.call_sound("ending")
+check("  nor any other sound", heard() == [])
+mic[0] = None
+inc({"cc": CC, "kind": "call"})
+check("  macOS's answer unknown: nothing either", heard() == [])
+mic[0] = "authorized"
+inc({"cc": CC, "kind": "call"})
+check("the mic allowed: it rings as before", heard() == ["incoming"])
+mic[0] = "denied"
+inc({"cc": CC, "kind": "call"})
+check("  refused: it rings too (a refused mic brings no prompt up)", heard() == ["incoming"])
+
+ui.sound = types.SimpleNamespace(play=lambda path: (time.sleep(3), played.append("late"), True)[2])
+t0 = time.time()
+r = inc({"cc": CC, "kind": "call"})
+took = time.time() - t0
+check("a player held up (a prompt up): the call's request answers anyway, within half a second",
+      "id" in r and took < ui.SOUND_WAIT + 0.3, round(took, 2))
+time.sleep(3.2)
+check("  and the sound plays once it can, on its own thread", heard() == ["late"])
+ui.sound = types.SimpleNamespace(play=lambda path: (played.append(os.path.basename(path)[:-4]), True)[1])
+ui.mic_access, ui.log = real_access, real_log
+
 # ---------------------------------------------------------------- the player
 from native import sound  # noqa: E402
 from native.macos import sound as mac_sound  # noqa: E402
 check("the player plays nothing with STANDBY_NO_DEVICES (every test)", sound.play(str(SOUNDS / "message.wav")) is False)
 check("  on a Mac, a file that isn't there: not played, nothing raised", mac_sound.play(str(Path(root) / "nope.wav")) is False)
+
+
+class FakeQueues(object):
+    """AudioToolbox, as the Mac player calls it: what it asked for, in order; nothing plays."""
+
+    def __init__(self):
+        self.calls, self.fmt, self.pcm = [], None, None
+        self.buf = mac_sound._Buffer()
+        self.mem = ctypes.create_string_buffer(1 << 20)
+
+    def __getattr__(self, name):
+        return lambda *a: self.calls.append((name,) + a[1:]) or 0
+
+    def AudioQueueNewOutput(self, fmt, done, user, loop, mode, flags, out):
+        f = fmt._obj
+        self.fmt = (f.rate, f.channels, f.bits, f.bytes_per_frame)
+        out._obj.value = 1234
+        self.calls.append(("AudioQueueNewOutput",))
+        return 0
+
+    def AudioQueueAllocateBuffer(self, q, size, out):
+        self.buf.capacity, self.buf.data = size, ctypes.addressof(self.mem)
+        out._obj.contents = self.buf
+        self.calls.append(("AudioQueueAllocateBuffer", size))
+        return 0
+
+    def AudioQueueEnqueueBuffer(self, q, buf, n, descs):
+        self.pcm = ctypes.string_at(self.buf.data, self.buf.size)
+        self.calls.append(("AudioQueueEnqueueBuffer",))
+        return 0
+
+
+import ctypes  # noqa: E402
+fake = FakeQueues()
+mac_sound._LIB, mac_sound.LET_GO_AFTER = fake, 0.0
+with wave.open(str(SOUNDS / "incoming.wav")) as w:
+    want, secs = w.readframes(w.getnframes()), w.getnframes() / float(w.getframerate())
+source = open(mac_sound.__file__).read()
+check("on a Mac the ring starts on an output queue", mac_sound.play(str(SOUNDS / "incoming.wav")) is True, fake.calls)
+check("  an output queue: no NSSound or AVAudioEngine, no main thread, nothing for input",
+      [c[0] for c in fake.calls] == ["AudioQueueNewOutput", "AudioQueueAllocateBuffer", "AudioQueueEnqueueBuffer",
+                                     "AudioQueueStart", "AudioQueueStop"]
+      and not any(name in source for name in ("NSSound(", "import AVFoundation", "NewInput", "from AppKit")), fake.calls)
+check("  the file as it is: 44.1 kHz, mono, 16-bit, every byte of it", fake.fmt == (44100.0, 1, 16, 2) and fake.pcm == want,
+      fake.fmt)
+check("  stopped not at once: what's queued plays out", fake.calls[-1] == ("AudioQueueStop", 0), fake.calls[-1])
+time.sleep(secs + 0.3)
+check("  and let go once it has played", fake.calls[-1] == ("AudioQueueDispose", 1), fake.calls[-1])
+mac_sound._LIB = None
 
 print("\n%s" % ("all OK" if not fails else "%d FAILED: %s" % (len(fails), "; ".join(fails))))
 sys.exit(1 if fails else 0)
