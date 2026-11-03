@@ -52,6 +52,7 @@ cat > "$B/claude" <<EOF
 #!/bin/bash
 echo "\$*" >> "$T/claude.args"
 [[ "\$1" == "plugin" && -e "$T/claude-fails" ]] && exit 1
+[[ "\$*" == "plugin list --json" ]] && { cat "$T/plugins.json" 2>/dev/null || echo "[]"; exit 0; }
 echo "\${CC_VERSION:-2.1.310} (Claude Code)"
 EOF
 cat > "$B/iconutil" <<'EOF'
@@ -230,6 +231,10 @@ check "  a re-run asks the same again (harmless: Claude Code says it's already t
   "[[ \$(grep -c 'plugin install standby@standby' $T/claude.args) -eq 2 ]] && grep -q 'plugin standby@standby, in every folder' $T/out.2"
 check "  the repo is a marketplace with standby from lite/" \
   "$REALPY -c \"import json,sys; m=json.load(open('$REPO/.claude-plugin/marketplace.json')); sys.exit(not (m['name']=='standby' and m['plugins'][0]['name']=='standby' and m['plugins'][0]['source']=='./lite'))\""
+echo '[{"id": "standby@claude-plugins-directory", "scope": "user", "enabled": true}, {"id": "standby@standby"}]' > "$T/plugins.json"
+: > "$T/claude.args"; run 10; rc=$?; rm -f "$T/plugins.json"
+check "  Standby's plugin already added from another marketplace (the directory): no copy of its own, ours from before removed" \
+  "[[ $rc -eq 0 ]] && grep -q 'plugin standby@claude-plugins-directory is already in Claude Code: Standby uses it' $T/out.10 && ! grep -q 'plugin install standby@standby' $T/claude.args && ! grep -q 'marketplace add' $T/claude.args && grep -qx 'plugin uninstall standby@standby --scope user' $T/claude.args && grep -qx 'plugin marketplace remove standby' $T/claude.args"
 touch "$T/claude-fails"; run 6; rc=$?; rm -f "$T/claude-fails"
 check "  Claude Code refusing it: the install still succeeds, and says the two commands" \
   "[[ $rc -eq 0 ]] && grep -q \"couldn't add the plugin\" $T/out.6 && grep -q 'claude plugin install standby@standby --scope user' $T/out.6"

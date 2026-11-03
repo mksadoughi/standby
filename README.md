@@ -91,7 +91,7 @@ Uninstall:
 
 ```bash
 standby dictation off
-claude plugin uninstall standby@standby && claude plugin marketplace remove standby
+claude plugin uninstall standby; claude plugin marketplace remove standby
 rm -rf ~/.standby ~/Applications/Standby.app "$HOME/Applications/Standby Dictation.app"
 rm -f ~/.local/bin/standby ~/.local/bin/standby-ctx
 ```

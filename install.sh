@@ -328,9 +328,25 @@ say "Claude Code plugin"
 # from ~/.standby/code/lite: after a git pull, any `standby` command updates the copy, and a new Claude Code
 # session (or /reload-plugins) has it.
 PLUGIN_CMDS="claude plugin marketplace add \"$ROOT/code\" && claude plugin install standby@standby --scope user"
+# Standby's plugin added from another marketplace (Claude's plugin directory, say) is Standby's plugin here: a copy
+# of its own beside it would load twice, two bands and each meeting's lines sent twice. One of ours from before goes.
+OTHER=""
+if [[ -n "$CLAUDE" ]]; then
+  OTHER="$("$CLAUDE" plugin list --json 2>/dev/null | "$VENV/bin/python" -c '
+import json, sys
+try:
+    ids = [p.get("id", "") for p in json.load(sys.stdin)]
+except Exception:
+    ids = []
+print(next((i for i in ids if i.startswith("standby@") and i != "standby@standby"), ""))' 2>/dev/null || true)"
+fi
 if [[ -z "$CLAUDE" ]]; then
   warn "Claude Code isn't on this Mac yet: once it is, add Standby to it with"
   echo "     $PLUGIN_CMDS"
+elif [[ -n "$OTHER" ]]; then
+  "$CLAUDE" plugin uninstall standby@standby --scope user >/dev/null 2>&1 || true
+  "$CLAUDE" plugin marketplace remove standby >/dev/null 2>&1 || true
+  ok "plugin $OTHER is already in Claude Code: Standby uses it, and adds no copy of its own"
 elif { "$CLAUDE" plugin marketplace remove standby >/dev/null 2>&1 || true; } &&
      "$CLAUDE" plugin marketplace add "$ROOT/code" >/dev/null 2>&1 && "$CLAUDE" plugin install standby@standby --scope user >/dev/null 2>&1; then
   if [[ "$CC_OLD" == yes ]]; then           # added, but this Claude Code can't run it: never "type /standby"
