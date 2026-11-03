@@ -25,6 +25,7 @@ test_installer             sh    par
 test_stop                  sh    par  
 test_ui_page               sh    par  
 test_mic_follow            py    par  
+test_mic_handover          py    par  
 test_projects              py    par  
 test_my_voice              py    par  
 test_agent_restart         py    par  

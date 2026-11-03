@@ -1216,6 +1216,7 @@ class Channel(object):
         self.partial = ""        # words of the utterance still being spoken
         self.device_name = "?"
         self.borrowed = None     # voice mode's echo-cancelling engine has the mic (VoiceIO)
+        self._handover = False   # ...is being made: the plain stream stays open, its audio dropped (borrow)
         self.borrow_error = None # why it could not, for the app (live.json voice.why)
         # a mic channel follows the Mac (follow), switches and reconnects in the same
         # recording; its clock stays the session's (silence fills a gap).
@@ -1326,6 +1327,8 @@ class Channel(object):
         self.audio.put(block)
 
     def _callback(self, indata, frames, time_info, status):
+        if self._handover:                     # the engine takes over this mic: its audio is the one kept
+            return
         if status:
             log("%s: %s" % (self.speaker, status))
         # Downmix to mono, copy out of the driver buffer. numpy only: no MLX here.
@@ -1416,6 +1419,7 @@ class Channel(object):
         if refresh and self.refresh is not None:
             self.refresh(self)
         if self.borrowed is not None:
+            keep = self._keeper(name)          # made before the old engine's mic goes (borrow)
             try:
                 self.borrowed.stop_mic()
             except Exception:
@@ -1426,6 +1430,8 @@ class Channel(object):
             except Exception as exc:
                 log("%s: echo cancellation unavailable on %s (%r): the plain mic" % (self.speaker, name, exc))
                 self.borrowed = None
+            finally:
+                self._close_plain(keep)
         idx = pa_index(name)
         if idx is None:
             raise RuntimeError("%s is not connected" % name)
@@ -1697,31 +1703,57 @@ class Channel(object):
     def borrow(self, backend):
         """Voice mode on open speakers: the mic comes through the backend's
         echo cancellation instead (VoiceIO), into the same queue, so the rest
-        is unchanged. True if it does; else the plain mic stays."""
+        is unchanged. True if it does; else the plain mic stays.
+
+        Made before the plain stream goes: it stays open, its audio dropped (one stream's
+        audio at a time), until the engine has started, so the mic never sits idle between
+        them. AirPods idle for 2 s leave call mode, and an engine started while they come back
+        can play into a link macOS left set up for the codec before: nothing heard of any
+        answer, the engine none the wiser (a call 2026-11-02)."""
         self.borrow_error = None
         if self.error is not None or self._input is None or self.borrowed is not None:
             self.borrow_error = "the mic isn't open" if self.borrowed is None else None
             return False
-        try:                                  # one stream at a time on the mic: no doubled audio
-            self._input.stop()
-            self._input.close()
-        except Exception:
-            pass
-        self._input = None
+        plain, self._handover, t0 = self._input, True, time.time()
         try:
             backend.start_mic(self.device_name, self._feed)
-            self.borrowed = backend
-            if hasattr(self._stream, "min_rms"):
-                self._stream.min_rms = getattr(type(self._stream), "ENGINE_MIN_RMS", self._stream.min_rms)
-            return True
         except Exception as exc:
+            self._handover = False            # the plain mic goes on as it was
             self.borrow_error = str(exc)      # why voice mode is half duplex: to the app (live.json)
             log("%s: echo cancellation unavailable (%r): the plain mic stays" % (self.speaker, exc))
-            try:
-                self._open_input()
-            except Exception as exc2:
-                self._fail(exc2)
             return False
+        self._input, self.borrowed = None, backend
+        self._close_plain(plain)
+        self._handover = False
+        log("%s: echo cancelling has the mic in %.2fs" % (self.speaker, time.time() - t0))
+        if hasattr(self._stream, "min_rms"):
+            self._stream.min_rms = getattr(type(self._stream), "ENGINE_MIN_RMS", self._stream.min_rms)
+        return True
+
+    @staticmethod
+    def _close_plain(stream):
+        if stream is None:
+            return
+        try:
+            stream.stop()
+            stream.close()
+        except Exception:
+            pass
+
+    def _keeper(self, name):
+        """A plain stream on `name` whose audio goes nowhere: the mic kept busy while voice mode's
+        engine is made again on it (borrow says why). None if it won't open."""
+        idx = pa_index(name)
+        if idx is None:
+            return None
+        try:
+            import sounddevice as sd
+            keep = sd.InputStream(device=idx, channels=1, samplerate=SAMPLE_RATE, dtype="float32",
+                                  blocksize=int(SAMPLE_RATE * BLOCK_SECONDS), callback=lambda *a: None)
+            keep.start()
+            return keep
+        except Exception:
+            return None
 
     def give_back(self):
         """Voice mode is over: the plain mic again."""

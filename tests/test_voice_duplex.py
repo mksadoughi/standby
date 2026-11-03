@@ -1,7 +1,7 @@
 """Voice mode on open speakers, the recorder's side, with a fake engine.
 
 While voice mode is on, the mic comes through the echo-cancelling engine
-(the plain stream is closed, and opened again after), and Claude's voice is
+(the plain stream is closed once the engine has it, and opened again after), and Claude's voice is
 played from here: sentences from speak.jsonl, in order, with stop.
 Talking over Claude stops it at once, tells the app (a barge_in row), and the
 words become the next turn. Not while Claude is silent, and not without echo
@@ -490,8 +490,8 @@ check("  and no more voice in the status", wait(lambda: "voice" not in live()), 
 
 FakeEngine.fail_mic = True
 (sdir / "dictate").write_text("voice 8\n")
-check("an engine that cannot take the mic: the plain one stays (half duplex)",
-      wait(lambda: len(engines) == 2) and wait(lambda: len(streams) == 3 and streams[2].run)
+check("an engine that cannot take the mic: the plain one stays, never closed or opened again (half duplex)",
+      wait(lambda: len(engines) == 2) and len(streams) == 2 and streams[1].run and not streams[1].closed
       and wait(lambda: vlive().get("half")), (len(engines), len(streams), vlive()))
 check("  and the recorder does not play: it would have no echo cancelled, nor a voice (the app's speaks)",
       not vlive().get("speaks"), vlive())
@@ -511,7 +511,7 @@ wait(lambda: len(engines) == 3)
 check("on headphones, the mic not the one echo cancellation takes: the recorder plays all the same",
       wait(lambda: vlive().get("speaks") and vlive().get("duplex")) and getattr(engines[2], "output", False)
       and not vlive().get("aec") and not vlive().get("half"), vlive())
-check("  and the plain mic stays as it was", wait(lambda: len(streams) == 4 and streams[3].run), len(streams))
+check("  and the plain mic stays as it was", len(streams) == 2 and streams[1].run and not streams[1].closed, len(streams))
 hp = engines[2]
 (sdir / "dictate").write_text("hold 9\n")
 wait(lambda: vlive().get("mode") == "hold")
