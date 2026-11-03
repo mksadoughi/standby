@@ -252,11 +252,20 @@ async function heard($, ev) {
 
 // The agent server, started from here: macOS then counts it, and every Claude Code it starts, as the app this
 // Claude Code runs in (a terminal, an editor), which already reads the project. Started by Standby, a project in
-// ~/Documents needed Standby's own grant, and refused, a call failed every turn. Only ever agentctl's ensure.
+// ~/Documents needed Standby's own grant, and refused, a call failed every turn. Only ever agentctl's ensure, by
+// Standby's own Python (its venv's, or Standby.app's), from Standby's code: beside this plugin's (a checkout,
+// ~/.standby/code) or in ~/.standby/code (this plugin from Claude's directory). Nothing else runs on the app's word.
+const STANDBY_PY = /^\/(?:[^/]+\/)*(?:\.standby\/venv\/bin\/python(?:3(?:\.\d+)?)?|Standby\.app\/Contents\/MacOS\/python)$/
+async function agentArgv($, argv) {
+  if (!Array.isArray(argv) || argv.length !== 3 || argv[2] !== 'ensure') return false
+  const [py, script] = argv
+  if (typeof py !== 'string' || typeof script !== 'string' || [py, script].some(p => p.split('/').includes('..'))) return false
+  const code = String($.plugin.root || '').replace(/\/+$/, '').replace(/\/[^/]+$/, '')
+  const scripts = [(await $.env.get('HOME')) + '/.standby/code/mac/agentctl.py'].concat(code ? [code + '/mac/agentctl.py'] : [])
+  return STANDBY_PY.test(py) && scripts.includes(script)
+}
 async function startAgent($, argv) {
-  const ok = Array.isArray(argv) && argv.length === 3 && typeof argv[0] === 'string' && argv[0].startsWith('/')
-    && typeof argv[1] === 'string' && argv[1].endsWith('/agentctl.py') && argv[2] === 'ensure'
-  if (!ok || S.agentStarting) return
+  if (S.agentStarting || !(await agentArgv($, argv))) return
   S.agentStarting = true
   try {
     const p = $.process.spawn({ argv: ['/usr/bin/env', 'STANDBY_AGENT_BY=claude-code'].concat(argv) })

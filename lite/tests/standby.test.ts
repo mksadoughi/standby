@@ -155,12 +155,20 @@ test('Standby asks: the agent is started from here, as this Claude Code, and onl
   // needed Standby's own grant (refused, a call failed every turn); started here, they count as this app
   const seen = { posts: [] as any[], submitted: [], aborted: [], status: [] } as any
   mock.clock(on)
-  const ok = ['/Users/you/.standby/venv/bin/python', '/Users/you/.standby/code/mac/agentctl.py', 'ensure']
-  fakeApp(on, [{ call: 'agent', argv: ok }, { call: 'agent', argv: ['/bin/rm', '-rf', '/tmp/x'] },
-               { call: 'agent', argv: ['/x/python', '/x/evil.py', 'ensure'] }], seen)
+  // the two real launches: the installed app (its venv's Python, ~/.standby/code), and Standby.app's own Python with
+  // the agentctl beside this plugin's code (a checkout, as the AI caller runs it, under a HOME of its own)
+  const besideMe = String(import.meta.dir).replace(/\/lite\/tests\/?$/, '') + '/mac/agentctl.py'     // this plugin is lite/
+  const installed = ['/tmp/standby-test-home/.standby/venv/bin/python', '/tmp/standby-test-home/.standby/code/mac/agentctl.py', 'ensure']
+  const bundled = ['/Users/you/Applications/Standby.app/Contents/MacOS/python', besideMe, 'ensure']
+  fakeApp(on, [{ call: 'agent', argv: installed }, { call: 'agent', argv: bundled }, { call: 'agent', argv: ['/bin/rm', '-rf', '/tmp/x'] },
+               { call: 'agent', argv: ['/x/python', '/x/evil.py', 'ensure'] },
+               { call: 'agent', argv: ['/bin/sh', installed[1], 'ensure'] },                          // another program
+               { call: 'agent', argv: [installed[0], '/tmp/x/mac/agentctl.py', 'ensure'] },           // another agentctl
+               { call: 'agent', argv: [installed[0], '/tmp/standby-test-home/.standby/code/mac/../../x/mac/agentctl.py', 'ensure'] },
+               { call: 'agent', argv: [installed[0], installed[1], 'start'] }], seen)
   await $.command.run({ command: 'standby', args: '' })
   await settle()
-  expect(seen.agentStarts).toEqual([['/usr/bin/env', 'STANDBY_AGENT_BY=claude-code'].concat(ok)])
+  expect(seen.agentStarts).toEqual([installed, bundled].map(a => ['/usr/bin/env', 'STANDBY_AGENT_BY=claude-code'].concat(a)))
 })
 
 // asked by Standby, `claude auth status` read the plugin's folders as Standby's: macOS asked it for Documents
