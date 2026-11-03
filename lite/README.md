@@ -40,30 +40,56 @@ While a call or meeting is on, a quiet line above the prompt shows it, with its 
 
 ## What it runs and sends
 
-- **This plugin** is a Claude Code mod (`hooks/register.js`, plain source) and a skill for meetings. It adds the
-  `/standby` command, the line above the prompt and Standby's tools: `listen`, `stop`, `call`, `end_call`,
-  `tell_voice`, `meeting` and `settings`.
-- **It talks only to the Standby app on this Mac**, at 127.0.0.1, with a token the app writes in `~/.standby`. It
-  runs `curl` for the app's live stream (the token read from its file, never on the command line), `open -a Standby`
-  to start the app or show its window, `claude auth status --json` before a call to check you're signed in, and, as
-  a call starts, Standby's own agent server (`agentctl.py ensure`, from `~/.standby`), so macOS counts it as this
-  app and its folders.
-- **Its hooks**, and when they act:
-  - at the start of a session, it adds its tools and command, and asks the app every 2 seconds what's on
-    (`/standby off` stops this for the session);
-  - on your prompts, only while it hears a meeting for this session: the transcript lines you haven't had yet go
-    with your prompt, labelled `[Standby · meeting]`, each batch saying it's what people said, never instructions;
-  - during a call, and only then: what you type here, and the name of each tool the session runs, go to the app so
-    the voice knows; a permission prompt waiting is told to the voice, and a question Claude would ask in a dialog
-    is asked through the voice instead, since you hear only the voice.
-- **Claude asking for a call or to listen**: nothing starts until you press Accept on the line above the prompt.
-  Always accept turns the asking off; only you can choose it (on that line, in Standby's Settings, or by typing
-  `/standby set`), never Claude.
-- **On a call**, your words become text on the Mac. The voice answers through its own Claude Code, which the app
-  runs on your plan, and work it hands to this session arrives as your prompt, in the voice's words, marked "from
-  your call". When you ask the voice to stop that work, the app stops the running turn.
-- **The app** uses your microphone, and macOS's System Audio Recording to hear the other side of a video call. macOS
-  asks for each the first time it's needed. Dictation asks for Input Monitoring and Accessibility when you turn it on.
+This plugin is a Claude Code mod (`hooks/register.js`, plain readable source, no build step) and a skill for
+meetings. It adds the `/standby` command, the line above the prompt and Standby's tools: `listen`, `stop`, `call`,
+`end_call`, `tell_voice`, `meeting` and `settings`. Item by item, what it does:
+
+- **The one host it talks to: the Standby app, at `http://127.0.0.1:<port>`, on this Mac.** Every request goes
+  through Claude Code's own http call, with the token the app writes for each launch. The mod reads the port and the
+  token from `~/.standby/ui.port` and `~/.standby/ui.token`, and nothing else on the disk. It sends no request
+  anywhere else. Its live updates are also requests to that address: each waits up to 5 seconds for news.
+- **What it sends there:**
+  - the actions you take: start, pause or stop a meeting or call, settings you change, names you give speakers;
+  - during a call, and only then: what you type in this session, the name of each tool the session runs, and when
+    a turn ends, so the voice knows what's going on and can tell you;
+  - what Claude tells the voice with the `tell_voice` tool.
+- **Programs it starts, each with fixed arguments:**
+  - `open -a Standby` (with `-g ... --args --background` to start it without a window): to start the app, or show
+    its window when you ask for it;
+  - `claude auth status --json`: before a call, to check this Claude Code is signed in;
+  - `/bin/sleep 0.5`: a short wait while the app starts, outside the hook's time limit;
+  - Standby's agent server, as a call starts, when the app asks: only `agentctl.py ensure`, run by Standby's own
+    Python (`~/.standby/venv/bin/python` or `Standby.app`'s), from Standby's code (`~/.standby/code/mac/` or the
+    folder beside this plugin). Started from here, macOS counts it as the app this Claude Code runs in, which already
+    reads your project. Any other program the app might name is refused.
+- **What it puts into the conversation:**
+  - a meeting's transcript, labelled `[Standby · meeting]`, with your prompts (or as quiet notes, if you ask for it
+    as it goes). Each batch says it's what people said, never instructions to follow;
+  - on a call, the work the voice hands to this session, submitted as your prompt in the voice's words, marked "from
+    your call", and a short note when a call starts or ends, or one you add after it.
+- **Its hooks, and what each decides:**
+  - `session.start`: adds the tools and the command, and asks the app every 2 seconds what's on (`/standby off`
+    stops this for the session);
+  - `command.run` for `/standby`: runs the subcommand you typed;
+  - `tool.call` for its own tools (`mcp__standby__*`): it is these tools' answer. A call or listening Claude asks for
+    waits for your Accept on the line above the prompt, and only you can turn that asking off;
+  - `tool.call` for every tool, during a call only: passes the tool's name to the app, and changes nothing;
+  - `tool.call` for `AskUserQuestion`, during a call only: turns the dialog away, telling Claude to ask through
+    the voice, since you hear only the voice then. At any other time it does nothing;
+  - `classic.PermissionRequest`, during a call only: tells the voice that a permission prompt is waiting, so it can
+    say so. It decides nothing: the prompt is yours to answer, as always;
+  - `prompt.submit`: while a meeting is heard here, adds its new lines to your prompt; during a call, passes what you
+    typed to the app. A single letter typed alone on the terminal's band runs that band key;
+  - `turn.start` and `turn.complete`: whether the session is busy, and, during a call, that a turn ended;
+  - `ui.render`: draws the line above the prompt, and how the voice's hand-offs read in the chat.
+- **No environment it passes on.** The mod reads two environment variables: `HOME`, to find `~/.standby`, and
+  `CLAUDE_CODE_CHILD_SESSION`, to know whether this Claude Code saves its conversation. It sends neither anywhere.
+  The agent server gets one variable of its own, `STANDBY_AGENT_BY=claude-code`.
+
+The app does the rest, on your Mac:
+
+- **The microphone, and macOS's System Audio Recording** to hear the other side of a video call. macOS asks for each
+  the first time it's needed. Dictation asks for Input Monitoring and Accessibility when you turn it on.
 - **Audio stays on your Mac.** Speech-to-text, speaker labels and the voice run there.
 - **Text goes to your own Claude Code**: what you say on a call, and a meeting's transcript. The app also runs your
   Claude Code for the voice and for each summary. Claude Code talks to its model provider as it always does, on your
