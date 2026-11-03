@@ -15,6 +15,7 @@ import sys
 import time
 import wave
 from pathlib import Path
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")      # its downloads send nothing about this Mac
 
 ROOT = Path(os.environ.get("STANDBY_ROOT", Path.home() / ".standby"))
 SESSIONS = ROOT / "sessions"

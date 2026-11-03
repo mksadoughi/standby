@@ -202,7 +202,8 @@ rows.append({"t": 30, "end": 33, "spk": 0, "text": "One more."})
 check("  one new line, under push_lines and fresh: not yet", L.batch(SID, now=time.time() - 600 + 40) == {})
 b2 = L.batch(SID, everything=True)
 check("  but with the user's question (all=1): it goes now, and only the opening batch had the opening words",
-      b2["through"] == 5 and "Nadia: One more." in b2["text"] and lite.PREAMBLE not in b2["text"], b2)
+      b2["through"] == 5 and "Nadia: One more." in b2["text"] and lite.PREAMBLE not in b2["text"]
+      and b2["text"].split("\n")[1] == lite.UNTRUSTED, b2)
 check("  and once push_seconds have passed since that line, it goes anyway",
       L.batch(SID, now=time.time() + 120)["through"] == 5)
 L.batch_sent({"session": SID, "through": 5})

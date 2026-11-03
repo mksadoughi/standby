@@ -23,7 +23,7 @@ sys.path.insert(0, str(HERE))
 
 # What the app, the recorder and the windows import, most of them inside the function that needs it
 LIBRARIES = ["objc", "Foundation", "CoreFoundation", "AppKit", "WebKit", "Quartz", "AVFoundation", "CoreAudio",
-             "CoreML", "ScreenCaptureKit", "PyObjCTools.AppHelper", "webview", "sounddevice", "onnxruntime",
+             "CoreML", "PyObjCTools.AppHelper", "webview", "sounddevice", "onnxruntime",
              "sherpa_onnx", "mlx.core", "scipy.signal"]
 VOICE_WAIT = 600                 # the most the voice's download and first load are waited for
 

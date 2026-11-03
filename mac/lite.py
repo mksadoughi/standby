@@ -299,8 +299,8 @@ class Lite(object):
         if not everything and (self.pass_of(sdir) == "ask" or (len(pending) < every and (now or time.time()) - oldest < seconds)):
             return {}                     # on ask: only with a prompt (all=1), never on its own
         out = ["[Standby · meeting · %s-%s]" % (self._stamp(sid, pending[0].get("t")), self._stamp(sid, pending[-1].get("t")))]
-        if through == 0:
-            out.append(ASK_PREAMBLE if self.pass_of(sdir) == "ask" else PREAMBLE)
+        # what it is with every batch, not only the first: a line Claude reads later is still data, never an ask
+        out.append((ASK_PREAMBLE if self.pass_of(sdir) == "ask" else PREAMBLE) if through == 0 else UNTRUSTED)
         out += self._said(sid, pending)
         return {"text": "\n".join(out), "through": through + len(pending)}
 

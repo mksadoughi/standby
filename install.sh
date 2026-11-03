@@ -15,6 +15,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$HOME/.standby"
 VENV="$ROOT/venv"
 BINDIR="$HOME/.local/bin"
+export HF_HUB_DISABLE_TELEMETRY=1          # the model downloads send nothing about this Mac
 APP="$HOME/Applications/Standby.app"
 DAPP="$HOME/Applications/Standby Dictation.app"
 SPEAKER_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx"
@@ -211,7 +212,7 @@ else
   warn "could not download the speech detection model: talking over the voice is judged by loudness alone"
 fi
 # Who's speaking: NVIDIA's Nemotron-3-Diarization in Fluid Inference's Core ML build
-# (OpenMDW-1.1), on the Neural Engine. Hugging Face, a fixed revision, checked by its sha256.
+# (OpenMDW-1.1), on the Neural Engine. Hugging Face, a fixed revision, every file checked by its sha256.
 # macOS 14 or later; without it, speakers are matched by voice prints alone, as before.
 DIAR="$ROOT/models/nemotron-3-diarization"
 DIAR_URL="https://huggingface.co/FluidInference/nemotron-3-diarization-coreml/resolve/25a90f97f254428d4b30374b76af9c74fdee8327"
@@ -220,7 +221,10 @@ monolithic/v2/Nemotron3Diarizer_fast.mlmodelc/model.mil
 monolithic/v2/Nemotron3Diarizer_fast.mlmodelc/analytics/coremldata.bin
 monolithic/v2/Nemotron3Diarizer_fast.mlmodelc/weights/weight.bin
 learnable_sil_emb.bin"
-DIAR_SUMS="5efb213341eb1d772d662d852a9a9cf9f45372a599862e16035880742c491967  Nemotron3Diarizer_fast.mlmodelc/weights/weight.bin
+DIAR_SUMS="cc3b262b0ac3028a749943bfe5b2502bd0e5d12c057b0d4d1fd2a2bbf9e4f1b2  Nemotron3Diarizer_fast.mlmodelc/coremldata.bin
+0ead6160e1152656f8c545b113c65d0ee3b73cb88dd96b8050039cdc58904ebf  Nemotron3Diarizer_fast.mlmodelc/model.mil
+f874278778095b9abfc07106fcbd0e877a8fd5dc34444c7a74331735b41eee68  Nemotron3Diarizer_fast.mlmodelc/analytics/coremldata.bin
+5efb213341eb1d772d662d852a9a9cf9f45372a599862e16035880742c491967  Nemotron3Diarizer_fast.mlmodelc/weights/weight.bin
 d4417b3c0eabdf7c47032fac2b5b5a7ee83d819a6ddda8fd8eaf74e2b5cc4ac7  learnable_sil_emb.bin"
 if [[ -s "$DIAR/Nemotron3Diarizer_fast.mlmodelc/weights/weight.bin" && -s "$DIAR/learnable_sil_emb.bin" ]]; then
   ok "speaker diarization model already present"

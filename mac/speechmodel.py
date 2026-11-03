@@ -33,6 +33,7 @@ import subprocess
 import threading
 from collections import namedtuple
 from pathlib import Path
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")      # its downloads send nothing about this Mac
 
 # Each model as measured on this Mac. punctuates: it writes capitals and stops, checked
 # by a real decode (tests/test_speech_model.py, and tools/punctuation_check.py for a new one).

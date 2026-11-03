@@ -38,6 +38,7 @@ from collections import deque
 from pathlib import Path
 
 import numpy as np
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")      # its downloads send nothing about this Mac
 
 HERE = Path(__file__).resolve().parent
 RATE = 24000
