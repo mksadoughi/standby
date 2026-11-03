@@ -679,6 +679,10 @@ const ASK_FIRST = {
   call: ['call', 'The user declined the call. Nothing was started.'],
   listen: ['meeting', 'The user declined listening. Nothing was started.'],
 }
+// Always accepting is the user's own word: Always accept on the band, Standby's Settings, or /standby set typed by
+// them. Never the settings tool's, or Claude could turn the asking off, then start the mic itself
+const ownOnly = name => String(name || '').trim().toLowerCase().replace(/-/g, '_') === 'auto_accept'
+const OWN_ONLY = 'Only the user can change auto_accept: with Always accept on the band, in Standby\u2019s Settings, or by typing /standby set auto_accept. Nothing was changed.'
 const ASK_WAIT_S = 30                     // the app declines it unanswered after 30 s
 const ASK_LOOK_S = 5                      // the answer waited for in short looks: a fetch held long is cut by the host
 // Claude asking for a call or listening: { go: true } to start it now (nothing to ask: already on), { accepted:
@@ -1019,7 +1023,8 @@ export function register(on) {
     const how = ['ask', 'live'].includes(e.pass) ? e.pass : undefined     // the tool's arguments ride on the event
     const answer = act === 'listen' ? await startListening($, how) : act === 'stop' ? await stopListening($)
       : act === 'call' ? await startCall($) : act === 'end_call' ? await endCall($)
-      : act === 'meeting' ? await meetingText($) : act === 'settings' ? await settings($, e.setting, e.value)
+      : act === 'meeting' ? await meetingText($) : act === 'settings' ? (ownOnly(e.setting) && e.value != null && String(e.value).trim()
+        ? OWN_ONLY : await settings($, e.setting, e.value))
       : 'No such Standby action'
     return { result: answer }
     } finally { S.holding-- }

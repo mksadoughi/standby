@@ -734,6 +734,16 @@ test('settings as a command and a tool: listed with values and choices, one chan
   expect(half.text).toContain('/standby set transcript live')
   const tool = await $.tool.call({ tool: 'mcp__standby__settings', setting: 'transcript', value: 'ask' } as any)
   expect(tool.result).toBe('transcript is now ask.')
+  // Always accepting is the user's word alone: Claude can't turn the asking off, then start the mic itself
+  const posted = seen.posts.length
+  for (const setting of ['auto_accept', 'Auto-Accept']) {
+    const own = await $.tool.call({ tool: 'mcp__standby__settings', setting, value: 'on' } as any)
+    expect(own.result).toContain('Only the user can change auto_accept')
+  }
+  expect(seen.posts.length).toBe(posted)
+  const typed = await $.command.run({ command: 'standby', args: 'set auto_accept on' })
+  expect(seen.posts[seen.posts.length - 1].body).toEqual({ name: 'auto_accept', value: 'on' })
+  void typed
   const listed = await $.tool.call({ tool: 'mcp__standby__settings' } as any)
   expect(listed.result).toContain('Standby\u2019s settings:')
   expect(seen.posts.some((p: any) => p.path === '/api/lite/pass')).toBe(false)     // nothing live: the default only

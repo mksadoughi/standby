@@ -199,7 +199,7 @@ List them with `mcp__standby__settings` or `/standby settings`; change one only 
 | `talk_over` | `on`, `off` (interrupt the voice on laptop speakers) | `off` |
 | `speakers` | `on`, `off` (label speakers) | `on` |
 | `remember_voices` | `on`, `off` (remember named voices and the user's own) | `on` |
-| `auto_accept` | `on`, `off` (Claude starts calls and listening without asking) | `off` |
+| `auto_accept` | `on`, `off` (Claude starts calls and listening without asking; only the user sets it, never the settings tool) | `off` |
 | `ai_update` | 1 to 200 sentences | `10` |
 | `auto_stop` | 0 to 600 minutes, 0 is never | `15` |
 
