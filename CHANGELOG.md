@@ -6,7 +6,7 @@ All notable changes to Standby are listed here. The format follows
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-11-01
+## [0.2.0] - 2026-11-03
 
 Calls work smoothly, your permissions survive a reinstall, and setup is easier, with steadier meetings and dictation
 too.
@@ -28,6 +28,12 @@ too.
   nothing.
 - **Hide.** The first button in the mini window's row puts it away for that call while the call goes on. It comes
   back from the band, from /standby window, or when the voice shows you something.
+- **Call sounds.** Soft sounds made for Standby: a ring when Claude asks to call, connecting as a call starts, an
+  ending when it's over, and a message sound for what arrives off a call, such as a meeting's summary or Claude
+  asking to listen. It rings once when news comes in while a call is paused. You can turn them off in
+  Settings > Sound. Until you've answered macOS's mic question once, a call request comes in silently, so the mic is
+  asked for only after you accept.
+- **The mini window's buttons say what they do** when you rest the pointer on them.
 - **A meeting that ends outside Claude Code.** Your session is told, once.
 - **The website.** A new hero and film: a call about a landing page that changes as you talk, then a meeting about
   its launch. The site reads better on phones. It counts visits with GoatCounter, which uses no cookies and keeps no
@@ -43,6 +49,8 @@ too.
 - **The voice knows how long ago** each task was asked or finished, and says it the way a person would.
 - **A call opens with a short hello,** nothing more. Its voice starts fresh each time, from your session's summary.
 - **Connecting** that takes more than a few seconds says why.
+- **Pause at any moment of a call,** even while the voice is working out a reply or connecting. It says paused at
+  once.
 - **Calls speak in Alba** by default. A voice you chose stays yours.
 - **The orb and the band say what's going on.** While the session works on something you handed over, the orb shows
   it, with "Working on it" as its tip. The band says what the session is working on, and names the session the call
@@ -78,7 +86,8 @@ too.
   came back at once. If a task ends with nothing to tell, the voice says so.
 - **The voice no longer hears itself,** and background noise, outdoors or in the room, no longer counts as you
   talking. Words you start just as the voice finishes are kept.
-- **The voice keeps going when you switch mics or headphones,** and headphones you plug in are used straight away.
+- **Changing your mic or speakers mid-call,** for example putting in AirPods, keeps the call going on the new
+  device.
 - **A noise at a call's start** no longer cuts its hello.
 - **The voice says decimals** with their point.
 - **A call ends when the Claude Code it's with quits,** and a long pause no longer ends a call.
