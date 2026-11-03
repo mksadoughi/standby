@@ -21,10 +21,24 @@ tells an agent how to set it up, use every part of it, fix problems and remove i
 
 Or by hand:
 
-```bash
-git clone https://github.com/mksadoughi/standby.git
-cd standby && ./install.sh
-```
+1. Get the code:
+
+   ```bash
+   git clone https://github.com/mksadoughi/standby.git
+   ```
+
+2. Read the installer, `standby/install.sh`, before you run it. It is a plain shell script in this same repository,
+   and it says what it fetches and sets up as it goes (see Privacy below).
+
+3. Run it, from the folder you cloned:
+
+   ```bash
+   cd standby
+   ```
+
+   ```bash
+   ./install.sh
+   ```
 
 The installer sets everything up and downloads the models once. After that, its speech models run offline; only your Claude Code talks to its model provider, as always.
 
@@ -81,7 +95,15 @@ Dictation is off until you turn it on in Standby's Settings.
 Update:
 
 ```bash
-cd standby && git pull && ./install.sh
+cd standby
+```
+
+```bash
+git pull
+```
+
+```bash
+./install.sh
 ```
 
 Then quit and reopen Standby, and start a new Claude Code session (or run `/reload-plugins`). Your meetings, calls

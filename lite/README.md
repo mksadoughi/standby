@@ -15,12 +15,26 @@ Standby app for Mac, so **without the app, this plugin does nothing.** You need:
 - Claude Code 2.1.299 or later, signed in;
 - about 6 GB free, for a one-time download of about 4.5 GB (2.5 GB on an 8 GB Mac).
 
-Install the app. The installer also adds this plugin to Claude Code:
+Install the app. Its installer also adds this plugin to Claude Code:
 
-```bash
-git clone https://github.com/mksadoughi/standby.git
-cd standby && ./install.sh
-```
+1. Get the code:
+
+   ```bash
+   git clone https://github.com/mksadoughi/standby.git
+   ```
+
+2. Read the installer, `standby/install.sh`, before you run it. It is a plain shell script in this same repository,
+   and it says what it fetches and sets up as it goes (the packages and models listed below).
+
+3. Run it, from the folder you cloned:
+
+   ```bash
+   cd standby
+   ```
+
+   ```bash
+   ./install.sh
+   ```
 
 The full guide, with updating and uninstalling, is in the [repository](https://github.com/mksadoughi/standby).
 Website and demo film: [mksadoughi.github.io/standby](https://mksadoughi.github.io/standby/)
@@ -84,7 +98,8 @@ meetings. It adds the `/standby` command, the line above the prompt and Standby'
   - `ui.render`: draws the line above the prompt, and how the voice's hand-offs read in the chat.
 - **No environment it passes on.** The mod reads two environment variables: `HOME`, to find `~/.standby`, and
   `CLAUDE_CODE_CHILD_SESSION`, to know whether this Claude Code saves its conversation. It sends neither anywhere.
-  The agent server gets one variable of its own, `STANDBY_AGENT_BY=claude-code`.
+  The agent server gets one variable of its own, `STANDBY_AGENT_BY=claude-code`. The one other address in the code,
+  `http://www.w3.org/2000/svg`, is only the namespace of Standby's logo drawing, and is never contacted.
 
 The app does the rest, on your Mac:
 
