@@ -363,6 +363,9 @@ try:
           and "[QUIET]" in call and len(call.replace(" ".join(sa.CALL_VISUALS.split()), "").split()) < 460, (len(call.split()), call[:300]))
     check("  brief: a sentence or two, longer only when they ask it to explain",
           "You're heard, not read: a sentence or two, then let them talk, longer only when they ask you to explain" in call)
+    check("  heard, so written as said aloud: a version in words, never digits with dots (the speech engine's sentence ends)",
+          "write as you'd say it aloud (\"zero point two point zero\" for 0.2.0), never paths, code, markdown or lists." in call
+          and "write as you'd say it aloud" in ledger)
     check("  its opening: its whole reply a hello, under ten words, naming what it's picking up; on the record too",
           "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming at most the one thing you're picking up." in call
           and "[CALL START] means the call just connected: your whole reply is a hello your way, under ten words, naming at most the one thing you're picking up." in ledger
@@ -371,7 +374,7 @@ try:
     check("  asked at their pauses, it never says nothing to wait for more (the app asks again if they go on)",
           "To say nothing, reply [QUIET]. You're asked at their pauses, and again if they go on: never reply [QUIET] to wait for more." in call)
     check("  it may handle things itself: it can read and search where its session works, and nothing forces going deeper",
-          "Your reading and search tools are only for looking, starting where your session works and in ~/.standby, "
+          "Your reading and search tools are only for looking, where your session works and in ~/.standby, "
           "never the whole home folder." in call
           and "So whatever they ask for is yours to do through it" in call
           and "A tool refusing you only means it's your deeper side's to do, never that it can't be done." in call
@@ -382,7 +385,7 @@ try:
           and "[SESSION]" not in call and "[RESULT]" not in call)
     check("  its deeper side never talks to them: it tells the voice, and the voice judges what they hear",
           "Your deeper side never talks to them. It tells you what it thinks they should know, as \"Deeper side: ...\", "
-          "and what reaches them is yours to judge: now, later or not at all, the gist in your words." in call
+          "and what reaches them is yours to judge: now, later or never, the gist in your words." in call
           and "Your deeper side never talks to them. It tells you what it thinks they should know" in ledger)
     check("  the voice can stop or change a task by its number in TASKS, on the record or not",
           "To stop a task, add [CANCEL #n] with its number from TASKS; to change one, stop it and send the new work with [DEEP]." in ledger
@@ -492,12 +495,12 @@ try:
           "Quick, simple things are yours: when they ask several, answer those and take the rest deeper in the same turn."
           in call and "when they ask several, answer those" in ledger)
     check("  [NOW]: the time as the turn began and each task's age, said as spans, never clock times",
-          "TASKS says what you've sent and where it stands, and [NOW] how long ago: say spans as a person would, never "
+          "TASKS says what you've sent and where it stands, and [NOW] how long ago: say spans, never "
           "clock times." in call and "and [NOW] how long ago" in ledger)
     check("  anything that matters is its deeper side's to answer, relied on, not its own summary; quick things are its own",
-          "anything that matters, like a decision, a plan, what's left or something unclear, is its to answer: rely on what "
+          "anything that matters (a decision, a plan, what's left, anything unclear) is its to answer: rely on what "
           "it says, not your own summary." in call
-          and "anything that matters, like a decision, a plan, what's left or something unclear" in ledger
+          and "anything that matters (a decision, a plan, what's left, anything unclear)" in ledger
           and "briefly what you understood, so a misreading shows at once" in ledger)
     check("  visuals on (the default): one plain paragraph, the tag's exact form, after the principles",
           " ".join(sa.CALL_VISUALS.split()) in call and call.index("[CALL START] means") < call.index(" ".join(sa.CALL_VISUALS.split()))
