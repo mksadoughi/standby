@@ -278,6 +278,21 @@ test('/standby listen live starts it live; the meeting tool reads the transcript
 const BAND = { plugin: 'standby', component: 'AbovePrompt', requestId: 'band', viewport: { columns: 120, rows: 40 },
   props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120, scroll: { offset: 0, bodyRows: 4 }, view: {} } } as const
 
+test('the first meeting ever: the line under it says to tell people as it starts, the app\u2019s words, once', async ($, on) => {
+  const words = 'Let people know you\u2019re transcribing. In some places everyone has to agree to be recorded.'
+  const seen: any = { posts: [] as any[], submitted: [], aborted: [], status: [], opened: [],
+    live: { kind: 'meeting', session: 'm1', recorded_s: 4, reminder: words } }
+  mock.clock(on)
+  fakeApp(on, [{ meet: 'line', i: 1, t: 1760700000, speaker: 1, name: 'Speaker 1', text: 'We ship Friday.' }], seen)
+  await $.command.run({ command: 'standby', args: '' })
+  await $.command.run({ command: 'standby', args: 'listen' })
+  await settle()
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Text', text: words })).toMatchObject({ props: { dimColor: true, wrap: 'truncate-end' } })
+  expect(await band.find({ type: 'Text', text: 'Speaker 1: We ship Friday.' })).toBeUndefined()
+  expect(seen.posts.some((p: any) => /incoming|setup/.test(p.path))).toBe(false)          // nothing to click, nothing asked
+})
+
 test('the band while a meeting records: one line that never wraps, the minutes, p pause · e end, and the latest line under it', async ($, on) => {
   const seen: any = { posts: [] as any[], submitted: [], aborted: [], status: [], opened: [] }
   mock.clock(on)

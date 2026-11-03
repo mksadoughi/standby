@@ -98,6 +98,11 @@ check("  what this build can do: listen, its window, and a call into the orb (ca
                         "orb": callable(getattr(ui, "lite_orb", None))}, st.get("can"))
 check("  another session has none", L.state("c0ffee00-1111-4222-8333-555555555555")["live"] is None)
 check("  with the meeting's name", st["live"]["title"] == "Weekly routing sync", st)
+check("the first meeting: the band's line says to tell people, as it starts", st["live"].get("reminder") == lite.REMINDER
+      and "transcribing" in lite.REMINDER and ui.transport.load_config().get("recording_reminded") is True, st["live"])
+was_s, lite.REMIND_S = lite.REMIND_S, 0
+check("  then it's gone: the meeting's own words take the line", "reminder" not in L.state(CC)["live"])
+lite.REMIND_S = was_s
 
 
 # What macOS refuses the meeting, or will ask for: for the band's second line and the window's
@@ -356,6 +361,7 @@ ui.is_talk = real_talk
 LIVE["sid"] = None
 FIRST, SID = SID, "meeting-20261017-110000"
 check("a second meeting: on ask, as Settings has it", L.listen({"cc": CC}) == {"session": SID, "pass": "ask"})
+check("  and no reminder: it was the first meeting's, once", "reminder" not in L.state(CC)["live"], L.state(CC)["live"])
 (ui.SESSIONS / SID / "transcript.jsonl").write_text(json.dumps({"t": 1, "spk": 0, "text": "Quick sync."}) + "\n")
 b4 = L.batch(SID, everything=True)
 check("  its first prompt has all of it, with words for on ask", lite.ASK_PREAMBLE in b4["text"] and lite.PREAMBLE not in b4["text"]

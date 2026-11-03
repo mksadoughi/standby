@@ -889,7 +889,8 @@ async function band($, e, next) {
     const top = live.paused
       ? line([...mark, fixed('‖'), fit('Paused · ' + title), time, ...keys])
       : line([...mark, fixed('●', { color: 'red' }), fit('Listening · ' + title), time, ...keys])
-    return Box({ flexDirection: 'column', children: [top, ...(permLine || below(S.caption))] })
+    // the first meeting ever, as it starts: the line says to tell people (the app's, once), then its words as ever
+    return Box({ flexDirection: 'column', children: [top, ...(permLine || below(live.reminder || S.caption))] })
   }
   // on a call: the top line says where the call is, the dim one under it what's happening now
   const cs = S.callState, failed = !!cs.notice, paused = !!live.muted || cs.phase === 'muted'
