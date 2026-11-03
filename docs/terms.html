@@ -38,7 +38,7 @@
     using it is covered by the terms of your Claude account, API key or cloud provider, and what it does counts toward your
     plan or usage like any Claude Code session. Standby's Settings show how much it used.</p>
 
-  <h2>What stays on your Mac</h2>
+  <h2 id="privacy">Privacy</h2>
   <p>Speech-to-text, speaker labels and Standby's voice run on your Mac. Audio and voice prints never leave it. A
     meeting's transcript and what you say on a call go to your own Claude Code as text, along with anything you paste or
     attach, and Claude Code talks to its model provider as it always does; Claude Code and its tools handle data their own
@@ -46,9 +46,11 @@
     listed below, and that's all. This website counts visits with GoatCounter, which uses no cookies and keeps
     no personal data.</p>
   <p>Standby learns the voices you name, and your own voice from your calls, to tell people apart. These voice prints
-    stay on your Mac; you can turn this off or forget them in Settings &gt; Recording. Standalone dictation isn't kept as
+    stay on your Mac; you can turn this off or forget them in Settings &gt; Meetings. Standalone dictation isn't kept as
     a session; when it uses a running recorder, temporary audio and text files can remain after an interruption.
     Dictated questions within a meeting or call stay in that session.</p>
+  <p>A meeting's audio, the other side of a video call included, is kept as WAV files in its session folder on your Mac
+    (<code>~/.standby/sessions/</code>) until you delete the meeting in Standby. A call keeps no audio.</p>
   <p>Routine logs omit conversation text. Optional debug call traces contain words and replies in the session's folder.
     Older logs can still contain conversation text; review logs and traces before sharing them, since diagnostics can
     also include local paths, device names and error details. Deleting a meeting or call removes its session files,
