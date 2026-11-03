@@ -271,7 +271,6 @@ const MXFAKE = (() => {
       if (p === "/api/msg/delete") { const c = items.find(m => m.session === b.session); if (!c) return {error: "No such meeting or call"};
         if (c.live || c.paused) return {error: "That one is still live: end it first"}; items.splice(items.indexOf(c), 1); return {ok: true, session: b.session} }
       if (p === "/api/speaker") { this._names = Object.assign(this._names || {}, {[b.spk]: b.name}); return {ok: true} }
-      if (p === "/api/msg/memory") { const c = items.find(m => m.session === b.session); if (c) c.memory = b.keep ? "kept" : "forgotten"; return {ok: true} }
       if (p === "/api/claude") { const d = this.session(b.id); d.info.claude = b.on; return {ok: true} }
       return {ok: true};
     },

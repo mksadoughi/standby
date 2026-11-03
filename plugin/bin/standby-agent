@@ -54,7 +54,7 @@ import uuid
 sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
 import sbspeakers  # noqa: E402
 import sbclaude  # noqa: E402  (where Claude Code is: the one finder)
-import sbagents  # noqa: E402  (agents: who holds a conversation, what it's doing, delivering to it)
+import sbagents  # noqa: E402  (agents: who holds a conversation, what it's doing, what Standby made)
 import sbtrace  # noqa: E402  (a call's trace.jsonl: what waited, what the model said)
 import sbledger  # noqa: E402  (a call's conversation as Standby keeps it: each voice turn is built from it)
 sbtrace.source("agent")
@@ -613,42 +613,6 @@ def _tail_facts(path, size=262144):
         return None
     clip = lambda x: " ".join(str(x or "").split())[:120]
     return {"title": clip(custom or ai or prompt), "prompt": clip(prompt), "tokens": tokens or 0}
-
-
-def _b64(value):
-    try:
-        return base64.b64decode(value).decode("utf-8")
-    except (ValueError, TypeError):
-        return None
-
-
-def cmd_deliver(args):
-    """A message to one conversation, as JSON (sbagents.deliver): {"delivery", "msg_id"?,
-    "open_in"?, "error"?}. The text comes base64, so any text survives ssh's quoting."""
-    text = _b64(args.text)
-    if not UUID_RE.match(args.id or "") or text is None:
-        print(json.dumps({"delivery": "failed", "error": "bad request"}))
-        return 1
-    folder = _b64(args.folder) if args.folder else None
-    print(json.dumps(sbagents.deliver(args.id, text, folder, _find_claude(), os.path.realpath(__file__),
-                                      REGISTRY, model=args.model)))
-    return 0
-
-
-def cmd_deliver_run(args):
-    """The outbox's runner: Standby's turns for one conversation, one at a time."""
-    if not UUID_RE.match(args.id or ""):
-        return 1
-    return sbagents.run_outbox(args.id, _find_claude(), REGISTRY)
-
-
-def cmd_delete_agent(args):
-    """A conversation Standby started, deleted for good, as JSON (sbagents.delete)."""
-    if not UUID_RE.match(args.id or ""):
-        print(json.dumps({"error": "bad request"}))
-        return 1
-    print(json.dumps(sbagents.delete(args.id, REGISTRY)))
-    return 0
 
 
 def cmd_open_where(args):
@@ -5415,19 +5379,6 @@ def main():
     p = sub.add_parser("open-where", help="is this conversation open in another Claude Code now, as JSON")
     p.add_argument("--id", required=True)
     p.set_defaults(func=cmd_open_where)
-
-    p = sub.add_parser("deliver", help="a message to one conversation, as JSON")
-    p.add_argument("--id", required=True, help="the conversation")
-    p.add_argument("--text", required=True, help="base64 UTF-8")
-    p.add_argument("--folder", help="base64 UTF-8: where to run a turn, if Standby runs it")
-    p.add_argument("--model", help="the model for a turn Standby runs itself (an alias or a full id)")
-    p.set_defaults(func=cmd_deliver)
-    p = sub.add_parser("deliver-run", help="(internal) run one conversation's waiting messages")
-    p.add_argument("--id", required=True)
-    p.set_defaults(func=cmd_deliver_run)
-    p = sub.add_parser("delete-agent", help="a conversation Standby started, deleted for good, as JSON")
-    p.add_argument("--id", required=True)
-    p.set_defaults(func=cmd_delete_agent)
 
     p = sub.add_parser("conversations", help="the user's Claude Code conversations, newest first, as JSON")
     p.add_argument("--limit", type=int, default=20, help="at most this many")

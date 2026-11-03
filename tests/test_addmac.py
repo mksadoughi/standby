@@ -2,8 +2,7 @@
 
 The sheet's switches as today's recording modes; the agent's own conversation, or a copy
 when it is live elsewhere; the session marked as the agent's (agent.json); the
-meeting card in the call card's shape; and the card sent to an agent that heard it on a copy,
-kept in the outbox until the agents layer delivers it."""
+meeting card in the call card's shape."""
 import agentpath  # noqa: E402,F401  (first: never the real ~/.standby, see agentpath.guard)
 import json, os, sys, tempfile
 from pathlib import Path
@@ -69,13 +68,6 @@ check("  a better title wins", m.card(sdir.name, data, "Routing sync: Q4 targets
 check("  nothing decided: no points, still a card", m.card(sdir.name, data, "", 1755, [])["points"] == [])
 check("  no name at all: Meeting", m.card("s", {"agent": "a"}, "", 5, [])["title"] == "Meeting")
 
-msg = m.card_message(c)
-check("the card as a message to the real agent: title, minutes, where the transcript is, the points",
-      msg.splitlines()[0] == "[MEETING SUMMARY] Meeting: Weekly routing sync (13 min), recorded by Standby. "
-      "Transcript: standby-ctx --session %s" % sdir.name
-      and msg.splitlines()[1:] == ["- p99 target: 300 ms", "- Fares cache by Thursday", "- Jules owns it"], msg)
-check("  no emoji in it", all(ord(ch) < 0x2190 for ch in msg))
-
 # -- Pause, Resume, End: one meeting in stretches, recorded time on the card
 d = {"agent": "a-planner", "started": 1000.0, "stretches": [[1000.0, None]], "paused_at": None, "ended_at": None}
 check("live: state live, recorded time up to now", m.state(d, True) == "live" and m.recorded_s(d, 1300.0) == 300.0)
@@ -103,15 +95,6 @@ m.ended(d, 9999.0)
 check("  ended twice: the first end stands", d["ended_at"] == 5300.0)
 old_style = {"agent": "a", "started": 100.0}
 check("a meeting from before stretches: start to end, as before", m.card("s", old_style, "", 400.0, [])["duration_s"] == 300)
-
-box = root / "agents" / "outbox.jsonl"
-r = m.deliver(c["agent"], msg)
-r2 = m.deliver("a-d1", "second")
-rows = [json.loads(x) for x in box.read_text().splitlines()]
-check("until delivery lands: kept in the outbox, in order, nothing lost",
-      r == r2 == {"queued": True} and [x["to"] for x in rows] == ["a-planner", "a-d1"]
-      and rows[0]["text"] == msg and rows[0]["kind"] == "meeting_card", rows)
-check("  the outbox is under STANDBY_ROOT, never the real one", str(m.OUTBOX).startswith(str(root)))
 
 print("\nALL PASS" if not fails else "\nFAILURES: %s" % fails)
 sys.exit(1 if fails else 0)

@@ -97,9 +97,8 @@ ui.log = lambda line: logged.append(line)
 
 AGENTS = {"a-planner": {"id": "a-planner", "name": "Planner", "session": "11111111-1111-4111-8111-111111111111",
                     "machine": "local", "folder": "/Users/you/code/orion"}}
-events, delivered, talks, live = [], [], [], [None]
-ui.MSG.update(agent=AGENTS.get, event=lambda e, d: events.append((e, d)),
-              deliver=lambda a, text, session=None: delivered.append((a, text)) or True)
+events, talks, live = [], [], [None]
+ui.MSG.update(agent=AGENTS.get, event=lambda e, d: events.append((e, d)))
 ui.start_sessions = lambda machine, folder: {"sessions": [
     {"id": "11111111-1111-4111-8111-111111111111", "title": "Planner", "open": {"where": "VS Code"}}]}
 ui.live_session = lambda: live[0]
@@ -219,27 +218,15 @@ while not card_path.exists() and time.time() - t0 < 20:
 card = json.loads(card_path.read_text()) if card_path.exists() else {}
 check("end: the talk stops, the stream says ended", r == {"ok": True} and stopped[-1] == sid
       and any(e[0] == "call" and e[1]["phase"] == "ended" for e in events), (r, events))
-check("  card.json: its points, when, about 4 min, a copy, memory pending, nothing sent to the agent",
+check("  card.json: its points, when, about 4 min, a copy, memory pending",
       card.get("points") == ["Keep the cache TTL at 5 minutes", "Add a warm-up on deploy"]
       and 200 < card.get("duration_s", 0) < 300 and card.get("copy") is True and card.get("memory") == "pending"
-      and card.get("delivered_at") is None and delivered == [], (card, delivered))
+      and card.get("delivered_at") is None, card)
 check("  the points were made from the call's words", "five minutes" in open(seen).read().splitlines()[-1])
 check("end of a call that has ended: said so", "ended" in ui.end_call(sid).get("error", ""))
 
-# Keep or forget: nothing reaches the agent until the user chooses.
-r = ui.card_memory(sid, True)
-check("keep: sent to the real agent once, as [CALL SUMMARY] with the card and the points",
-      r.get("memory") == "kept" and r.get("delivered_at") and len(delivered) == 1 and delivered[0][0] == "a-planner"
-      and delivered[0][1].startswith("[CALL SUMMARY] Call with the user (4 min)") and sid in delivered[0][1]
-      and "- Keep the cache TTL at 5 minutes" in delivered[0][1] and "- Add a warm-up on deploy" in delivered[0][1], (r, delivered))
-check("  the card says so, and the page is told", json.loads(card_path.read_text())["memory"] == "kept"
-      and ("card", {"session": sid}) in events)
-r = ui.card_memory(sid, True)
-check("  a second Keep (a double click, a retry) sends nothing more", r.get("memory") == "kept" and len(delivered) == 1, (r, delivered))
-r = ui.card_memory(sid, False)
-check("  kept is final: Forget is refused", "It's in memory now" == r.get("error") and json.loads(card_path.read_text())["memory"] == "kept", r)
-
-# A second call: forgotten, then kept after all.
+# A second call: its card waits as it is, with no timeout. Nothing of a call reaches the agent's own
+# conversation: no route keeps a card any more.
 r = start_call("a-planner")
 sid2 = r["session"]
 (ui.SESSIONS / sid2 / "chat.jsonl").write_text("".join(json.dumps(m) + "\n" for m in chat))
@@ -249,41 +236,11 @@ card_path2 = ui.SESSIONS / sid2 / "card.json"
 t0 = time.time()
 while not card_path2.exists() and time.time() - t0 < 20:
     time.sleep(0.05)
-check("a call nobody chose about: pending, with no timeout, nothing sent",
-      json.loads(card_path2.read_text())["memory"] == "pending" and len(delivered) == 1)
-r = ui.card_memory(sid2, False)
-check("forget: nothing is sent", r == {"memory": "forgotten"} and len(delivered) == 1, (r, delivered))
-r = ui.card_memory(sid2, True)
-check("  forgotten can still be kept: then it goes, once", r.get("memory") == "kept" and len(delivered) == 2
-      and "Ship it on Friday" in delivered[1][1], (r, delivered))
-check("a card that isn't there, or isn't a call's: said so", ui.card_memory("talk-20200101-0000", True).get("error")
-      and ui.card_memory("../x", True).get("error") == "No such card")
-queued_text = []
-ui.MSG["deliver"] = lambda a, text, session=None: queued_text.append(text) and False       # the agents layer: kept for later
-r = start_call("a-planner")
-sid3 = r["session"]
-(ui.SESSIONS / sid3 / "chat.jsonl").write_text("".join(json.dumps(m) + "\n" for m in chat))
-os.environ["FAKE_REPLY"] = "Ship it"
-ui.end_call(sid3)
-card_path3 = ui.SESSIONS / sid3 / "card.json"
-t0 = time.time()
-while not card_path3.exists() and time.time() - t0 < 20:
-    time.sleep(0.05)
-r = ui.card_memory(sid3, True)
-# The agents layer retries a held summary at app start and every 5 minutes until it is delivered.
-check("keep while the agent can't be reached now: kept and queued with the agents layer, never twice",
-      r.get("memory") == "kept" and r.get("queued") is True and not r.get("delivered_at")
-      and ui.card_memory(sid3, True).get("queued") is True and len(queued_text) == 1, (r, queued_text))
-ui.MSG["agent"] = lambda aid: None
-sid4 = new_session()
-(ui.SESSIONS / sid4 / "agent.json").write_text(json.dumps({"agent": "a-gone", "name": "Gone", "copy": True}))
-(ui.SESSIONS / sid4 / "card.json").write_text(json.dumps({"points": ["x"], "duration_s": 60, "memory": "pending"}))
-check("keep for an agent that was removed: said so, still pending", "isn't there any more" in ui.card_memory(sid4, True).get("error", "")
-      and json.loads((ui.SESSIONS / sid4 / "card.json").read_text())["memory"] == "pending")
-ui.MSG["agent"] = AGENTS.get
-ui.MSG["deliver"] = lambda a, text, session=None: delivered.append((a, text)) or True
+check("a call nobody chose about: pending, with no timeout", json.loads(card_path2.read_text())["memory"] == "pending")
+check("  no Keep that sends it anywhere", "/api/msg/memory" not in ui.MSG_POST and not hasattr(ui, "card_memory")
+      and "deliver" not in ui.MSG)
 
-# A call with nothing decided still has something to keep: one line on what it was about.
+# A call with nothing decided still has a card: one line on what it was about.
 def short_call(reply, chat_rows):
     r = start_call("a-planner")
     gid = r["session"]
@@ -302,11 +259,6 @@ test_chat = [{"role": "me", "text": "can you hear me", "voice": True}, {"role": 
 gid, card = short_call("GIST: " + GIST, test_chat)
 check("a short test call: no points, the gist instead, pending",
       card.get("points") == [] and card.get("gist") == GIST and card.get("memory") == "pending", card)
-before = len(delivered)
-r = ui.card_memory(gid, True)
-check("  Keep sends the gist, so the agent hears what the call was",
-      r.get("memory") == "kept" and len(delivered) == before + 1 and delivered[-1][1].startswith("[CALL SUMMARY] Call with the user")
-      and delivered[-1][1].endswith("Gist: " + GIST) and "- " not in delivered[-1][1].split("\n", 1)[1], delivered[-1:])
 gid, card = short_call("", [])
 check("a call nobody spoke on: it says so, not nothing", card.get("points") == [] and card.get("gist") == "No one spoke on this call.", card)
 gid, card = short_call("", test_chat)
@@ -335,61 +287,13 @@ check("  a card that didn't fail, or isn't there: nothing to make again",
       and ui.summarize_again({"session": "../x"}).get("error") == "No such card")
 gid, card = short_call("Ship it on Friday", test_chat)
 check("a call with a decision: its points, and no gist", card.get("points") == ["Ship it on Friday"] and card.get("gist") is None, card)
-ui.MSG["deliver"] = lambda a, text, session=None: delivered.append((a, text)) or True
 
 check("  a meeting that never was a call: no card from the calls", ui.call_ended(new_session("meeting")) is None)
-# A meeting's card is kept the same way: its text is the meeting's own.
-msid = new_session("meeting")
-(ui.SESSIONS / msid / "agent.json").write_text(json.dumps({"agent": "a-planner", "name": "Planner", "copy": True}))
-(ui.SESSIONS / msid / "card.json").write_text(json.dumps({"title": "Weekly routing sync", "points": ["Cache stays at 5"],
-                                                          "duration_s": 600, "memory": "pending"}))
-before = len(delivered)
-r = ui.card_memory(msid, True)
-check("keep a meeting's card: its own [MEETING SUMMARY], once", r.get("memory") == "kept" and len(delivered) == before + 1
-      and delivered[-1][1].startswith("[MEETING SUMMARY] Meeting: Weekly routing sync (10 min)")
-      and "- Cache stays at 5" in delivered[-1][1], delivered[-1:])
-
-gm = new_session("meeting")
-(ui.SESSIONS / gm / "agent.json").write_text(json.dumps({"agent": "a-planner", "name": "Planner", "copy": True}))
-(ui.SESSIONS / gm / "card.json").write_text(json.dumps({"title": "Standup", "points": [], "gist": "A standup: nothing new, everyone is on track",
-                                                         "duration_s": 300, "memory": "pending"}))
-before = len(delivered)
-ui.card_memory(gm, True)
-check("keep a meeting with nothing decided: its gist", delivered[-1][1].startswith("[MEETING SUMMARY] Meeting: Standup (5 min)")
-      and delivered[-1][1].endswith("Gist: A standup: nothing new, everyone is on track"), delivered[-1:])
-
-# The agent's voice, call after call: moved on at the end, and a forgotten call that later ones
-# build on says the voice keeps it.
+# The voice file, for standby-agent
 from pathlib import Path  # noqa: E402
-ended_v, forgot = [], []
-NOTE = "The voice still remembers this call: later calls build on it."
-ui.MSG["voice_end"] = lambda a, call, v: ended_v.append((a, call, v))
-ui.MSG["voice_forget"] = lambda a, call: forgot.append((a, call)) or NOTE
-r = start_call("a-planner")
-vsid = r["session"]
-ran = "33333333-3333-4333-8333-333333333333"
-(Path(root) / "agent").mkdir(parents=True, exist_ok=True)
-(Path(root) / "agent" / ("%s.voice.uuid" % vsid)).write_text(ran + "\n")
-(ui.SESSIONS / vsid / "chat.jsonl").write_text("".join(json.dumps(m) + "\n" for m in chat))
-ui.end_call(vsid)
-t0 = time.time()
-while not ended_v and time.time() - t0 < 20:
-    time.sleep(0.05)
-check("  at its end, the agent's voice moves on to the one the call ran as", ended_v[-1:] == [("a-planner", vsid, ran)], ended_v)
-vcard = ui.SESSIONS / vsid / "card.json"
-t0 = time.time()
-while not vcard.exists() and time.time() - t0 < 20:
-    time.sleep(0.05)
-r = ui.card_memory(vsid, False)
-check("  forgotten: the voice is told; one later calls build on says the voice keeps it",
-      forgot[-1:] == [("a-planner", vsid)] and json.loads(vcard.read_text()).get("memory_note") == NOTE, (forgot, r))
 ui.voice_file("talk-20261016-1200", "local", {"from": None, "name": "Planner · voice", "brief": ""})
 check("  the voice file lands where standby-agent reads it", json.loads(
       (Path(root) / "live" / "talk-20261016-1200.voice.json").read_text())["name"] == "Planner · voice")
-check("  and what a voice ran as is read back; anything else is nothing",
-      ui.voice_ran(vsid) == ran and ui.voice_ran("talk-20261016-1299") is None)
-for k in ("voice_end", "voice_forget"):
-    ui.MSG.pop(k, None)
 
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
 sys.exit(1 if fails else 0)

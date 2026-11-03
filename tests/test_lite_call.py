@@ -105,8 +105,6 @@ ui.append_chat = lambda *a, **k: chat.append((a, k))
 real_voice_action = ui.voice_action
 paths = []                                     # every pause and unpause, by session
 ui.voice_action = lambda sid, action, src=None: (paths.append((sid, action)), setattr(ui.VOICE[sid], "muted", action == "mute"), {"ok": True})[2]
-ran = {}
-ui.voice_ran = lambda sid: ran.get(sid)
 ended = []
 
 
@@ -1097,7 +1095,6 @@ real_voice_action(sid, "mute")
 check("  the orb's click (/api/voice, action mute): the voice session's own mute", ui.VOICE[sid].got == [True], ui.VOICE[sid].got)
 ui.VOICE[sid] = was_voice
 ui.LITE_POST["/api/lite/mute"]({"session": sid, "muted": True})
-ran[sid] = "7d1e2f30-aaaa-4bbb-8ccc-0123456789ab"
 out.clear()
 r = ui.LITE_POST["/api/lite/call/end"]({"session": sid})
 check("end: as End does, and the stream says it ended", r == {"ok": True} and ended == [sid]

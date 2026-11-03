@@ -4,8 +4,6 @@ A meeting stays a Standby session, as it always was (its transcript, audio, spea
 labels, snapshots, repass, export). What is new is whose it is: an agent's. Its Claude
 runs on a copy of that agent's conversation, forked as the meeting starts: it knows
 everything up to then and hears the meeting live, and the agent itself hears nothing.
-At the end the user chooses: keep it (the card's summary goes to the agent, once) or
-forget it (nothing ever reached the agent, so it really is forgotten).
 
 Plain Python: the app (ui.py) does the starting and stopping, with these answers.
 """
@@ -17,7 +15,6 @@ from pathlib import Path
 ROOT = Path(os.environ.get("STANDBY_ROOT", os.path.expanduser("~/.standby")))
 PAUSE_ENDS = 2 * 3600.0           # a meeting paused this long ends by itself, as End does
 AGENT_FILE = "agent.json"          # in the session's folder: whose meeting it is, how it ran
-OUTBOX = ROOT / "agents" / "outbox.jsonl"
 
 # The sheet's two switches, as today's recording modes (Settings > Sound > Record).
 MODES = {(True, True): "auto", (True, False): "meeting", (False, True): "mic"}
@@ -147,31 +144,3 @@ def card(sid, data, title, ended, pts):
             "title": (title or data.get("name") or "Meeting").strip(),
             "started": started, "duration_s": max(0, int(round(took))),
             "points": list(pts or [])[:3], "copy": bool(data.get("copy"))}
-
-
-# A copy's meeting card reaches the real agent with this tag, which the timeline hides.
-SUMMARY_TAG = "[MEETING SUMMARY]"
-
-
-def card_message(c):
-    """The card as one plain message, for the agent, when the user keeps the meeting."""
-    mins = max(1, int(round(c["duration_s"] / 60.0)))
-    lines = ["%s Meeting: %s (%d min), recorded by Standby. Transcript: standby-ctx --session %s"
-             % (SUMMARY_TAG, c["title"], mins, c["session"])]
-    lines += ["- " + p for p in c["points"]]
-    if not c["points"] and c.get("gist"):
-        lines.append("Gist: " + c["gist"])         # nothing was decided: what it was about
-    return "\n".join(lines)
-
-
-def deliver_stub(agent_id, text, kind="meeting_card", outbox=None):
-    """Delivering a message to an agent, until the agents layer does: kept in an outbox so
-    nothing is lost, and the agents layer delivers what is waiting there. {"queued": True}."""
-    path = Path(outbox or OUTBOX)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a") as fh:
-        fh.write(json.dumps({"to": agent_id, "kind": kind, "text": text, "at": time.time()}) + "\n")
-    return {"queued": True}
-
-
-deliver = deliver_stub             # the agents layer replaces this with the real delivery

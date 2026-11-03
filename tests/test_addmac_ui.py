@@ -185,7 +185,6 @@ OPEN["open"] = False
 # -- at the end: the card, waiting for the user to keep or forget it
 box = root / "agents" / "outbox.jsonl"
 sent = []
-ui.MSG["deliver"] = lambda agent, text, session=None: sent.append((agent, text)) or True
 c = ui.mac_card("orion-20261015-1100", now=addmac.bound(ui.SESSIONS / "orion-20261015-1100")["started"] + 600)
 card = json.loads((ui.SESSIONS / "orion-20261015-1100" / "card.json").read_text())
 check("no generator yet: card.json still written, nothing decided, the card's fields",

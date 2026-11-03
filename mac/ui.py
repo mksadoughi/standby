@@ -2834,16 +2834,6 @@ def voice_file(sid, where, voice):
         log("voice: %s's voice file: %r" % (sid, exc))
 
 
-def voice_ran(sid):
-    """The conversation session sid's voice ran as, on its machine, or None."""
-    try:
-        raw = transport.for_config().read("agent/%s.voice.uuid" % sid)
-        value = raw.decode("utf-8", "replace").strip() if raw else ""
-    except Exception:
-        return None
-    return value if re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", value) else None
-
-
 def title_talk(sid):
     """A talk is titled from its chat, after its first answer: it has no
     transcript. The text goes with the call, so it works over SSH too."""
@@ -2872,15 +2862,12 @@ def title_talk(sid):
 # A call is today's talk, one to one with an agent: voice mode on that agent's own Claude
 # Code conversation, with everything voice mode has (talking over Claude, the companion).
 # It always runs on a fork of that conversation, made at the call's start, whether or not
-# anything else holds it: nothing reaches the real agent until the user keeps the call
-# (card_memory), as one [CALL SUMMARY] message.
+# anything else holds it: nothing of the call reaches the real conversation.
 # In the session's folder: agent.json {agent, name, copy, meeting_audio, mic, call} from the
 # start, and card.json {points, at, duration_s, copy, delivered_at} once it ends.
 
 MSG = {"agent": None,       # the timeline: agent id -> {id, name, session, machine, folder} or None
-       "event": None,       # the timeline: (event, data) to the page's stream
-       "deliver": None}     # the agents layer: (agent id, text) -> True once it reached the real agent
-CALL_SUMMARY = "[CALL SUMMARY]"
+       "event": None}       # the timeline: (event, data) to the page's stream
 
 
 # ---------------------------------------------------------------- Standby inside Claude Code (mac/lite.py)
@@ -2989,9 +2976,6 @@ def call_ended(sid):
     _msg_event("call", {"session": first, "agent": info["agent"], "phase": "ended", "copy": bool(info.get("copy")),
                         "started": _call_info(first).get("started")})
     threading.Thread(target=make_card, args=(first,), name="call-card", daemon=True).start()
-    if MSG.get("voice_end"):                      # the agent's voice is now this call's: it remembers it
-        threading.Thread(target=lambda: MSG["voice_end"](info["agent"], first, voice_ran(sid)),
-                         name="call-voice", daemon=True).start()
 
 
 def _card_text(sessions, name, me="You"):
@@ -3068,8 +3052,8 @@ def _decisions(first, text):
 
 def make_card(sid):
     """card.json for the call or meeting `sid` belongs to (its first session): when, how long,
-    and its points (or, if nothing was decided, a gist) from `standby-agent decisions`. Nothing goes to the agent: the card waits,
-    memory "pending", for the user to keep it or forget it (card_memory)."""
+    and its points (or, if nothing was decided, a gist) from `standby-agent decisions`. Nothing goes to the agent: the card
+    stays in Standby, memory "pending" as it always was."""
     first = call_first(sid)
     sessions, info = call_sessions(first), _call_info(first)
     started = info.get("started") or session_info(first).get("started") or time.time()
@@ -3143,131 +3127,6 @@ def summarize_again(b):
 
 
 MSG_POST["/api/msg/card/again"] = summarize_again
-
-
-# Keep or forget (the user's): what a call or a meeting heard goes to the real agent only if
-# the user keeps it, once, and then it stays kept. Forgotten can still be kept later: nothing
-# was sent. card.json's memory is pending, kept or forgotten.
-MEMORY_LOCK = threading.Lock()
-
-
-def _card_for(session):
-    """(first session, card.json, agent.json) for a call's or a meeting's card, or an error line."""
-    if not valid_id(str(session or "")):
-        return None, None, None, "No such card"
-    first = call_first(session)
-    card, info = read_json(SESSIONS / first / "card.json"), _call_info(first)
-    if not card or not info.get("agent"):
-        return None, None, None, "That card isn't ready yet"
-    return first, card, info, None
-
-
-def card_text(first, card, info):
-    """The message the real agent gets when a call or a meeting is kept: the tag, what it was,
-    and its points, with the card's session so the agent can look it up."""
-    if is_talk(first):
-        mins = max(1, int(round(float(card.get("duration_s") or 0) / 60.0)))
-        lines = ["%s Call with the user (%d min), on a copy of your conversation, recorded by Standby. "
-                 "Standby session: %s" % (CALL_SUMMARY, mins, first)]
-        if card.get("points"):
-            lines += ["- " + p for p in card["points"]]
-        else:
-            lines.append("Gist: " + (card.get("gist") or "Nothing was decided."))
-        return "\n".join(lines)
-    return addmac.card_message({"title": card.get("title") or "Meeting", "duration_s": card.get("duration_s") or 0,
-                                "session": first, "points": card.get("points") or [], "gist": card.get("gist")})
-
-
-def card_memory(session, keep):
-    """POST /api/msg/memory {session, keep}: Keep sends the card to the real agent, once, then it
-    is kept for good; Forget sends nothing, and a forgotten card can still be kept. A second Keep,
-    a retry or a double click never sends twice. {memory, delivered_at, queued?} or {error}."""
-    import lite as lite_mod
-    if isinstance(session, str) and valid_id(session) and lite_mod.is_lite(addmac.bound(SESSIONS / session)):
-        return {"error": lite_mod.SAVED}
-    with MEMORY_LOCK:
-        first, card, info, why = _card_for(session)
-        if why:
-            return {"error": why}
-        memory = card.get("memory") or "pending"
-        if memory == "kept":
-            return {k: card[k] for k in ("memory", "delivered_at", "queued") if card.get(k) is not None} if keep else \
-                {"error": "It's in memory now"}
-        if not keep:
-            card["memory"] = "forgotten"
-            forget = MSG.get("voice_forget")
-            note = forget(info["agent"], first) if forget and is_talk(first) else None
-            if note:                              # the voice can't drop a call later ones build on: says so
-                card["memory_note"] = note
-        else:
-            find, deliver = MSG.get("agent"), MSG.get("deliver")
-            if deliver is None or (find is not None and not find(info["agent"])):
-                return {"error": "%s isn't there any more" % (info.get("name") or "That agent")}
-            try:
-                sent = deliver(info["agent"], card_text(first, card, info), first)
-            except Exception as exc:
-                log("card: delivering %s: %r" % (first, exc))
-                return {"error": "Couldn't reach %s: try again" % (info.get("name") or "the agent")}
-            card["memory"] = "kept"
-            if sent:
-                card["delivered_at"] = time.time()
-            else:
-                # Held in the agents layer's outbox, tried at every app start, every 5 minutes, and as
-                # soon as the agent or its machine is back, once each. When it goes, card_delivered
-                # sets delivered_at; if the agent leaves Standby first, card_dropped puts it back.
-                card["queued"] = True
-        write_json(SESSIONS / first / "card.json", card)
-        log("card: %s %s" % (first, card["memory"]))
-    _msg_event("card", {"session": first})
-    return {k: card.get(k) for k in ("memory", "delivered_at", "queued") if card.get(k) is not None}
-
-
-CARD_SESSION = re.compile(r"(?:Standby session: |standby-ctx --session )(\S+)")
-
-
-def _card_of(which):
-    """A held summary's card: its session as given, or found in its text (a summary kept
-    before the session went with it). None if there's no such card."""
-    which = str(which or "")
-    m = None if valid_id(which) else CARD_SESSION.search(which)
-    sid = m.group(1) if m else which
-    if not valid_id(sid) or not (SESSIONS / call_first(sid) / "card.json").is_file():
-        return None
-    return call_first(sid)
-
-
-def card_delivered(agent, which):
-    """MSG["on_delivered"]: a kept card's summary held in the outbox has reached the agent."""
-    with MEMORY_LOCK:
-        first = _card_of(which)
-        if first is None:
-            return
-        card = read_json(SESSIONS / first / "card.json")
-        card["delivered_at"] = time.time()
-        card.pop("queued", None)
-        card.pop("memory_note", None)
-        write_json(SESSIONS / first / "card.json", card)
-        log("card: %s delivered from the outbox" % first)
-    _msg_event("card", {"session": first})
-
-
-def card_dropped(agent, which, why):
-    """MSG["on_dropped"]: a held summary had nowhere to go (its agent left Standby). The card
-    goes back to pending, saying why, rather than "in memory" for something never sent."""
-    with MEMORY_LOCK:
-        first = _card_of(which)
-        if first is None:
-            return
-        card = read_json(SESSIONS / first / "card.json")
-        card["memory"] = "pending"
-        card.pop("queued", None)
-        card["memory_note"] = str(why or "It couldn't be sent")[:120]
-        write_json(SESSIONS / first / "card.json", card)
-        log("card: %s back to pending: %s" % (first, why))
-    _msg_event("card", {"session": first})
-
-
-MSG["on_delivered"], MSG["on_dropped"] = card_delivered, card_dropped
 
 
 # ---------------------------------------------------------------- a call from a Claude Code session
@@ -6575,8 +6434,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(capture_answer(b))
         if self.path == "/api/start" and TEST_ROUTES:      # tests only (test_ui): meetings start from Claude Code
             return self._json(start_session(workspace=b.get("workspace"), own_agent=True))
-        if self.path == "/api/msg/memory":
-            return self._json(card_memory(b.get("session"), bool(b.get("keep"))))
         if self.path == "/api/msg/call/end":
             return self._json(end_call(b.get("session")))
         if self.path in ("/api/msg/mac/pause", "/api/msg/mac/resume", "/api/msg/mac/end"):

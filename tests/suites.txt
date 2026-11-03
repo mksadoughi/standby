@@ -90,7 +90,6 @@ test_mic_denied            py    par
 test_titlebar              py    full   # a real window
 test_vocabulary            py    par  
 test_voice_memory          diar  full   # the real speaker models
-test_card_delivery         py    par  
 test_closure_names         py    par  
 test_companion_page        sh    par  
 test_companion_spaces      py    full   # real desktops and windows

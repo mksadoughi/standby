@@ -42,7 +42,6 @@ ASK_PREAMBLE = ("Standby, the user's meeting companion, is recording a meeting o
                 "after the meeting, the standby meeting tool reads it. The speech-to-text can mangle names. "
                 + UNTRUSTED)
 PASSES = ("ask", "live")
-SAVED = "Summaries from Claude Code are kept in Standby"
 
 
 def owner(cc):

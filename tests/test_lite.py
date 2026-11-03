@@ -296,7 +296,7 @@ check("  the card: its title, points, recorded time, saved in Standby with nothi
       made == [SID] and c["title"] == "Weekly routing sync" and c["points"] == ["Ship the cache fix Thursday"]
       and "memory" not in c and "duration_s" in c, c)
 check("  no keep or forget for it: it stays as it is",
-      "/api/lite/memory" not in ui.LITE_POST and ui.card_memory(SID, False) == {"error": lite.SAVED} and (ui.SESSIONS / SID).exists())
+      "/api/lite/memory" not in ui.LITE_POST and "/api/msg/memory" not in ui.MSG_POST and (ui.SESSIONS / SID).exists())
 t = L.transcript(CC, SID)
 check("the meeting tool's transcript: all of it, named, after the meeting too",
       t.get("session") == SID and t["live"] is False and t["text"].startswith("[Standby · meeting · Weekly routing sync · ")
@@ -411,7 +411,7 @@ cev = cq.get_nowait() if not cq.empty() else None
 L.unsubscribe(cq)
 check("  but its card is read and announced (as a call's), saved the same way",
       L.card(CALL)["points"] == ["Ship it Monday"] and cev == {"call": "card", "session": CALL}
-      and ui.card_memory(CALL, True) == {"error": lite.SAVED}, (L.card(CALL), cev))
+      and (ui.SESSIONS / CALL / "card.json").is_file(), (L.card(CALL), cev))
 
 # ---------------------------------------------------------------- the routes
 check("the routes: the mod's GETs and POSTs reach the meeting side",
