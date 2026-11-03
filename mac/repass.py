@@ -146,7 +146,9 @@ def main():
 
     wavs = audio_files(sdir)
     if not wavs:
-        raise SystemExit("no audio kept for %s (started with --no-audio?)" % session)
+        raise SystemExit("%s has no audio to transcribe again: Standby keeps only a meeting's transcript unless "
+                         "Settings > Meetings > Keep a meeting's audio is on. Turn it on there (or type /standby set keep_audio on"
+                         " in Claude Code), and the meetings after that keep theirs." % session)
 
     rows = []
     voices = live_voices(sdir)

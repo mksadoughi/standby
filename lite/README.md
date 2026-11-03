@@ -71,8 +71,8 @@ While a call or meeting is on, a quiet line above the prompt shows it, with its 
 - **No account, no API key, no telemetry.** The installer fetches Python packages from PyPI, the models from
   Hugging Face and GitHub, and two display libraries from npm and jsDelivr, each at a fixed version. After that, the
   speech models run offline; only a model you pick later is downloaded.
-- **Your meetings and calls** are saved in `~/.standby/sessions/` on your Mac: transcripts and summaries, and a
-  meeting's audio as WAV files (a call keeps none), until you delete them in Standby.
+- **Your meetings and calls** are saved in `~/.standby/sessions/` on your Mac, as transcripts and summaries, until you
+  delete them in Standby. No audio is kept, unless you turn on Settings > Meetings > Keep a meeting's audio.
 - **Consent**: tell people when you're transcribing. In many places everyone in a conversation has to agree to being
   recorded.
 

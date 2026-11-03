@@ -139,6 +139,7 @@ case "$cmd" in
         --push-lines) mode_args+=(--push-lines "$2"); shift 2 ;;
         --push-seconds) mode_args+=(--push-seconds "$2"); shift 2 ;;
         --no-claude) mode_args+=(--no-claude); claude=0; shift ;;
+        --no-audio) mode_args+=(--no-audio); shift ;;
         --kind) mode_args+=(--kind "$2"); [[ "$2" == talk ]] && claude=1; shift 2 ;;
         *) die "unknown option $1" ;;
       esac

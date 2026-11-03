@@ -16,16 +16,16 @@ STANDBY_TAGS = ("[TRANSCRIPT]", "[QUESTION]", "[VOICE]", "[STANDBY RULES]", "[BR
                 "[CHAT]", "[DEEP]", "[CALL SUMMARY]", "[MEETING SUMMARY]")
 MESSAGE_TAG = "[MESSAGE]"           # a message sent from Standby's chat: shown as the user's words
 SUMMARY_TAGS = ("[CALL SUMMARY]", "[MEETING SUMMARY]")
-# A message handed to a Claude Code window comes as another session's message, from "Standby"
-# (sbagents' postman), with a line after its tag saying how to answer. The timeline shows the
-# user's words alone.
+# A message Standby once handed to a Claude Code window (it sends none now) came as another
+# session's message, from "Standby", with a line after its tag saying how to answer. In a
+# transcript from then, the timeline shows the user's words alone.
 STANDBY_PEER = "Standby"
 MESSAGE_NOTE = ("(From the user, through Standby. Answer in your reply here: Standby shows them "
                 "your last message. Not with SendMessage: the sender has already gone.)")
 SUMMARY_NOTE = "(From Standby, for your notes. No reply needed.)"
-# Handed to a window, every tagged text carries a one-time token, "[MESSAGE <token>]",
-# "[CALL SUMMARY <token>]": sbagents records it for that conversation and those exact words
-# before it goes, and the timeline takes it as Standby's only then, once. Without one, a peer
+# Handed to a window, every tagged text carried a one-time token, "[MESSAGE <token>]",
+# "[CALL SUMMARY <token>]", recorded for that conversation and those exact words before it
+# went, and the timeline takes it as Standby's only then, once. Without one, a peer
 # calling itself Standby is just another agent, its turn shown (hiding is harm too).
 TOKENED = re.compile(r"^\[(%s) ([0-9a-f]{32})\]" % "|".join(
     re.escape(t[1:-1]) for t in (MESSAGE_TAG,) + STANDBY_TAGS))

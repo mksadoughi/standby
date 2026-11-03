@@ -199,6 +199,7 @@ List them with `mcp__standby__settings` or `/standby settings`; change one only 
 | `talk_over` | `on`, `off` (interrupt the voice on laptop speakers) | `off` |
 | `speakers` | `on`, `off` (label speakers) | `on` |
 | `remember_voices` | `on`, `off` (remember named voices and the user's own) | `on` |
+| `keep_audio` | `on`, `off` (keep a meeting's audio, for `standby repass`; off, only its transcript) | `off` |
 | `auto_accept` | `on`, `off` (Claude starts calls and listening without asking; only the user sets it, never the settings tool) | `off` |
 | `ai_update` | 1 to 200 sentences | `10` |
 | `auto_stop` | 0 to 600 minutes, 0 is never | `15` |
@@ -250,8 +251,8 @@ Then, if the user wants everything gone:
 
 ## Where things live
 
-- `~/.standby/sessions/` meetings and calls (transcripts, summaries, recordings), on the Mac only; `standby purge
-  <session>` deletes one.
+- `~/.standby/sessions/` meetings and calls (transcripts and summaries; a meeting's recording only with `keep_audio`
+  on), on the Mac only; `standby purge <session>` deletes one.
 - `~/.standby/config.json` settings; `~/.standby/agent/usage.jsonl` usage counts (no meeting text).
 - Voice prints, on the Mac only: the voices the user names, and the user's own voice, which Standby learns from calls
   to tell them apart (setting `remember_voices`; Settings > Meetings has Forget for the user's voice and for all).

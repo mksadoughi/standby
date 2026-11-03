@@ -108,9 +108,10 @@ stays, and macOS keeps Standby's permissions until `tccutil reset All dev.standb
 - **Audio** stays on your Mac and is transcribed there. Standalone dictation isn't kept as a session; when it uses a
   running recorder, temporary audio and text files can remain after an interruption. Dictated questions within a
   meeting or call are part of that session.
-- **Transcripts, calls and summaries** are saved in `~/.standby/sessions/`, and so is **a meeting's audio**, as WAV
-  files in its folder (for `standby repass`, a slower second transcription); a call keeps no audio. All of it stays
-  until you delete the meeting or call in Standby, or run `standby purge <session>`.
+- **Transcripts, calls and summaries** are saved in `~/.standby/sessions/` until you delete the meeting or call in
+  Standby, or run `standby purge <session>`. **No audio is kept**, unless you turn on Settings > Meetings > Keep a
+  meeting's audio: then a meeting's recording stays in its folder too, as WAV files, for `standby repass` (a slower
+  second transcription). A call never keeps audio.
 - **Text to Claude**: a meeting's transcript and what you say on a call go to your own Claude Code, which talks to
   its model provider as it always does.
 - **Voice prints** stay on your Mac: the voices you name, and your own voice, which Standby learns from your calls to

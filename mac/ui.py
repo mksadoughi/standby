@@ -589,7 +589,7 @@ def drop_chat_row(sid, row, text=None):
 # Apple's echo cancellation takes the Mac's default mic only (native.duplex).
 TALK_OVER_MIC = "Needs the Mac's default microphone (Settings > Sound)"
 DEFAULTS = {"push_lines": 10, "speakers": True, "capture": "auto",
-            "remember_voices": True, "lite_transcript": "ask",
+            "remember_voices": True, "keep_audio": False, "lite_transcript": "ask",
             "auto_stop_min": 15, "auto_accept": False, "call_visuals": True, "call_opens": "mini",
             "call_sounds": True}
 CALL_OPENS = ("mini", "full", "nothing")   # what opens as a call starts: the mini window, Standby's window, or neither
@@ -690,6 +690,8 @@ def get_settings():
             "push_lines": int(cfg.get("push_lines", DEFAULTS["push_lines"])),
             "speakers": bool(cfg.get("speakers", DEFAULTS["speakers"])),
             "remember_voices": bool(cfg.get("remember_voices", DEFAULTS["remember_voices"])),
+            # a meeting's audio, kept beside its transcript (WAV, for `standby repass`); off, only the text is kept
+            "keep_audio": bool(cfg.get("keep_audio", DEFAULTS["keep_audio"])),
             # Claude starts calls and listening without the incoming panel (the user's Always accept)
             "auto_accept": bool(cfg.get("auto_accept", DEFAULTS["auto_accept"])),
             # a call's visual card: off, the voice is never asked for one and nothing is made (standby-agent reads it)
@@ -873,6 +875,8 @@ def set_settings(b):
                 cfg["speakers"] = bool(b["speakers"])
             if "remember_voices" in b:
                 cfg["remember_voices"] = bool(b["remember_voices"])
+            if "keep_audio" in b:
+                cfg["keep_audio"] = bool(b["keep_audio"])
             if "auto_accept" in b:
                 cfg["auto_accept"] = bool(b["auto_accept"])
             if "call_visuals" in b:
@@ -946,6 +950,8 @@ def _named_settings():
         ("talk_over", "talk over the voice to interrupt it", onoff(st["talk_over"]), list(ON_OFF), "talk_over"),
         ("speakers", "tell the speakers apart", onoff(st["speakers"]), list(ON_OFF), "speakers"),
         ("remember_voices", "remember voices, yours and the ones you name", onoff(st["remember_voices"]), list(ON_OFF), "remember_voices"),
+        ("keep_audio", "keep a meeting's audio on this Mac, for standby repass (off: only the transcript)", onoff(st["keep_audio"]),
+         list(ON_OFF), "keep_audio"),
         ("call_opens", "what opens when a call starts: the mini window, the full window, or nothing", st["call_opens"],
          list(CALL_OPENS), "call_opens"),
         ("auto_accept", "Claude starts calls and listening without asking", onoff(st["auto_accept"]), list(ON_OFF), "auto_accept"),
@@ -1601,6 +1607,8 @@ def _do_start(resume, kind="meeting", workspace=None, where=None, no_claude=Fals
             cmd += ["--resume", resume]
         if no_claude and kind != "talk":
             cmd.append("--no-claude")
+        if kind != "talk" and not s["keep_audio"]:
+            cmd.append("--no-audio")             # only the transcript (a call keeps no audio anyway)
         if workspace:
             cmd += ["--workspace", workspace]
         if valid_model(model):
@@ -7276,6 +7284,7 @@ pre.log{white-space:pre-wrap;font-size:12px;background:var(--soft);padding:10px;
         <label class="tgl" style="margin-top:10px"><input type="checkbox" id="s_english" onchange="setSpeech()"> I speak English only</label>
         <div class="hint" id="s_speechdl" hidden></div></div>
       <div class="field"><label class="tgl"><input type="checkbox" id="s_speakers" data-save> Label speakers</label></div>
+      <div class="field"><label class="tgl"><input type="checkbox" id="s_keepaudio" data-save> Keep a meeting's audio<span class="mx-help" tabindex="0" title="The recording stays with the meeting on this Mac until you delete it, so standby repass can transcribe it again. Off, only the transcript is kept." aria-label="About keeping a meeting's audio" onclick="event.preventDefault()"></span></label></div>
       <div class="field"><label class="tgl"><input type="checkbox" id="s_remember" data-save> Recognize voices I have named<span class="mx-help" tabindex="0" title="Voice prints stay on this Mac. Your own voice is learnt from calls, so in a room only you talk to Claude." aria-label="About voice recognition" onclick="event.preventDefault()"></span></label>
         <div class="hint" id="s_voices"></div>
         <div class="hint" id="myvoicef" hidden><span id="s_myvoice"></span><a href="#" class="dotlink" id="s_myforget" onclick="event.preventDefault();forgetMyVoice()">Forget</a></div></div>
@@ -7642,7 +7651,7 @@ async function openSettings(pane){if(!SETWIN&&window.pywebview&&pywebview.api&&p
   return showSettings(pane)}
 async function showSettings(pane){const r=await api("/api/settings"),s=r.settings;
   $("s_vmodel").value=s.voice_model||"sonnet";EFFINH=s.voice_effort_inherit||"";setEffort(s.voice_effort||"low",true);setOpens(s.call_opens||"mini",true);$("s_push").value=s.push_lines;$("s_litepass").value=s.lite_transcript==="live"?"live":"ask";$("s_speakers").checked=!!s.speakers;
-  $("s_remember").checked=!!s.remember_voices;
+  $("s_remember").checked=!!s.remember_voices;$("s_keepaudio").checked=!!s.keep_audio;
   // Talking over Claude (the duplex engine): from the next voice mode; a quiet line when the mic chosen can't
   $("s_autoaccept").checked=!!s.auto_accept;$("s_visuals").checked=s.call_visuals!==false;$("s_callsounds").checked=s.call_sounds!==false;$("s_talkover").checked=!!s.talk_over;{const n=$("s_talkovernote");n.textContent=s.talk_over_note||"";n.hidden=!s.talk_over_note}
   MYVOICE=s.my_voice;paintMyVoice();
@@ -7669,7 +7678,7 @@ function watchModel(){loadModels();
 function markModels(off){["s_vmodel"].forEach(id=>{for(const o of $(id).options){o.dataset.label=o.dataset.label||o.textContent;
   o.disabled=off.includes(o.value);o.textContent=o.disabled?o.dataset.label.split(" (")[0]+" (not available)":o.dataset.label}})}
 function formSettings(){return {voice_model:$("s_vmodel").value,voice_effort:$("s_veffort").value,voice_effort:$("s_veffort").value,
-  push_lines:$("s_push").value,lite_transcript:$("s_litepass").value,speakers:$("s_speakers").checked,remember_voices:$("s_remember").checked,talk_over:$("s_talkover").checked,auto_accept:$("s_autoaccept").checked,call_visuals:$("s_visuals").checked,call_sounds:$("s_callsounds").checked,call_opens:$("s_opens").value||"mini",capture:$("s_capture").value,mic_device:$("s_mic").value,
+  push_lines:$("s_push").value,lite_transcript:$("s_litepass").value,speakers:$("s_speakers").checked,remember_voices:$("s_remember").checked,keep_audio:$("s_keepaudio").checked,talk_over:$("s_talkover").checked,auto_accept:$("s_autoaccept").checked,call_visuals:$("s_visuals").checked,call_sounds:$("s_callsounds").checked,call_opens:$("s_opens").value||"mini",capture:$("s_capture").value,mic_device:$("s_mic").value,
   speech_model:SPEECHSET?($("s_speech").value||undefined):undefined,english_only:$("s_english").checked}}
 let VOICES=null;
 const Q={premium:"Premium",enhanced:"Enhanced",standard:"Standard"};

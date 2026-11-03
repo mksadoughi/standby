@@ -108,5 +108,11 @@ if mod is not None:
     check("  every_window: a reset window gets the names; the first keeps its own",
           on is True and reset.prompt == "Claude Code, Orion." and first.prompt == [50, 60], (reset.prompt, first.prompt))
     check("  and mlx_whisper is as it was afterwards", mod.DecodingOptions is real)
+bare = root / "sessions" / "meeting-2"; bare.mkdir()
+(bare / "transcript.jsonl").write_text(json.dumps(live[0]) + "\n")
+r = subprocess.run([sys.executable, "mac/repass.py", "meeting-2", "--no-ship"], env=env, capture_output=True, text=True)
+check("a meeting kept without its audio: says why it can't, and how to keep the next ones'",
+      r.returncode != 0 and "has no audio to transcribe again" in r.stderr and "Keep a meeting's audio" in r.stderr
+      and "/standby set keep_audio on" in r.stderr, r.stderr[-400:])
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
 sys.exit(1 if fails else 0)

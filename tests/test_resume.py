@@ -130,6 +130,14 @@ try:
           started and "--resume" in started[-1] and "--workspace" not in started[-1], started[-1:])
     ui._do_start(None)
     check("  and starts a new one with no folder of its own", "--workspace" not in started[-1], started[-1:])
+    check("a meeting keeps no audio unless Settings say so (off by default): the recorder is told --no-audio",
+          ui.DEFAULTS["keep_audio"] is False and "--no-audio" in started[-1], started[-1:])
+    ui.get_settings = lambda: dict(real_settings(), workspace=default, keep_audio=True)
+    ui._do_start(None)
+    check("  Keep a meeting's audio on: kept, as before", "--no-audio" not in started[-1], started[-1:])
+    ui.get_settings = lambda: dict(real_settings(), workspace=default, keep_audio=False)
+    ui._do_start(None, kind="talk")
+    check("  a call: no flag (it keeps none anyway)", "--no-audio" not in started[-1], started[-1:])
 finally:
     ui.subprocess.run, ui.get_settings = real_run, real_settings
 
