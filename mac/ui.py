@@ -2900,6 +2900,7 @@ def lite_get(path, q):
 
 LITE_GET = {
     "/api/lite/state": lambda q: lite().state(q.get("cc")),
+    "/api/lite/events": lambda q: lite().events(q.get("cc"), q.get("sub"), q.get("wait")),
     "/api/lite/lines": lambda q: lite().lines(q.get("session"), q.get("after")),
     "/api/lite/batch": lambda q: lite().batch(q.get("session"), everything=q.get("all") in ("1", "true")),
     "/api/lite/card": lambda q: lite().card(q.get("session")),

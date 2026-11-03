@@ -52,18 +52,6 @@ export function endNote(title, now) {
     'Nothing to answer now.'
 }
 
-// Split a stream's text into whole JSON lines, keeping a partial tail for the next chunk
-export function jsonLines(buffer, chunk) {
-  const text = buffer + chunk, parts = text.split('\n'), rest = parts.pop()
-  const out = []
-  for (const p of parts) {
-    const s = p.trim()
-    if (!s) continue
-    try { out.push(JSON.parse(s)) } catch { /* not ours: skip */ }
-  }
-  return { events: out, rest }
-}
-
 // What a tool call is doing, in a few words the voice can say
 export function toolWords(e) {
   const t = e.tool || ''

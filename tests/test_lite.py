@@ -3,7 +3,7 @@ app's recorder with its own Claude off, its lines named as the engine names them
 the meeting's push policy, pause and resume with Claude still off, the card,
 keep or forget, and the mod's live stream. The recorder and the model are stand-ins."""
 import agentpath  # noqa: F401  (first: never the real ~/.standby, and no child may crash)
-import json, os, sys, tempfile, time
+import json, os, sys, tempfile, threading, time
 from pathlib import Path
 
 root = Path(tempfile.mkdtemp(prefix="sblite-"))
@@ -251,6 +251,36 @@ q.dropped = True
 check("  a stream that fell behind says resync and ends", json.loads(next(L.frames(q))) == {"resync": True})
 L.unsubscribe(q)
 L.unsubscribe(other)
+
+# The same events by the mod's own http call (no curl): a subscription kept between asks
+r0 = L.events(CC)
+check("events: the first ask subscribes, at once, with nothing yet", set(r0) == {"sub", "events"} and r0["events"] == [], r0)
+sub = r0["sub"]
+L.publish(CC, {"call": "caption", "text": "one"}); L.publish(CC, {"call": "caption", "text": "two"})
+t0 = time.time(); r1 = L.events(CC, sub, 5)
+check("  what came since, all of it, in order, at once (not after the wait)",
+      [e.get("text") for e in r1["events"]] == ["one", "two"] and r1["sub"] == sub and time.time() - t0 < 1, r1)
+threading.Timer(0.2, lambda: L.publish(CC, {"call": "caption", "text": "three"})).start()
+t0 = time.time(); r2 = L.events(CC, sub, 5)
+check("  held while nothing comes, answered as soon as something does",
+      [e.get("text") for e in r2["events"]] == ["three"] and 0.1 < time.time() - t0 < 2, (r2, time.time() - t0))
+t0 = time.time(); r3 = L.events(CC, sub, 0.2)
+check("  nothing in the wait: none, after it", r3["events"] == [] and time.time() - t0 >= 0.15, r3)
+check("  the wait is capped", L.events(CC, sub, 0)["events"] == [] and lite.POLL_MAX <= 10)
+check("  another session's id, or none of ours: a new subscription",
+      L.events(CC, "nope")["sub"] != sub and L.events("c0ffee00-1111-4222-8333-555555555555", sub)["sub"] != sub)
+check("  a bad Claude Code id: refused", L.events("nope").get("error"))
+L.polls[sub][1].dropped = True
+check("  one that fell behind: resync, and it's gone", L.events(CC, sub, 0) == {"resync": True} and sub not in L.polls)
+was = len(L.polls)
+for v in L.polls.values():
+    v[2] -= lite.POLL_DROP + 1
+L.events(CC)
+check("  ones not asked for a minute are dropped", len(L.polls) == 1, (was, len(L.polls)))
+check("  served at /api/lite/events, and the watchdog knows it waits on purpose",
+      "/api/lite/events" in ui.LITE_GET and "/api/lite/events" in __import__("watchdog").LONG)
+for pid in list(L.polls):
+    L.unsubscribe(L.polls.pop(pid)[1])
 
 # ---------------------------------------------------------------- pause and resume, Claude still off
 real_stop = ui.stop_session

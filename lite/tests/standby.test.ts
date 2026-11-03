@@ -45,10 +45,23 @@ function fakeApp(on: any, events: any[], seen: any) {
       return new Promise(res => { seen.held = (ans: string) => res({ value: { status: 200, ok: true, headers: {},
         text: JSON.stringify({ answer: ans === 'decline' ? 'decline' : 'accept' }) } }) })
     if (seen.down) throw new Error('connection refused')      // Standby not running
+    // its live events, asked for by the mod's own http call: a new subscription first, then the events; with
+    // waitMore, more when a test sends them (seen.more([...]), null: the app goes away), else the app goes
+    // away after them (as Standby restarting), and the mod subscribes again
+    if (url.includes('/api/lite/events?')) {
+      const said = (o: any) => ({ value: { status: 200, ok: true, headers: {}, text: JSON.stringify(o) } })
+      const gone = { value: { status: 503, ok: false, headers: {}, text: '' } }
+      seen.polls = (seen.polls || 0) + 1
+      const sub = (url.match(/[?&]sub=([^&]+)/) || [])[1]
+      if (!sub) { seen.subs = (seen.subs || 0) + 1; return said({ sub: 's' + seen.subs, events: [] }) }
+      if (!(seen.gave ||= {})[sub]) { seen.gave[sub] = true; return said({ sub, events }) }
+      if (!seen.waitMore) return gone
+      return new Promise(res => { seen.more = (more: any[]) => res(more ? said({ sub, events: more }) : gone) })
+    }
     // a start the app takes longer over than the request waits (macOS asking for the mic): the request fails
     if (seen.slowStart && /\/api\/lite\/(call|listen)$/.test(url.split('?')[0]) && e.init && e.init.body) { seen.slowStart(); throw new Error('timed out') }
     const body = e.init && e.init.body ? JSON.parse(e.init.body) : null
-    if (body) seen.posts.push({ path: url.replace(/^http:\/\/127\.0\.0\.1:\d+/, ''), body })
+    if (body) seen.posts.push({ path: url.replace(/^https?:\/\/[^/]+/, ''), body })
     const answer = url.includes('/api/lite/state') ? { app: '1.0', can: seen.can ?? { listen: true }, live: seen.idle || (seen.liveFor !== undefined && seen.liveFor-- <= 0) ? null : seen.live ?? { kind: 'meeting', session: 'm1', recorded_s: 64 },
           ...(seen.setup ? { setup: seen.setup } : {}) }
       // a first call or meeting: Standby holds it for its setup window (seen.setup on the state while it's up)
@@ -69,32 +82,22 @@ function fakeApp(on: any, events: any[], seen: any) {
       : { ok: true }
     const reply = { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(answer) } }
     // a request the app takes its time over: held until the test lets it go (seen.release())
-    if (seen.holdPath && url.replace(/^http:\/\/127\.0\.0\.1:\d+/, '').split('?')[0] === seen.holdPath)
+    if (seen.holdPath && url.replace(/^https?:\/\/[^/]+/, '').split('?')[0] === seen.holdPath)
       return new Promise(res => { seen.release = () => res(reply) })
     return reply
   })
   on('process.spawn', async function* ($: any, e: any) {
     const argv = (e && (e.argv || e.args)) || []
-    if (argv[0] === '/usr/bin/env') {                   // the agent started from here (startAgent): no stream
-      (seen.agentStarts ||= []).push(argv)
+    if (String(argv[1] || '').endsWith('/agentctl.py')) {     // the agent started from here (startAgent)
+      (seen.agentStarts ||= []).push({ argv, env: e.env })
       return { value: { code: 0, signal: null } }
     }
     if (argv[0] === 'claude') {                         // `claude auth status --json`, asked here (signedIn)
-      (seen.authAsked ||= []).push(argv)
-      yield { stream: 'stdout', text: seen.auth ?? '{"loggedIn": true}' }
+      (seen.signinAsked ||= []).push(argv)
+      yield { stream: 'stdout', text: seen.signin ?? '{"loggedIn": true}' }
       return { value: { code: 0, signal: null } }
     }
-    seen.spawned = argv
-    seen.spawns = (seen.spawns || 0) + 1
-    // the stream comes in pieces that aren't lines
-    const text = events.map(ev => JSON.stringify(ev)).join('\n') + '\n'
-    for (const piece of [text.slice(0, 17), text.slice(17)]) if (piece) yield { stream: 'stdout', text: piece }
-    // more events later, when a test sends them (seen.more([...]))
-    while (seen.waitMore) {
-      const more: any[] = await new Promise(r => { seen.more = r })
-      if (!more) break
-      yield { stream: 'stdout', text: more.map(ev => JSON.stringify(ev)).join('\n') + '\n' }
-    }
+    seen.spawned = argv                                  // nothing else is ever started
     return { value: { code: 0, signal: null } }
   })
 }
@@ -168,19 +171,19 @@ test('Standby asks: the agent is started from here, as this Claude Code, and onl
                { call: 'agent', argv: [installed[0], installed[1], 'start'] }], seen)
   await $.command.run({ command: 'standby', args: '' })
   await settle()
-  expect(seen.agentStarts).toEqual([installed, bundled].map(a => ['/usr/bin/env', 'STANDBY_AGENT_BY=claude-code'].concat(a)))
+  expect(seen.agentStarts).toEqual([installed, bundled].map(argv => ({ argv, env: { STANDBY_AGENT_BY: 'claude-code' } })))
 })
 
 // asked by Standby, `claude auth status` read the plugin's folders as Standby's: macOS asked it for Documents
-for (const [auth, said] of [['{"loggedIn": false}', false], ['{"loggedIn": true}', true], ['not json', null]] as const)
-  test(`a call asks Claude Code here whether it is signed in, and tells Standby (${auth} -> ${said})`, async ($, on) => {
-    const seen: any = { posts: [], submitted: [], aborted: [], status: [], auth }
+for (const [answer, said] of [['{"loggedIn": false}', false], ['{"loggedIn": true}', true], ['not json', null]] as const)
+  test(`a call asks Claude Code here whether it is signed in, and tells Standby (${answer} -> ${said})`, async ($, on) => {
+    const seen: any = { posts: [], submitted: [], aborted: [], status: [], signin: answer }
     mock.clock(on)
     fakeApp(on, [], seen)
     await $.command.run({ command: 'standby', args: '' })
     await $.command.run({ command: 'standby', args: 'call' })
     const post = seen.posts.find((p: any) => p.path === '/api/lite/call')
-    expect(seen.authAsked && seen.authAsked[0]).toEqual(['claude', 'auth', 'status', '--json'])
+    expect(seen.signinAsked && seen.signinAsked[0]).toEqual(['claude', 'auth', 'status', '--json'])
     expect(post && post.body.signed_in).toBe(said)
   })
 
@@ -348,14 +351,14 @@ test('VS Code while live: quiet links beside Full window, Pause and End, short (
   const panel = await $.ui.mount({ ...BAND, surface: 'vscode' } as any)
   const text = async (key: string) => (await panel.find({ key }))?.props.text
   expect([await text('pause'), await text('stop'), await text('window')]).toEqual([
-    '[Pause](https://standby.invalid/pause)', '[End](https://standby.invalid/stop)', '[Full window](https://standby.invalid/window)'])
+    '[Pause](file:///standby/pause)', '[End](file:///standby/stop)', '[Full window](file:///standby/window)'])
   for (const key of ['pause', 'stop', 'window']) expect((await panel.find({ key })).props.dimColor).toBe(true)
-  await panel.press({ key: 'pause', link: { href: 'https://standby.invalid/pause' } } as any)
+  await panel.press({ key: 'pause', link: { href: 'file:///standby/pause' } } as any)
   expect(seen.posts.some((p: any) => p.path === '/api/lite/pause')).toBe(true)
-  await panel.press({ key: 'window', link: { href: 'https://standby.invalid/window' } } as any)
+  await panel.press({ key: 'window', link: { href: 'file:///standby/window' } } as any)
   expect(seen.posts.some((p: any) => p.path === '/api/window')).toBe(true)
-  await panel.press({ key: 'stop', link: { href: 'https://standby.invalid/stop' } } as any)
-  await (await bandOf($, 'vscode')).press({ key: 'confirmYes', link: { href: 'https://standby.invalid/confirmYes' } } as any)
+  await panel.press({ key: 'stop', link: { href: 'file:///standby/stop' } } as any)
+  await (await bandOf($, 'vscode')).press({ key: 'confirmYes', link: { href: 'file:///standby/confirmYes' } } as any)
   expect(seen.posts.some((p: any) => p.path === '/api/lite/stop')).toBe(true)
 })
 
@@ -367,9 +370,9 @@ test('VS Code, a paused meeting: Resume and End', async ($, on) => {
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   const panel = await $.ui.mount({ ...BAND, requestId: 'b-paused', surface: 'vscode' } as any)
-  expect((await panel.find({ key: 'pause' })).props.text).toBe('[Resume](https://standby.invalid/pause)')
-  expect((await panel.find({ key: 'stop' })).props.text).toBe('[End](https://standby.invalid/stop)')
-  await panel.press({ key: 'pause', link: { href: 'https://standby.invalid/pause' } } as any)
+  expect((await panel.find({ key: 'pause' })).props.text).toBe('[Resume](file:///standby/pause)')
+  expect((await panel.find({ key: 'stop' })).props.text).toBe('[End](file:///standby/stop)')
+  await panel.press({ key: 'pause', link: { href: 'file:///standby/pause' } } as any)
   expect(seen.posts.some((p: any) => p.path === '/api/lite/resume')).toBe(true)
 })
 
@@ -382,11 +385,11 @@ test('VS Code, a call: Pause (Resume while paused) and End, beside Full window',
   await settle()
   const panel = await $.ui.mount({ ...BAND, requestId: 'b-call', surface: 'vscode' } as any)
   expect([(await panel.find({ key: 'mute' })).props.text, (await panel.find({ key: 'end' })).props.text, (await panel.find({ key: 'window' })).props.text]).toEqual([
-    '[Pause](https://standby.invalid/mute)', '[End](https://standby.invalid/end)', '[Full window](https://standby.invalid/window)'])
-  await panel.press({ key: 'mute', link: { href: 'https://standby.invalid/mute' } } as any)
+    '[Pause](file:///standby/mute)', '[End](file:///standby/end)', '[Full window](file:///standby/window)'])
+  await panel.press({ key: 'mute', link: { href: 'file:///standby/mute' } } as any)
   expect(seen.posts.find((p: any) => p.path === '/api/lite/mute').body).toEqual({ session: 'c1', muted: true })
-  await panel.press({ key: 'end', link: { href: 'https://standby.invalid/end' } } as any)
-  await (await bandOf($, 'vscode')).press({ key: 'confirmYes', link: { href: 'https://standby.invalid/confirmYes' } } as any)
+  await panel.press({ key: 'end', link: { href: 'file:///standby/end' } } as any)
+  await (await bandOf($, 'vscode')).press({ key: 'confirmYes', link: { href: 'file:///standby/confirmYes' } } as any)
   expect(seen.posts.some((p: any) => p.path === '/api/lite/call/end')).toBe(true)
 })
 
@@ -398,8 +401,8 @@ test('VS Code, a paused call: Resume, which goes on with it', async ($, on) => {
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   const panel = await $.ui.mount({ ...BAND, requestId: 'b-call-muted', surface: 'vscode' } as any)
-  expect((await panel.find({ key: 'mute' })).props.text).toBe('[Resume](https://standby.invalid/mute)')
-  await panel.press({ key: 'mute', link: { href: 'https://standby.invalid/mute' } } as any)
+  expect((await panel.find({ key: 'mute' })).props.text).toBe('[Resume](file:///standby/mute)')
+  await panel.press({ key: 'mute', link: { href: 'file:///standby/mute' } } as any)
   expect(seen.posts.find((p: any) => p.path === '/api/lite/mute').body).toEqual({ session: 'c1', muted: false })
 })
 
@@ -492,7 +495,7 @@ test('a terminal that doesn\'t save the conversation: no band, and Listen says w
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await band.find({ type: 'Text', text: 'drawn by Claude Code' })).toBeDefined()
   const r = await $.tool.call({ tool: 'mcp__standby__listen' })
-  expect(r.result).toMatch(/env -u CLAUDE_CODE_CHILD_SESSION claude$/)
+  expect(r.result).toMatch(/unset CLAUDE_CODE_CHILD_SESSION; claude$/)
   expect(seen.posts.some((p: any) => p.path === '/api/lite/listen')).toBe(false)
 })
 
@@ -588,7 +591,7 @@ test('after a call, its summary offers Add to Claude Code or Forget, and waits f
   await settle()
   const panel = await $.ui.mount({ ...BAND, requestId: 'cc1', surface: 'vscode' } as any)
   expect([(await panel.find({ key: 'add' })).props.text, (await panel.find({ key: 'forget' })).props.text]).toEqual([
-    '[Add to Claude Code](https://standby.invalid/add)', '[Forget](https://standby.invalid/forget)'])
+    '[Add to Claude Code](file:///standby/add)', '[Forget](file:///standby/forget)'])
   expect(await panel.find({ key: 'close' })).toBeUndefined()
   const term = await $.ui.mount({ ...BAND, requestId: 'cc2', surface: 'terminal' })
   expect(await term.find({ key: 'forget' })).toMatchObject({ props: { label: 'forget' } })
@@ -599,7 +602,7 @@ test('after a call, its summary offers Add to Claude Code or Forget, and waits f
   const later = await $.ui.mount({ ...BAND, requestId: 'cc3', surface: 'vscode' } as any)
   expect(await later.find({ key: 'add' })).toBeDefined()
   // Add: the app writes and sends the summary; the card goes, a toast says so
-  await later.press({ key: 'add', link: { href: 'https://standby.invalid/add' } } as any)
+  await later.press({ key: 'add', link: { href: 'file:///standby/add' } } as any)
   expect(seen.posts.find((p: any) => p.path === '/api/lite/card/add').body).toEqual({ session: 'c1' })
   expect(seen.status).toContain('Added to Claude Code')
   const gone = await $.ui.mount({ ...BAND, requestId: 'cc4', surface: 'vscode' } as any)
@@ -614,13 +617,13 @@ test('a call\'s summary: Forget closes it and sends nothing; an Add that can\'t 
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   const panel = await $.ui.mount({ ...BAND, requestId: 'cf1', surface: 'vscode' } as any)
-  await panel.press({ key: 'add', link: { href: 'https://standby.invalid/add' } } as any)
+  await panel.press({ key: 'add', link: { href: 'file:///standby/add' } } as any)
   expect(seen.status).toContain('That call\u2019s summary isn\u2019t ready yet')
   const still = await $.ui.mount({ ...BAND, requestId: 'cf2', surface: 'vscode' } as any)
   expect(await still.find({ key: 'add' })).toBeDefined()
   // nothing new for Claude Code: said, and the card goes as after an Add
   seen.addAnswer = { error: 'There was nothing new for Claude Code in that call' }
-  await still.press({ key: 'add', link: { href: 'https://standby.invalid/add' } } as any)
+  await still.press({ key: 'add', link: { href: 'file:///standby/add' } } as any)
   expect(seen.status).toContain('There was nothing new for Claude Code in that call')
   expect(await (await $.ui.mount({ ...BAND, requestId: 'cf3', surface: 'vscode' } as any)).find({ key: 'add' })).toBeUndefined()
 })
@@ -633,7 +636,7 @@ test('a call\'s summary: Forget closes it, nothing sent', async ($, on) => {
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   const panel = await $.ui.mount({ ...BAND, requestId: 'cg1', surface: 'vscode' } as any)
-  await panel.press({ key: 'forget', link: { href: 'https://standby.invalid/forget' } } as any)
+  await panel.press({ key: 'forget', link: { href: 'file:///standby/forget' } } as any)
   expect(seen.posts.some((p: any) => p.path === '/api/lite/card/add')).toBe(false)
   expect(await (await $.ui.mount({ ...BAND, requestId: 'cg2', surface: 'vscode' } as any)).find({ key: 'forget' })).toBeUndefined()
 })
@@ -646,7 +649,7 @@ test('the summary on the band closes when Close is pressed', async ($, on) => {
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   const panel = await $.ui.mount({ ...BAND, requestId: 'band-c', surface: 'vscode' } as any)
-  await panel.press({ key: 'close', link: { href: 'https://standby.invalid/close' } } as any)
+  await panel.press({ key: 'close', link: { href: 'file:///standby/close' } } as any)
   const after = await $.ui.mount({ ...BAND, requestId: 'band-c2', surface: 'vscode' } as any)
   expect(await after.find({ type: 'Text', text: 'Summary · Planning' })).toBeUndefined()
 })
@@ -732,10 +735,10 @@ test('the stream to Standby drops (Standby restarted): it reconnects by itself, 
   fakeApp(on, [], seen)
   await $.command.run({ command: 'standby', args: '' })
   await settle()
-  const first = seen.spawns
+  const first = seen.subs
   await clock.advance(1500)
   await settle()
-  expect(seen.spawns).toBeGreaterThan(first)
+  expect(seen.subs).toBeGreaterThan(first)
 })
 
 test('settings as a command and a tool: listed with values and choices, one changed by name, the app checking the value', async ($, on) => {
@@ -881,7 +884,7 @@ test('in VS Code the ring is links; Decline starts nothing', async ($, on) => {
   await settle()
   const band = await $.ui.mount({ ...BAND, surface: 'vscode' } as any)
   expect(await band.find({ type: 'Text', text: 'Listen to your meeting?' })).toBeDefined()
-  await band.press({ key: 'decline', link: { href: 'https://standby.invalid/decline' } } as any)
+  await band.press({ key: 'decline', link: { href: 'file:///standby/decline' } } as any)
   const r: any = await waiting
   expect(r.result).toBe('Declined')
   expect(seen.posts.some((p: any) => p.path === '/api/lite/listen')).toBe(false)
@@ -1308,12 +1311,12 @@ test('letters · VS Code\'s End asks on the band too: End and Keep talking as li
   fakeApp(on, [], seen)
   await $.command.run({ command: 'standby', args: '' })
   await settle()
-  await (await bandOf($, 'vscode')).press({ key: 'end', link: { href: 'https://standby.invalid/end' } } as any)
+  await (await bandOf($, 'vscode')).press({ key: 'end', link: { href: 'file:///standby/end' } } as any)
   const panel = await bandOf($, 'vscode')
   expect(await textOn(panel, 'End the call?')).toBeDefined()
-  expect((await panel.find({ key: 'confirmYes' })).props).toMatchObject({ text: '[End](https://standby.invalid/confirmYes)', dimColor: false })
-  expect((await panel.find({ key: 'confirmNo' })).props).toMatchObject({ text: '[Keep talking](https://standby.invalid/confirmNo)', dimColor: true })
-  await panel.press({ key: 'confirmNo', link: { href: 'https://standby.invalid/confirmNo' } } as any)
+  expect((await panel.find({ key: 'confirmYes' })).props).toMatchObject({ text: '[End](file:///standby/confirmYes)', dimColor: false })
+  expect((await panel.find({ key: 'confirmNo' })).props).toMatchObject({ text: '[Keep talking](file:///standby/confirmNo)', dimColor: true })
+  await panel.press({ key: 'confirmNo', link: { href: 'file:///standby/confirmNo' } } as any)
   expect(posted(seen, '/api/lite/call/end')).toBe(false)
   expect(await textOn(await bandOf($, 'vscode'), 'On a call with Claude')).toBeDefined()
 })
@@ -1457,19 +1460,19 @@ test('VS Code, a call: the Mini window link, a plain quiet link as the others, a
   await $.command.run({ command: 'standby', args: '' })
   await settle()
   const panel = await bandOf($, 'vscode')
-  expect((await panel.find({ key: 'mini' })).props.text).toBe('[Mini window](https://standby.invalid/mini)')
+  expect((await panel.find({ key: 'mini' })).props.text).toBe('[Mini window](file:///standby/mini)')
   expect((await panel.find({ key: 'mini' })).props.dimColor).toBe(true)                // as Pause, End and the window's
   expect(await textOn(panel, '\u25cf ')).toBeUndefined()                                 // no dot of its own
   expect((await panel.findAll({ type: 'Svg' })).map((v: any) => v.props.alt)).toEqual(['Standby'])        // only the row's own mark
   // one line: the link's own box never wraps, as every row on the band
-  const boxes = (await panel.findAll({ type: 'Box' })).filter((b: any) => b.props.flexDirection === 'row' && JSON.stringify(b).includes('standby.invalid/mini'))
+  const boxes = (await panel.findAll({ type: 'Box' })).filter((b: any) => b.props.flexDirection === 'row' && JSON.stringify(b).includes('file:///standby/mini'))
   expect(boxes.length).toBeGreaterThan(0)
   for (const b of boxes) expect(b.props.flexWrap).toBe('nowrap')
   // and at a narrow width the call's words still lead the row, cut with … rather than wrapped
   const narrow = await $.ui.mount({ ...BAND, requestId: 'narrow', surface: 'vscode', viewport: { columns: 60, rows: 40 },
     props: { ...BAND.props, bodyColumns: 60 } } as any)
   expect(await textOn(narrow, 'On a call with Claude')).toMatchObject({ props: { wrap: 'truncate-end' } })
-  await panel.press({ key: 'mini', link: { href: 'https://standby.invalid/mini' } } as any)
+  await panel.press({ key: 'mini', link: { href: 'file:///standby/mini' } } as any)
   expect(posted(seen, '/api/lite/orb')).toBe(true)
 })
 
@@ -1628,7 +1631,7 @@ test('access · the meeting’s sound refused, in VS Code: its line, and Open Se
   expect(await textOn(panel, SOUND_NO)).toMatchObject({ props: { color: '#d29922' } })
   expect(await rowOf(panel)).toEqual(['Pause', 'End', 'Full window', 'Open Settings'])
   expect((await panel.find({ key: 'settings' })).props.dimColor).toBe(true)
-  await panel.press({ key: 'settings', link: { href: 'https://standby.invalid/settings' } } as any)
+  await panel.press({ key: 'settings', link: { href: 'file:///standby/settings' } } as any)
   expect(posted(seen, '/api/lite/permission')).toBe(true)
 })
 
@@ -1755,7 +1758,7 @@ test('a start that fails while the app really is down still says so', async ($, 
   expect(r.text).toContain('isn’t running')
 })
 
-test('every request to Standby carries this launch\'s token, from its file; the stream reads it from a file, never the command line', async ($, on) => {
+test('every request to Standby carries this launch\'s token, from its file, its live events too, by the mod\'s own http call', async ($, on) => {
   const seen: any = { posts: [], submitted: [], aborted: [], status: [] }
   mock.clock(on)
   fakeApp(on, [], seen)
@@ -1763,9 +1766,8 @@ test('every request to Standby carries this launch\'s token, from its file; the 
   await settle()
   expect(seen.tokens.length).toBeGreaterThan(0)
   expect(seen.tokens.every((t: any) => t === 'tok-launch-1')).toBe(true)
-  expect(seen.spawned).toContain('-H')
-  expect(seen.spawned[seen.spawned.indexOf('-H') + 1]).toBe('@/tmp/standby-test-home/.standby/ui.header')
-  expect(seen.spawned.join(' ')).not.toContain('tok-launch-1')
+  expect(seen.polls).toBeGreaterThan(0)
+  expect(seen.spawned).toBeUndefined()                  // no program of its own for them
 })
 
 // ---------------------------------------------------------------- one channel: the session tells its voice

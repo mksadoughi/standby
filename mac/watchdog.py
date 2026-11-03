@@ -21,7 +21,7 @@ import traceback
 
 STALL = 2.0          # s: longer than this is a stall worth a line in the log
 EVERY = 1.0          # s between beats sent to the main thread
-LONG = ("/api/msg/events", "/api/lite/stream")   # requests that stay open by design
+LONG = ("/api/msg/events", "/api/lite/stream", "/api/lite/events")   # requests that stay open by design
 
 _requests = {}       # thread id -> (path, started)
 _lock = threading.Lock()

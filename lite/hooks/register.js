@@ -2,10 +2,11 @@
 // (127.0.0.1, its own port); this module is what the person sees here, and the one way
 // in and out of this session: a meeting's transcript with the person's prompts (or, set to live, as
 // quiet notes as it goes), a call's hand-offs as turns. A summary stays in Standby: never sent here.
-import { said, jsonLines, minutes, noteLine, toolWords, joined, helpText, nameArgs, startNote, endNote, settingsText, setArgs } from './words.js'
+import { said, minutes, noteLine, toolWords, joined, helpText, nameArgs, startNote, endNote, settingsText, setArgs } from './words.js'
 
-// A key drawn as a link (VS Code, the desktop): an address nothing opens, answered by the mod
-const KEY_LINK = 'https://standby.invalid/'
+// A key drawn as a link (VS Code, the desktop): a file address of no file and no host, never fetched or opened:
+// the mod answers the press itself
+const KEY_LINK = 'file:///standby/'
 // Standby's mark, as the app icon draws it small (mac/icons.py, wave_icon small): three white bars on the
 // indigo-to-violet rounded square. For VS Code and the desktop, one text line high.
 const LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 94 94"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
@@ -18,7 +19,7 @@ const WARN = '#d29922'      // the band's word that something isn't working (the
 // Claude Code started from inside another (its terminal app carries CLAUDE_CODE_CHILD_SESSION, which
 // a new window of that app inherits too) doesn't save its conversation, so Standby can't listen in it
 const UNSAVED = 'Standby can\u2019t listen here: this Claude Code doesn\u2019t save its conversation. ' +
-  'Quit it and start it with: env -u CLAUDE_CODE_CHILD_SESSION claude'
+  'Quit it, then start it in that terminal with: unset CLAUDE_CODE_CHILD_SESSION; claude'
 // What an action says when it worked: a band press shows nothing then (the band itself changes)
 const LISTENING = { ask: 'Listening. Claude here gets the transcript with each of your prompts.', live: 'Listening. Claude here hears the meeting as it goes.' }
 const OK = new Set(['Standby\u2019s window is open.', LISTENING.ask, LISTENING.live, 'Stopped. The summary comes in a moment.',
@@ -33,7 +34,7 @@ const S = {
   pending: [],          // lines Claude hasn't had yet (before the next batch)
   card: null,           // the ended meeting's or call's card: { session, title, points, gist }
   turn: null,           // the session's running turn id, or null when idle
-  stream: null,         // the app's live stream (a spawned curl)
+  stream: null,         // the app's live events, while they're asked for
   caption: '',          // the last line said, for the band
   call: null,           // { session } while a call is live
   fromCall: new Set(),  // the words of a call's hand-offs, to mark them in the chat
@@ -43,7 +44,6 @@ const S = {
   heard: { you: '', said: '' },   // a call's turn as it goes (the captions)
   said: null,           // the last finished exchange of a call, for the band's second line
   holding: 0,           // inside a tool call of ours: a turn is running, whatever turn.start said
-  later: [],            // turns to submit once the running one ends (a hook can't wait on its own turn)
   noted: new Set(),     // meetings this session was told have started (on ask)
   incoming: null,       // { id, kind, expires }: Claude asks to start a call or listening, on the band until answered
   starting: null,       // { kind, since, cancel? }: a call or listening starting, until it's live
@@ -111,7 +111,6 @@ async function where($) {
   const port = await $.fs.read(home + 'ui.port').catch(() => '')
   if (/^\d+$/.test(String(port).trim())) S.port = Number(String(port).trim())
   S.token = String(await $.fs.read(home + 'ui.token').catch(() => '')).trim()
-  S.header = home + 'ui.header'
 }
 
 async function app($, path, body, again) {
@@ -143,21 +142,21 @@ async function refresh($) {
   $.ui.invalidate('ui.render')
 }
 
-// The app's live stream: meeting lines, renames, a call's captions and hand-offs. Runs while
-// /standby is on; leaving the loop ends curl.
+// The app's live events: meeting lines, renames, a call's captions and hand-offs. Runs while /standby is on,
+// asked for with the mod's own http call: each ask answers as soon as anything comes, else after POLL_S
+// seconds with nothing (a fetch held much longer is cut by the host), and the next is asked at once.
+const POLL_S = 5
 async function listen($) {
   if (S.stream) return
-  const url = 'http://127.0.0.1:' + S.port + '/api/lite/stream?cc=' + encodeURIComponent(S.cc)
-  // the token from its file (-H @file), never on the command line, where ps would show it
-  S.stream = $.process.spawn({ argv: ['curl', '-sN', '--max-time', '0', '-H', '@' + (S.header || ''), url] })
-  let rest = ''
+  S.stream = true
+  let sub = ''
   try {
-    for await (const chunk of S.stream) {
-      if (!S.on) break
-      if (chunk.stream !== 'stdout') continue
-      const got = jsonLines(rest, chunk.text)
-      rest = got.rest
-      for (const ev of got.events) await heard($, ev)
+    while (S.on) {
+      const r = await app($, '/api/lite/events?cc=' + encodeURIComponent(S.cc) + (sub ? '&sub=' + encodeURIComponent(sub) : '') + '&wait=' + POLL_S)
+      if (r.error) break                      // the app went away: the state poll says so, and this reconnects
+      if (r.resync) { S.resync = true; break }
+      sub = r.sub || ''
+      for (const ev of r.events || []) { await heard($, ev); if (S.resync) break }
       if (S.resync) break
     }
   } catch (err) {
@@ -268,7 +267,7 @@ async function startAgent($, argv) {
   if (S.agentStarting || !(await agentArgv($, argv))) return
   S.agentStarting = true
   try {
-    const p = $.process.spawn({ argv: ['/usr/bin/env', 'STANDBY_AGENT_BY=claude-code'].concat(argv) })
+    const p = $.process.spawn({ argv, env: { STANDBY_AGENT_BY: 'claude-code' } })
     for await (const chunk of p) { void chunk }       // until it's up; Standby reads the agent's state itself
   } catch (err) {
     // Standby waits a while, then starts it itself
@@ -288,16 +287,16 @@ async function batch($, session, all) {
 }
 
 // The ended meeting's card, once the engine has made it
-async function cardOf($, session, note) {
+async function cardOf($, session, why) {
   // at once: what ended, "Summarizing…" where its points will be (the summary takes a few seconds)
   if (!S.card || S.card.session !== session) {
     S.ending = null                                         // the summary's row takes over from Ending
     const l = S.lastLive && S.lastLive.session === session ? S.lastLive : {}
     const secs = l.recorded_s != null ? l.recorded_s : l.started ? (l.seenAt || Date.now() / 1000) - l.started : null
-    S.card = { session, kind: l.kind || null, title: l.title || (l.kind === 'call' ? 'Call' : 'the meeting'), duration_s: secs, waiting: true, shownAt: Date.now(), note: note || null }
+    S.card = { session, kind: l.kind || null, title: l.title || (l.kind === 'call' ? 'Call' : 'the meeting'), duration_s: secs, waiting: true, shownAt: Date.now(), note: why || null }
     $.ui.invalidate('ui.render')
   } else {
-    if (note && !S.card.note) { S.card.note = note; $.ui.invalidate('ui.render') }     // its word came after the card
+    if (why && !S.card.note) { S.card.note = why; $.ui.invalidate('ui.render') }     // its word came after the card
     if (!S.card.waiting) return                             // this one's summary is here already
   }
   try {                                                     // ends quietly with the session (the mod unloaded)
@@ -328,12 +327,6 @@ async function handOn($, ev) {
   try { r = await $.prompt.submit({ text: ev.text, asUser: true }) } catch (err) { r = { drop: String((err && err.message) || err) } }
   const got = !!r && !r.drop
   await app($, '/api/lite/progress', { session: ev.session, id: ev.id || '', kind: got ? 'received' : 'undelivered', text: got ? '' : String((r && r.drop) || '') })
-}
-
-// A turn Standby starts: now if the session is idle, else once the running turn ends
-function submit($, text, asUser) {
-  if (S.turn || S.holding) { S.later.push({ text, asUser: !!asUser }); return }
-  $.prompt.submit(asUser ? { text, asUser: true } : { text })
 }
 
 // A user-role note Claude reads and the person doesn't see as typed: no turn of its own
@@ -1058,8 +1051,6 @@ export function register(on) {
   on('turn.start', async ($, e, next) => { S.turn = e.turnId; return next(e) })
   on('turn.complete', async ($, e, next) => {
     S.turn = null
-    const due = S.later.splice(0)
-    for (const t of due) $.prompt.submit(t.asUser ? { text: t.text, asUser: true } : { text: t.text })
     if (S.call && !e.agentId) {
       const reason = e.isAborted ? 'aborted' : (e.reason || 'answer')
       // a state for the call's tasks; what came of it is the session's to tell, with tell_voice
