@@ -32,8 +32,8 @@ The installer sets everything up and downloads the models once. After that, its 
 
 - **A Mac**: Apple Silicon, macOS 14.4 or later, and [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 2.1.299 or later,
   signed in (`claude update` gets the latest). 16 GB of memory is best for calls.
-- **A one-time download** of about 4.5 GB (2.5 GB on an 8 GB Mac), so leave 5 GB free. Standby's voice, 240 MB of
-  it, comes with your first call.
+- **A one-time download** of about 4.5 GB (2.5 GB on an 8 GB Mac), so leave 6 GB free. The installer fetches it all,
+  Standby's voice (240 MB) included.
 - **Three permissions**, each asked the first time it's needed:
 
   | macOS asks for | When | Why |
@@ -41,6 +41,9 @@ The installer sets everything up and downloads the models once. After that, its 
   | Microphone | Your first call or meeting | To hear you |
   | System Audio Recording | The first meeting that records your Mac's sound | To hear the other side of a video call. Standby takes only the sound |
   | Input Monitoring and Accessibility | When you turn on dictation | To notice your dictation shortcut, and to type the text for you |
+
+  macOS may also ask once for a folder (Desktop, Documents, Downloads, another disk) when a call works on a project
+  there. With dictation on, Standby Dictation starts at login; `standby dictation off` removes it.
 
 - **Consent**: tell people when you're transcribing. In many places everyone in a conversation has to agree to being
   recorded.
@@ -94,7 +97,9 @@ rm -f ~/.local/bin/standby ~/.local/bin/standby-ctx
 ```
 
 This deletes your meetings and calls too; copy `~/.standby/sessions` first to keep them. The models are in
-`~/.cache/huggingface/hub` (the `parakeet`, `whisper` and `pocket-tts` folders).
+`~/.cache/huggingface/hub` (the `parakeet`, `whisper` and `pocket-tts` folders). The installer's PATH line in `~/.zshrc`
+stays, and macOS keeps Standby's permissions until `tccutil reset All dev.standby.app` and
+`tccutil reset All dev.standby.dictation`.
 </details>
 
 <details>
@@ -103,7 +108,9 @@ This deletes your meetings and calls too; copy `~/.standby/sessions` first to ke
 - **Audio** stays on your Mac and is transcribed there. Standalone dictation isn't kept as a session; when it uses a
   running recorder, temporary audio and text files can remain after an interruption. Dictated questions within a
   meeting or call are part of that session.
-- **Transcripts, calls and summaries** are saved in `~/.standby/sessions/`. `standby purge <session>` deletes one.
+- **Transcripts, calls and summaries** are saved in `~/.standby/sessions/`, and so is **a meeting's audio**, as WAV
+  files in its folder (for `standby repass`, a slower second transcription); a call keeps no audio. All of it stays
+  until you delete the meeting or call in Standby, or run `standby purge <session>`.
 - **Text to Claude**: a meeting's transcript and what you say on a call go to your own Claude Code, which talks to
   its model provider as it always does.
 - **Voice prints** stay on your Mac: the voices you name, and your own voice, which Standby learns from your calls to
@@ -115,7 +122,13 @@ This deletes your meetings and calls too; copy `~/.standby/sessions` first to ke
   and traces before sharing them, since diagnostics can also include local paths, device names and error details.
 - **Deleting** a meeting or call in Standby removes its session files and Standby's delivered copies, including its
   debug trace. It doesn't erase global diagnostic logs, what was already sent to Claude Code, or exports.
-- Standby has no account and no telemetry. It only downloads its models, from Hugging Face and GitHub.
+- **Dictation's vocabulary**: with dictation on, Standby learns the words of your Claude Code projects (from their
+  names, READMEs, CLAUDE.md files, package lists and git authors) so it spells them right, and keeps them in
+  `~/.standby/dictation-vocabulary.json`.
+- **Downloads**: the installer fetches Python packages from PyPI, the models from Hugging Face and GitHub, and two
+  display libraries from npm and jsDelivr, each at a fixed version. Afterwards Standby downloads only a model you
+  choose later: another speech model in Settings, or Whisper (about 1.6 GB) the first time you run `standby repass`.
+- The app has no account and no telemetry. (The website counts visits with GoatCounter, without cookies.)
 </details>
 
 <details>

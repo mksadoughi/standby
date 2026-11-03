@@ -1,7 +1,15 @@
 {
   "name": "standby",
   "version": "0.2.0",
-  "description": "Standby inside Claude Code: listen to a meeting or talk by voice, with Claude in this session hearing it all",
-  "author": { "name": "Standby" },
-  "license": "MIT"
+  "description": "Standby inside Claude Code: listen to a meeting or talk by voice, with Claude in this session hearing it all. Needs the free Standby app for Mac",
+  "author": { "name": "Standby", "url": "https://github.com/mksadoughi/standby" },
+  "homepage": "https://mksadoughi.github.io/standby/",
+  "repository": "https://github.com/mksadoughi/standby",
+  "license": "MIT",
+  "keywords": ["meetings", "voice", "transcription", "dictation", "macos"],
+  "icon": "./icon.png",
+  "documentationUrl": "https://github.com/mksadoughi/standby#readme",
+  "supportUrl": "https://github.com/mksadoughi/standby/issues",
+  "privacyPolicyUrl": "https://mksadoughi.github.io/standby/terms.html",
+  "termsOfServiceUrl": "https://mksadoughi.github.io/standby/terms.html"
 }
