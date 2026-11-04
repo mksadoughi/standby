@@ -6595,7 +6595,7 @@ def write_token():
         with os.fdopen(fd, "w") as fh:
             fh.write(TOKEN + "\n")
         os.replace(str(tmp), str(TOKEN_FILE))
-        # and as a header line, for curl's -H @file (the mod's stream): never on a command line, where ps shows it
+        # and as a header line, for curl's -H @file (an older plugin's stream): never on a command line, where ps shows it
         fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
             fh.write("%s: %s\n" % (TOKEN_HEADER, TOKEN))

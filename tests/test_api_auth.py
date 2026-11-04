@@ -81,7 +81,8 @@ check("  POST from another page's Origin, with the token: still refused (the bro
 check("the page's event stream without the token: 401", ask("GET", "/api/msg/events")[0] == 401)
 st, r, _t = ask("GET", "/api/msg/events", query_token=True, read=False)
 check("  with ?token= (EventSource takes no header): open", st == 200 and "event-stream" in (r.getheader("Content-Type") or ""), st)
-check("the mod's stream without the token: 401", ask("GET", "/api/lite/stream?cc=x")[0] == 401)
+check("the mod's events (its long poll) without the token: 401", ask("GET", "/api/lite/events?cc=x&wait=0")[0] == 401)
+check("  an older plugin's stream without it: 401", ask("GET", "/api/lite/stream?cc=x")[0] == 401)
 check("  from a foreign Host: 403", ask("GET", "/api/msg/events", host="evil.example:%d" % PORT, query_token=True)[0] == 403)
 
 # ---------------------------------------------------------------- the pages
@@ -113,7 +114,7 @@ ui.write_token()
 tok, hdr = root / "ui.token", root / "ui.header"
 check("the token is written for Standby's clients, readable by its owner only",
       tok.read_text().strip() == T and stat.S_IMODE(os.stat(tok).st_mode) == 0o600, oct(stat.S_IMODE(os.stat(tok).st_mode)))
-check("  and as a header line, for curl -H @file (the mod's stream): owner only, never on a command line",
+check("  and as a header line, for curl -H @file (an older plugin's stream): owner only, never on a command line",
       hdr.read_text() == "X-Standby-Token: %s\n" % T and stat.S_IMODE(os.stat(hdr).st_mode) == 0o600)
 check("another Standby on a port (its token not ours): known as Standby, not another app",
       ui.port_owner(PORT) == "this")
@@ -130,8 +131,10 @@ check("  its event stream and its download link carry it as ?token=",
 comp = (Path(ui.HERE) / "companion.html").read_text()
 check("the mini window's page sends it on every request", '"X-Standby-Token": SBT' in comp and 'const SBT = "__SB_TOKEN__"' in comp)
 mod = (Path(ui.HERE).parent / "lite" / "hooks" / "register.js").read_text()
-check("the mod reads it from ~/.standby/ui.token and sends it; its stream reads it from ui.header",
-      "'ui.token'" in mod and "'x-standby-token'" in mod and "'-H', '@'" in mod)
+check("the mod reads it from ~/.standby/ui.token and sends it on every fetch, its events' long poll too",
+      "'ui.token'" in mod and mod.count("'x-standby-token': S.token") == 2 and "app($, '/api/lite/events?" in mod
+      and mod.count("$.http.fetch(") == 1)
+check("  nothing of it reads ui.header, nor starts curl", "ui.header" not in mod and "curl" not in mod)
 
 srv.shutdown()
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
