@@ -27,7 +27,7 @@ svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 </head>
 <body>
 <svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
-<script>const DUR = 58.6;</script>
+<script>const CLIP = /[?&]clip/.test(location.search), DUR = CLIP ? 19.7 : 58.6;   // ?clip: the short square loop (clip(), at the end)</script>
 <script src="kit.js"></script>
 <script src="screens.js"></script>
 <script src="cc.js"></script>
@@ -174,7 +174,7 @@ function work(t) {
   if (ok > 0) g += orbApp(ORB[0], ORB[1], 40 * ok, callState(t), t, clamp(ok));
   // as it suggests the colours, a card above the mini window shows them; it's put away when the page moves over
   const vk = pop(span(t, SAY.c3.at + .3, SAY.c3.at + .65)) * (1 - span(t, MOVE - .5, MOVE));
-  if (vk > 0) g += visualCard(1572, ORB[1] - 58, 440, t < SAY.c3.at + 1.4 ? { brief: "The changes to the page" } :
+  if (vk > 0) g += visualCard(1572, ORB[1] - 58, CLIP ? 560 : 440, t < SAY.c3.at + 1.4 ? { brief: "The changes to the page" } :
     { title: "A lighter look", swatches: [["Header", "#ffffff"], ["Button", "#5046e5"], ["Text", "#1d1c2b"]] }, clamp(vk));
   // the meeting, on a video call beside it
   const vw = 0;                                                        // the meeting is the room (the options are in meeting-options.html)
@@ -409,7 +409,7 @@ function subtitle(t) {
     ui(x + (l.who === "Claude" ? 56 : 30), y + 5, `<tspan font-weight="700" fill="${l.who === "Claude" ? "#b9b4ff" : l.who === "You" ? "#ffffff" : COL[l.who]}">${l.who}</tspan>  ${esc(s)}`, 27, { fill: "#f4f4fa" }) + "</g>";
 }
 
-function film(t0) {
+function film(t0, bare) {
   // the opening runs on the real clock and is held a moment longer; everything after it comes that much later
   const [HOLD_AT, HOLD] = STORY_HOLD, t = t0 < HOLD_AT ? t0 : Math.max(HOLD_AT, t0 - HOLD);
   let g = `<rect width="1600" height="900" fill="${PAPER}"/>`;
@@ -433,13 +433,52 @@ function film(t0) {
   if (d > 0) g += `<g opacity="${fo(d)}">${outro(t)}</g>`;
   const ck = closeUp(t) * fade(t, WORK0, WORK1, .4);                   // up close, the terminal fills the top: paper under the words
   if (ck > 0) g += `<rect width="1600" height="150" fill="${PAPER}" opacity="${fo(ck)}"/>`;
+  if (bare) return g;
   g += cap(t, [[WORK0 + .3, ZIN1 + .2, "Hours into a Claude Code session, on a long task."], [ZIN1 + .3, ZOUT1 + .4, "Ask it to call."],
     [OPEN + .2, HANDOFF + .2, "Call it and brainstorm, for hours."], [HANDOFF + .3, MEET0 + .2, "While it does the work."],
     [MEET0 + PULL - .1, ZLAP0 + .3, "Let it listen in on your meetings."], [ZLAP1 + .1, WIN0 + .4, "Just ask it to join."],
     [WIN0 + .6, TYPE_C - .2, "It helps in real time, as they happen."], [TYPE_C, MEET1 - .3, "Ask it to check, while the meeting goes on."]]);   // choosing what it hears shows itself
   return g + subtitle(t);
 }
-play(t => film(t + SKIP));   // the opening words are left out: it starts on the screen, hours into the work
+// ---- ?clip: the call alone, as a short square loop for a post, readable small (about 480 px wide) ----------------------
+// Four cuts of the film's own call (story time, after the hold), a camera on each, and the words big in bands of their
+// own: what's happening at the top, what's said at the bottom. render.py ... --query clip=1 --size 720x720 --scale 1
+const CUTS = [[12.0, 14.3], [15.0, 24.3], [24.9, 27.6], [28.2, 33.6]];
+const CAM = [[14.3, 100, 40, 1060], [15.0, 20, -73, 1570], [17.4, 20, -73, 1570], [18.2, 200, -15, 1400], [20.9, 200, -15, 1400],
+  [21.6, 560, 130, 1040], [28.9, 560, 130, 1040], [29.7, 720, 180, 900], [31.4, 720, 180, 900], [32.0, 20, 140, 940]];   // [from story time, x, y, width] of the world in view
+const VIEW = { y: 104, h: 640 };                                            // the world's band in the 900 x 900 frame
+function camAt(t) {
+  let i = CAM.findIndex(c => c[0] > t); if (i < 0) return CAM[CAM.length - 1].slice(1); if (i === 0) return CAM[0].slice(1);
+  const a = CAM[i - 1], b = CAM[i], q = inout(span(t, a[0], b[0]));
+  return [1, 2, 3].map(j => lerp(a[j], b[j], q));
+}
+function wrap(s, n) {
+  const out = [""]; for (const w of s.split(" ")) { if (out[out.length - 1] && (out[out.length - 1] + " " + w).length > n) out.push(w); else out[out.length - 1] += (out[out.length - 1] ? " " : "") + w; }
+  return out;
+}
+function clip(c) {
+  let i = 0, c0 = 0; while (i < CUTS.length - 1 && c >= c0 + CUTS[i][1] - CUTS[i][0]) { c0 += CUTS[i][1] - CUTS[i][0]; i++; }
+  const t = CUTS[i][0] + (c - c0), [x, y, w] = camAt(t), sc = 900 / w, cut1 = CUTS[0][1] - CUTS[0][0];
+  const dip = 1 - .85 * (1 - span(Math.abs(c - cut1), 0, .18));          // the first cut, terminal to the page, through paper
+  let g = `<rect width="900" height="900" fill="${PAPER}"/><clipPath id="cv"><rect y="${VIEW.y}" width="900" height="${VIEW.h}"/></clipPath>` +
+    `<g clip-path="url(#cv)" opacity="${fo(dip)}"><g transform="translate(0 ${VIEW.y}) scale(${fs(sc)}) translate(${f(-x)} ${f(-y)})">${film(t + STORY_HOLD[1], true)}</g></g>`;
+  g += `<rect width="900" height="${VIEW.y + 1}" fill="${PAPER}"/>`;        // a clean edge under the top words
+  const top = [[0, cut1, "Ask your Claude Code to call."], [cut1, 14.3, "Talk it through. It answers at once."], [14.3, DUR, "The work lands in the same session."]];
+  for (const [a, b, s] of top) {
+    const k = (a ? out(span(c, a, a + .4)) : 1) * (b < DUR ? 1 - span(c, b - .3, b) : 1);
+    if (k > 0) g += text(450, 70, s, 44, { weight: 700, opacity: fo(k) });
+  }
+  const l = STORY_LINES.find(l => t > l.at - .1 && t < l.at + l.dur + .35);
+  if (l) {
+    const k = fade(t, l.at - .1, l.at + l.dur + .35, .15), me = l.who === "Claude", lines = wrap(l.who + "  " + l.text, 36), y0 = 822 - (lines.length - 1) * 23;
+    g += `<g opacity="${fo(k)}">` + box(30, VIEW.y + VIEW.h + 14, 840, 900 - VIEW.y - VIEW.h - 30, 28, DARK ? "#2b2b40" : "#1b1a2e", { op: .95 }) +
+      (me ? orbApp(78, y0 - 12 + (lines.length - 1) * 23, 20, "speaking", t) : "") +
+      lines.map((s, j) => ui(me ? 114 : 66, y0 + j * 46, j ? esc(s) : `<tspan font-weight="700" fill="${me ? "#b9b4ff" : "#ffffff"}">${l.who}</tspan>${esc(s.slice(l.who.length))}`, 34, { fill: "#f4f4fa" })).join("") + "</g>";
+  }
+  return g;
+}
+if (CLIP) document.getElementById("s").setAttribute("viewBox", "0 0 900 900");
+play(CLIP ? clip : t => film(t + SKIP));   // the opening words are left out: it starts on the screen, hours into the work
 </script>
 </body>
 </html>
