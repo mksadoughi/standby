@@ -6,7 +6,7 @@ Standby is a Claude Code plugin that gives your session ears and a voice, on you
 
 Website and demo film: [mksadoughi.github.io/standby](https://mksadoughi.github.io/standby/)
 
-<p align="center"><img src="docs/img/hero.svg" width="460" alt="A terminal running Claude Code, wearing headphones"></p>
+<p align="center"><a href="https://mksadoughi.github.io/standby/"><img src="docs/img/readme-hero.png" width="880" alt="The top of Standby's website: Talk to your Claude Code. Standby is a free Claude Code plugin that works inside the session you already use, for calls and meetings, beside a drawing of a terminal running Claude Code wearing headphones. Stays on your Mac, no API key, open source."></a></p>
 
 - **Call it** and talk things through. It does the real work in your session while you keep talking.
 - **Bring it to meetings**, on a call or in the room, with no bot in the call. Ask it anything as it goes.
