@@ -60,9 +60,10 @@ class Engine(object):
 
     def __init__(self, setup=0.0, refuse=False, during=None):
         self.setup, self.refuse, self.during = setup, refuse, during
-        self.mic, self.seen = None, []
+        self.mic, self.seen, self.took = None, [], None
 
     def start_mic(self, name, feed):
+        t0 = time.time()
         self.seen.append([(s.name, s.run, s.closed) for s in plains])   # the plain streams, as the engine started
         events.append(("engine start", name))
         if self.during:
@@ -72,6 +73,7 @@ class Engine(object):
             raise RuntimeError("voice processing did not start")
         self.mic = name
         feed(np.full(800, 0.5, "float32"))               # the engine's own audio
+        self.took = time.time() - t0                     # its own start, as long as the runner made it
 
     def stop_mic(self):
         events.append(("engine stop", self.mic))
@@ -104,9 +106,25 @@ def plain_block(ch):
 ch = channel()
 plain = ch._input
 eng = Engine(setup=0.3, during=lambda: plain_block(ch))
+
+
+class Clock(object):
+    """The recorder's clock, as itself, but every wait of the recorder's own is counted (the engine's is not)."""
+    def __init__(self, real):
+        self.real, self.slept = real, []
+    def __getattr__(self, name):
+        return getattr(self.real, name)
+    def sleep(self, secs):
+        self.slept.append(secs)
+        self.real.sleep(secs)
+
+
+sb.time = Clock(time)
+clock = sb.time
 t0 = time.time()
 ok = ch.borrow(eng)
 took = time.time() - t0
+sb.time = time
 check("borrow: the engine has the mic", ok and ch.borrowed is eng and eng.mic == "AirPods Pro", (ok, ch.borrowed))
 check("  the plain stream was still open on the same mic as the engine started",
       eng.seen == [[("AirPods Pro", True, False)]], eng.seen)
@@ -115,11 +133,13 @@ check("  ...and closed once the engine had it, never before",
       and plain.closed and ch._input is None, events)
 check("  its audio meanwhile is dropped: only the engine's reaches the transcriber (no doubled audio)",
       ch.fed == [0.5], ch.fed)
-check("  the handover adds no wait of its own to the engine's start (0.3s here)",
-      took < 0.3 + 0.1, "%.3fs" % took)
+check("  the handover adds no wait of its own to the engine's start: the recorder waits on nothing",
+      clock.slept == [] and eng.took is not None and took >= eng.took, (clock.slept, took, eng.took))
 check("  no longer handing over: a straggling plain block after it is the engine's mic, not the plain's",
       ch._handover is False)
-check("  the log says how long the engine took", any("echo cancelling has the mic in 0.3" in m for m in logged), logged[-3:])
+said = [float(m.rsplit(" in ", 1)[1].rstrip("s")) for m in logged if m.startswith("Room: echo cancelling has the mic in ")]
+check("  the log says how long the engine took: its own start, up to the whole handover (to the log's 0.01 s)",
+      len(said) == 1 and eng.took - 0.006 <= said[0] <= took + 0.006, (said, eng.took, took))
 
 # ---------------------------------------------------------------- an engine that won't start
 ch = channel()
