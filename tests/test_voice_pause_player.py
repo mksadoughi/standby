@@ -173,6 +173,26 @@ time.sleep(Engine.SAY)
 check("  resumed: listening, and that reply is never said", vs.status()["state"] == "listening" and said() == [],
       (said(), vs.status()))
 slow["on"] = False
+# Paused just as a turn begins: it shows thinking, its question not yet the turn's, so mute() saw no turn and
+# its reply was said while paused (CI run 41588365233). Here the pause lands in that moment every time.
+start_ask, n = vs._start_ask, len(asked)
+
+
+def pausing(*a, **k):
+    vs.mute(True)
+    return start_ask(*a, **k)
+
+
+vs._start_ask = pausing
+row(turn=2, end_turn=True, text="And the tests?")
+check("paused as a turn begins: its reply is kept unsaid; still paused",
+      wait(lambda: len(asked) > n, 3) and wait(lambda: vs._q is None, 3) and said() == []
+      and vs.status()["state"] == "muted", (said(), vs.status()))
+vs._start_ask = start_ask
+vs.mute(False)
+time.sleep(Engine.SAY)
+check("  resumed: listening, and that reply is never said", vs.status()["state"] == "listening" and said() == [],
+      (said(), vs.status()))
 
 on["rec"] = False
 vs.stop()

@@ -792,13 +792,7 @@ class VoiceSession(object):
                                or getattr(q, "floor", False)):
                 self.interrupt()
             elif self.muted and self.state == "thinking" and not q.deep:
-                # Still working out its reply to words said before the pause: the turn runs to its end
-                # (work it hands on still goes), but what it would say is never said, nor after Resume
-                # (it would answer a moment that's gone); the next turn says they never heard it.
-                with q.lock:
-                    q.silenced = True
-                    q.unsaid.extend(q.held)
-                    q.held = []
+                self._silence(q)
             return
         if self.muted and (self.state == "speaking" or self.speaker.speaking or self.speaker.busy):
             # A line of its own outside a turn (news from work handed on, _aside): silenced now and
@@ -809,6 +803,16 @@ class VoiceSession(object):
             self._write("hold" if self.muted else "voice")
             self.state = "muted" if self.muted else "listening"
             self.you = ""
+
+    @staticmethod
+    def _silence(q):
+        """Paused while it works out its reply to words said before the pause: the turn runs to its end
+        (work it hands on still goes), but what it would say is never said, nor after Resume (it would
+        answer a moment that's gone); the next turn says they never heard it."""
+        with q.lock:
+            q.silenced = True
+            q.unsaid.extend(q.held)
+            q.held = []
 
     def status(self):
         st = {"state": self.state, "level": round(self.level, 3), "you": self.you,
@@ -1502,11 +1506,16 @@ class VoiceSession(object):
         if not mic:
             self._write("hold")
         self._interrupt.clear()
+        paused = self.muted
         self.state, self.you, self.claude, self.step = "thinking", question if shown is None else shown, "", ""
         if hasattr(self.speaker, "begin"):           # the voice for this answer, all of it
             self.speaker.begin()
         q = ask if ask is not None else self._start_ask(question)
         self._q, self._cut = q, None
+        if self.muted and not paused and not q.deep:
+            # Paused as it showed thinking, before the turn was its own to pause (mute() saw no turn): as
+            # mute() would have, else its reply was said while paused (CI, 41588365233)
+            self._silence(q)
         self._release(q)
         got = q.got
         flushed, end = False, None
