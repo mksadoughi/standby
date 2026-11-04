@@ -27,7 +27,7 @@ svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 </head>
 <body>
 <svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
-<script>const CLIP = /[?&]clip/.test(location.search), DUR = CLIP ? 27.9 : 58.6;   // ?clip: the short square loop (clip(), at the end)</script>
+<script>const CLIP = /[?&]clip/.test(location.search), DUR = CLIP ? 25.2 : 58.6;   // ?clip: the short square loop (clip(), at the end)</script>
 <script src="kit.js"></script>
 <script src="screens.js"></script>
 <script src="cc.js"></script>
@@ -443,44 +443,56 @@ function film(t0, bare) {
 // ---- ?clip: the call and the meeting, as a short square loop for a post, readable small (about 480 px wide) ---------
 // Cuts of the film itself (story time, after the hold), each with the words at the top and a camera on the world, and
 // what's said big in a band at the bottom. render.py tools/demo/story.html OUT.mp4 --query clip=1 --size 720x720 --scale 1
-const CUTS = [[12.0, 14.3, "Ask your Claude Code to call."], [18.1, 24.3, "Talk it through. It answers at once."], [24.9, 27.6, "Talk it through. It answers at once."],
-  [28.2, 33.6, "The work lands in the same session."], [36.4, 37.6, "Bring it to your meetings."], [38.4, 39.9, "Just ask it to join."],
-  [42.8, 46.2, "It hears the room and the call."], [47.6, 52.8, "Ask it anything as it goes."]];
+const CUTS = [[12.0, 14.3, "Ask your Claude Code to call."], [18.1, 24.3, "Talk it through. It answers at once."], [24.9, 27.8, "Talk it through. It answers at once."],
+  [35.9, 37.6, "Bring it to your meetings."], [38.4, 39.9, "Just ask it to join."], [42.8, 46.2, "It hears the room and the call."],
+  [47.6, 52.8, "Ask it anything as it goes."]];
+const CUT_END = CUTS.reduce((n, k) => n + k[1] - k[0], 0), DIPS = [1, 3];   // then Standby's mark till the end; through paper where the scene changes
 const C_ROOM = [180, 18, 1240], C_LAP = [230, 60, 1140], C_WIN = [940, 170, 620], C_ASK = [240, 150, 760];   // the meeting's cameras
 const CAM = [[14.3, 100, 40, 1060], [18.1, 200, -15, 1400], [20.9, 200, -15, 1400],
-  [21.6, 560, 130, 1040], [28.9, 560, 130, 1040], [29.7, 720, 180, 900], [31.4, 720, 180, 900], [32.0, 20, 140, 940], [33.6, 20, 140, 940],
-  [36.4, ...C_ROOM], [37.6, ...C_ROOM], [38.4, ...C_LAP], [39.9, ...C_LAP], [42.8, ...C_WIN], [46.2, ...C_WIN], [47.6, ...C_ASK]];   // [from story time, x, y, width] of the world in view
+  [21.6, 560, 130, 1040], [27.8, 560, 130, 1040], [35.9, ...C_ROOM], [37.6, ...C_ROOM], [38.4, ...C_LAP], [39.9, ...C_LAP], [42.8, ...C_WIN], [46.2, ...C_WIN], [47.6, ...C_ASK]];   // [from story time, x, y, width] of the world in view
 const VIEW = { y: 104, h: 640 };                                            // the world's band in the 900 x 900 frame
 function camAt(t) {
   let i = CAM.findIndex(c => c[0] > t); if (i < 0) return CAM[CAM.length - 1].slice(1); if (i === 0) return CAM[0].slice(1);
   const a = CAM[i - 1], b = CAM[i], q = inout(span(t, a[0], b[0]));
   return [1, 2, 3].map(j => lerp(a[j], b[j], q));
 }
-function wrap(s, n) {
+function wrap(s, n) {                                                  // at most n characters a line
   const out = [""]; for (const w of s.split(" ")) { if (out[out.length - 1] && (out[out.length - 1] + " " + w).length > n) out.push(w); else out[out.length - 1] += (out[out.length - 1] ? " " : "") + w; }
   return out;
 }
 const NAME = { Claude: "#b9b4ff", You: "#ffffff", Nadia: "#9cc0ff", Theo: "#7fdcd8" };   // the speakers' names, light on the dark band
+// the said lines run together where they follow closely, so the band under them stays while the words change
+const RUNS = STORY_LINES.reduce((r, l) => { const p = r[r.length - 1]; if (p && l.at - p[1] < 1.6) p[1] = l.at + l.dur; else r.push([l.at, l.at + l.dur]); return r; }, []);
 function clip(c) {
+  if (c >= CUT_END) {                                                   // the end: Standby's mark, in the middle
+    const k = out(span(c, CUT_END, CUT_END + .35)), o = pop(span(c, CUT_END + .05, CUT_END + .5));
+    return `<rect width="900" height="900" fill="${PAPER}"/>` + orbApp(450, 360, 70 * o, "speaking", c, clamp(o)) +
+      text(450, 520, "Standby", 72, { font: ROUND, weight: 800, fill: INK, opacity: fo(k) }) +
+      text(450, 580, "github.com/mksadoughi/standby", 26, { font: MONO, fill: INDIGO, opacity: fo(out(span(c, CUT_END + .25, CUT_END + .6))) });
+  }
   let i = 0, c0 = 0; while (i < CUTS.length - 1 && c >= c0 + CUTS[i][1] - CUTS[i][0]) { c0 += CUTS[i][1] - CUTS[i][0]; i++; }
   const t = CUTS[i][0] + (c - c0), [x, y, w] = camAt(t), sc = 900 / w, starts = CUTS.map((_, j) => CUTS.slice(0, j).reduce((n, k) => n + k[1] - k[0], 0));
-  let dip = 1;                                                          // where the scene changes, through paper
-  for (const j of [1, 4]) dip = Math.min(dip, 1 - .85 * (1 - span(Math.abs(c - starts[j]), 0, .18)));
+  let dip = 1 - .85 * (1 - span(CUT_END - c, 0, .18));                 // through paper where the scene changes, and into the end
+  for (const j of DIPS) dip = Math.min(dip, 1 - .85 * (1 - span(Math.abs(c - starts[j]), 0, .18)));
   let g = `<rect width="900" height="900" fill="${PAPER}"/><clipPath id="cv"><rect y="${VIEW.y}" width="900" height="${VIEW.h}"/></clipPath>` +
     `<g clip-path="url(#cv)" opacity="${fo(dip)}"><g transform="translate(0 ${VIEW.y}) scale(${fs(sc)}) translate(${f(-x)} ${f(-y)})">${film(t + STORY_HOLD[1], true)}</g></g>`;
   g += `<rect width="900" height="${VIEW.y + 1}" fill="${PAPER}"/>`;        // a clean edge under the top words
   const tops = [];                                                      // the words at the top, one run per sentence
   CUTS.forEach((k, j) => { const e = starts[j] + k[1] - k[0]; if (tops.length && tops[tops.length - 1][2] === k[2]) tops[tops.length - 1][1] = e; else tops.push([starts[j], e, k[2]]); });
   for (const [a, b, s] of tops) {
-    const k = (a ? out(span(c, a, a + .4)) : 1) * (b < DUR - .01 ? 1 - span(c, b - .3, b) : 1);
+    const k = (a ? out(span(c, a, a + .4)) : 1) * (1 - span(c, b - .3, b));
     if (k > 0) g += text(450, 70, s, 44, { weight: 700, opacity: fo(k) });
   }
-  const l = STORY_LINES.find(l => t > l.at - .1 && t < l.at + l.dur + .35);
-  if (l) {
-    const k = fade(t, l.at - .1, l.at + l.dur + .35, .15), me = l.who === "Claude", lines = wrap(l.who + "  " + l.text, 36), y0 = 822 - (lines.length - 1) * 23;
-    g += `<g opacity="${fo(k)}">` + box(30, VIEW.y + VIEW.h + 14, 840, 900 - VIEW.y - VIEW.h - 30, 28, DARK ? "#2b2b40" : "#1b1a2e", { op: .95 }) +
-      (me ? orbApp(78, y0 - 12 + (lines.length - 1) * 23, 20, "speaking", t) : "") +
-      lines.map((s, j) => ui(me ? 114 : 66, y0 + j * 46, j ? esc(s) : `<tspan font-weight="700" fill="${NAME[l.who] || "#ffffff"}">${l.who}</tspan>${esc(s.slice(l.who.length))}`, 34, { fill: "#f4f4fa" })).join("") + "</g>";
+  const run = RUNS.find(r => t > r[0] - .1 && t < r[1] + .35);
+  if (run) {
+    const B = VIEW.y + VIEW.h + 14, bk = fade(t, run[0] - .1, run[1] + .35, .15) * (1 - span(c, CUT_END - .18, CUT_END));
+    g += `<g opacity="${fo(bk)}">` + box(30, B, 840, 900 - B - 16, 28, DARK ? "#2b2b40" : "#1b1a2e", { op: .95 }) + "</g>";
+    const l = STORY_LINES.find(l => t > l.at - .1 && t < l.at + l.dur + .35);
+    if (l) {
+      const k = fade(t, l.at - .1, l.at + l.dur + .35, .15) * bk, me = l.who === "Claude", said = l.who + "  " + l.text, lines = wrap(said, Math.ceil(said.length / Math.ceil(said.length / 42)) + 4), y0 = 822 - (lines.length - 1) * 23;
+      g += `<g opacity="${fo(k)}">` + (me ? orbApp(78, y0 - 12 + (lines.length - 1) * 23, 20, "speaking", t) : "") +
+        lines.map((s, j) => ui(me ? 114 : 66, y0 + j * 46, j ? esc(s) : `<tspan font-weight="700" fill="${NAME[l.who] || "#ffffff"}">${l.who}</tspan>${esc(s.slice(l.who.length))}`, 34, { fill: "#f4f4fa" })).join("") + "</g>";
+    }
   }
   return g;
 }
