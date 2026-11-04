@@ -27,7 +27,7 @@ svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 </head>
 <body>
 <svg id="s" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice"></svg>
-<script>const CLIP = /[?&]clip/.test(location.search), DUR = CLIP ? 19.7 : 58.6;   // ?clip: the short square loop (clip(), at the end)</script>
+<script>const CLIP = /[?&]clip/.test(location.search), DUR = CLIP ? 27.9 : 58.6;   // ?clip: the short square loop (clip(), at the end)</script>
 <script src="kit.js"></script>
 <script src="screens.js"></script>
 <script src="cc.js"></script>
@@ -440,12 +440,16 @@ function film(t0, bare) {
     [WIN0 + .6, TYPE_C - .2, "It helps in real time, as they happen."], [TYPE_C, MEET1 - .3, "Ask it to check, while the meeting goes on."]]);   // choosing what it hears shows itself
   return g + subtitle(t);
 }
-// ---- ?clip: the call alone, as a short square loop for a post, readable small (about 480 px wide) ----------------------
-// Four cuts of the film's own call (story time, after the hold), a camera on each, and the words big in bands of their
-// own: what's happening at the top, what's said at the bottom. render.py ... --query clip=1 --size 720x720 --scale 1
-const CUTS = [[12.0, 14.3], [15.0, 24.3], [24.9, 27.6], [28.2, 33.6]];
-const CAM = [[14.3, 100, 40, 1060], [15.0, 20, -73, 1570], [17.4, 20, -73, 1570], [18.2, 200, -15, 1400], [20.9, 200, -15, 1400],
-  [21.6, 560, 130, 1040], [28.9, 560, 130, 1040], [29.7, 720, 180, 900], [31.4, 720, 180, 900], [32.0, 20, 140, 940]];   // [from story time, x, y, width] of the world in view
+// ---- ?clip: the call and the meeting, as a short square loop for a post, readable small (about 480 px wide) ---------
+// Cuts of the film itself (story time, after the hold), each with the words at the top and a camera on the world, and
+// what's said big in a band at the bottom. render.py tools/demo/story.html OUT.mp4 --query clip=1 --size 720x720 --scale 1
+const CUTS = [[12.0, 14.3, "Ask your Claude Code to call."], [18.1, 24.3, "Talk it through. It answers at once."], [24.9, 27.6, "Talk it through. It answers at once."],
+  [28.2, 33.6, "The work lands in the same session."], [36.4, 37.6, "Bring it to your meetings."], [38.4, 39.9, "Just ask it to join."],
+  [42.8, 46.2, "It hears the room and the call."], [47.6, 52.8, "Ask it anything as it goes."]];
+const C_ROOM = [180, 18, 1240], C_LAP = [230, 60, 1140], C_WIN = [940, 170, 620], C_ASK = [240, 150, 760];   // the meeting's cameras
+const CAM = [[14.3, 100, 40, 1060], [18.1, 200, -15, 1400], [20.9, 200, -15, 1400],
+  [21.6, 560, 130, 1040], [28.9, 560, 130, 1040], [29.7, 720, 180, 900], [31.4, 720, 180, 900], [32.0, 20, 140, 940], [33.6, 20, 140, 940],
+  [36.4, ...C_ROOM], [37.6, ...C_ROOM], [38.4, ...C_LAP], [39.9, ...C_LAP], [42.8, ...C_WIN], [46.2, ...C_WIN], [47.6, ...C_ASK]];   // [from story time, x, y, width] of the world in view
 const VIEW = { y: 104, h: 640 };                                            // the world's band in the 900 x 900 frame
 function camAt(t) {
   let i = CAM.findIndex(c => c[0] > t); if (i < 0) return CAM[CAM.length - 1].slice(1); if (i === 0) return CAM[0].slice(1);
@@ -456,16 +460,19 @@ function wrap(s, n) {
   const out = [""]; for (const w of s.split(" ")) { if (out[out.length - 1] && (out[out.length - 1] + " " + w).length > n) out.push(w); else out[out.length - 1] += (out[out.length - 1] ? " " : "") + w; }
   return out;
 }
+const NAME = { Claude: "#b9b4ff", You: "#ffffff", Nadia: "#9cc0ff", Theo: "#7fdcd8" };   // the speakers' names, light on the dark band
 function clip(c) {
   let i = 0, c0 = 0; while (i < CUTS.length - 1 && c >= c0 + CUTS[i][1] - CUTS[i][0]) { c0 += CUTS[i][1] - CUTS[i][0]; i++; }
-  const t = CUTS[i][0] + (c - c0), [x, y, w] = camAt(t), sc = 900 / w, cut1 = CUTS[0][1] - CUTS[0][0];
-  const dip = 1 - .85 * (1 - span(Math.abs(c - cut1), 0, .18));          // the first cut, terminal to the page, through paper
+  const t = CUTS[i][0] + (c - c0), [x, y, w] = camAt(t), sc = 900 / w, starts = CUTS.map((_, j) => CUTS.slice(0, j).reduce((n, k) => n + k[1] - k[0], 0));
+  let dip = 1;                                                          // where the scene changes, through paper
+  for (const j of [1, 4]) dip = Math.min(dip, 1 - .85 * (1 - span(Math.abs(c - starts[j]), 0, .18)));
   let g = `<rect width="900" height="900" fill="${PAPER}"/><clipPath id="cv"><rect y="${VIEW.y}" width="900" height="${VIEW.h}"/></clipPath>` +
     `<g clip-path="url(#cv)" opacity="${fo(dip)}"><g transform="translate(0 ${VIEW.y}) scale(${fs(sc)}) translate(${f(-x)} ${f(-y)})">${film(t + STORY_HOLD[1], true)}</g></g>`;
   g += `<rect width="900" height="${VIEW.y + 1}" fill="${PAPER}"/>`;        // a clean edge under the top words
-  const top = [[0, cut1, "Ask your Claude Code to call."], [cut1, 14.3, "Talk it through. It answers at once."], [14.3, DUR, "The work lands in the same session."]];
-  for (const [a, b, s] of top) {
-    const k = (a ? out(span(c, a, a + .4)) : 1) * (b < DUR ? 1 - span(c, b - .3, b) : 1);
+  const tops = [];                                                      // the words at the top, one run per sentence
+  CUTS.forEach((k, j) => { const e = starts[j] + k[1] - k[0]; if (tops.length && tops[tops.length - 1][2] === k[2]) tops[tops.length - 1][1] = e; else tops.push([starts[j], e, k[2]]); });
+  for (const [a, b, s] of tops) {
+    const k = (a ? out(span(c, a, a + .4)) : 1) * (b < DUR - .01 ? 1 - span(c, b - .3, b) : 1);
     if (k > 0) g += text(450, 70, s, 44, { weight: 700, opacity: fo(k) });
   }
   const l = STORY_LINES.find(l => t > l.at - .1 && t < l.at + l.dur + .35);
@@ -473,7 +480,7 @@ function clip(c) {
     const k = fade(t, l.at - .1, l.at + l.dur + .35, .15), me = l.who === "Claude", lines = wrap(l.who + "  " + l.text, 36), y0 = 822 - (lines.length - 1) * 23;
     g += `<g opacity="${fo(k)}">` + box(30, VIEW.y + VIEW.h + 14, 840, 900 - VIEW.y - VIEW.h - 30, 28, DARK ? "#2b2b40" : "#1b1a2e", { op: .95 }) +
       (me ? orbApp(78, y0 - 12 + (lines.length - 1) * 23, 20, "speaking", t) : "") +
-      lines.map((s, j) => ui(me ? 114 : 66, y0 + j * 46, j ? esc(s) : `<tspan font-weight="700" fill="${me ? "#b9b4ff" : "#ffffff"}">${l.who}</tspan>${esc(s.slice(l.who.length))}`, 34, { fill: "#f4f4fa" })).join("") + "</g>";
+      lines.map((s, j) => ui(me ? 114 : 66, y0 + j * 46, j ? esc(s) : `<tspan font-weight="700" fill="${NAME[l.who] || "#ffffff"}">${l.who}</tspan>${esc(s.slice(l.who.length))}`, 34, { fill: "#f4f4fa" })).join("") + "</g>";
   }
   return g;
 }
