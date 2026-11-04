@@ -1207,12 +1207,16 @@ class VoiceSession(object):
         out.append("taken %.2fs early" % early if early is not None else "none taken")
         return ", ".join(out)
 
-    def _start_ask(self, text, hold=False, turn=None):
+    def _start_ask(self, text, hold=False, turn=None, taken=False):
         """Ask the agent `text`, in the background: a Question. Its sentences
         are spoken as they come, or, with hold, kept until _converse takes it
         (a question asked before the turn is surely over). A turn after one the
-        user cut off carries what they heard (with_cut)."""
+        user cut off carries what they heard (with_cut). taken: the turn's own,
+        its sentences kept until the turn has it (_release), so none is said
+        before the turn could see a pause."""
         q = Question(text, hold, cut=self._cut)
+        if taken:
+            q.live = False
         q.turn = self.turn if turn is None else turn
         trace(self.sid, "ask", q.turn, words=text, early=bool(hold), cut=self._cut)
 
@@ -1510,11 +1514,12 @@ class VoiceSession(object):
         self.state, self.you, self.claude, self.step = "thinking", question if shown is None else shown, "", ""
         if hasattr(self.speaker, "begin"):           # the voice for this answer, all of it
             self.speaker.begin()
-        q = ask if ask is not None else self._start_ask(question)
+        q = ask if ask is not None else self._start_ask(question, taken=True)
         self._q, self._cut = q, None
         if self.muted and not paused and not q.deep:
             # Paused as it showed thinking, before the turn was its own to pause (mute() saw no turn): as
-            # mute() would have, else its reply was said while paused (CI, 41588365233)
+            # mute() would have, else its reply was said while paused (CI, 41588365233). Nothing of it is
+            # said yet: its sentences wait for _release below, however soon they came
             self._silence(q)
         self._release(q)
         got = q.got

@@ -174,13 +174,16 @@ check("  resumed: listening, and that reply is never said", vs.status()["state"]
       (said(), vs.status()))
 slow["on"] = False
 # Paused just as a turn begins: it shows thinking, its question not yet the turn's, so mute() saw no turn and
-# its reply was said while paused (CI run 41588365233). Here the pause lands in that moment every time.
+# its reply was said while paused (CI run 41588365233). Here the pause lands in that moment every time, and the
+# whole reply has come before the turn has its question (a quick voice's can, on a busy Mac).
 start_ask, n = vs._start_ask, len(asked)
 
 
 def pausing(*a, **k):
     vs.mute(True)
-    return start_ask(*a, **k)
+    q = start_ask(*a, **k)
+    q.worker.join(3)
+    return q
 
 
 vs._start_ask = pausing
