@@ -355,6 +355,23 @@ bn = backend(neural="jean", process=fp)
 bn.start_mic("MacBook Pro Microphone", lambda x: None)
 en, pn = engines[-1], bn.player
 check("Standby's voice: its process starts with the mic", fp.opened == 1 and bn.speech is not None)
+fe = FakeProcess()
+be = backend(neural="jean", process=fe)
+n_eng = len(engines)
+be.open_voice()
+check("  or ahead of the engine (open_voice): loading while voice processing is made, nothing to play on yet",
+      fe.opened == 1 and be.speech is not None and be.engine is None and be.player is None and len(engines) == n_eng,
+      (fe.opened, be.engine))
+sp = be.speech
+be.open_voice()
+be.start_mic("MacBook Pro Microphone", lambda x: None)
+check("    the engine then keeps that same process: opened once, never again", fe.opened == 1 and be.speech is sp
+      and be.player is not None, fe.opened)
+be.close()
+fm = FakeProcess()
+bm = backend(process=fm)
+bm.open_voice()
+check("    a Mac voice chosen instead: nothing of Standby's is opened", fm.opened == 0 and bm.speech is None)
 fp.state, fp.downloading, fp.done, fp.total = "downloading", True, 10, 40
 check("  its getting ready goes to the recorder's status",
       bn.tts_status() == {"state": "downloading", "downloading": True, "done": 10, "total": 40}, bn.tts_status())

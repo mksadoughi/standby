@@ -2251,6 +2251,10 @@ class VoiceIO(object):
             self._offset = self.path.stat().st_size
         except OSError:
             self._offset = 0
+        try:                                     # Standby's voice loads while the engine is made, not after it
+            getattr(self.backend, "open_voice", lambda: None)()
+        except Exception as exc:
+            self.log("voice %s: Standby's voice could not start ahead (%r): it opens with the engine" % (seq, exc))
         self.borrowed = [c for c in mics if c.borrow(self.backend)] if self.talk_over else []
         self._no_aec = {c.device_name for c in mics
                         if self.talk_over and c not in self.borrowed and getattr(c, "borrow_error", None)}

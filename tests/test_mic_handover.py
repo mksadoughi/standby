@@ -77,6 +77,9 @@ class Engine(object):
         events.append(("engine stop", self.mic))
         self.mic = None
 
+    def open_voice(self):
+        events.append(("voice opened", None))
+
 
 plains = []
 
@@ -135,7 +138,10 @@ check("  its audio reaches the transcriber again", ch.fed == [0.1], ch.fed)
 # ---------------------------------------------------------------- echo cancelling still comes up
 ch = channel()
 vio = sb.VoiceIO(root, Engine(), log=logged.append, leaks=lambda: True)
+del events[:]
 vio.start(7, [ch])
+check("voice mode: Standby's voice starts loading before the engine is made, not after it",
+      events[:2] == [("voice opened", None), ("engine start", "AirPods Pro")], events)
 check("voice mode: echo cancelled, talking over Claude stops it", vio.aec and vio.duplex and ch.borrowed is vio.backend,
       (vio.aec, vio.duplex))
 check("  said so in the log", any("echo cancelled: talking over Claude stops it" in m for m in logged), logged[-3:])

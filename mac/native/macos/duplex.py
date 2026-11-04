@@ -200,18 +200,24 @@ class AVFBackend(object):
         ok, err = engine.startAndReturnError_(None)
         return None if ok else err
 
-    def _voices(self):
-        """The Mac's voice, and Standby's own process: opened with the first engine, kept through
-        every engine after it (a mic switched, an output changed), ended by close()."""
-        avf = self.avf
-        self.synth = avf.AVSpeechSynthesizer.alloc().init()
-        voices = list(avf.AVSpeechSynthesisVoice.speechVoices() or [])
-        self.voice = pick_voice(voices, self.wanted)
+    def open_voice(self):
+        """Standby's own voice process, started now: it loads (about 2 s) while voice processing is
+        made (3 to 6 s on AirPods), not after it, so the first answer waits for the slower of the two
+        only. open() returns at once; nothing is played before an engine is there to play it."""
         if self.neural and self.speech is None:
             import tts
             process = self._process or tts.VoiceProcess(self.neural, log=self.log)
             process.open()
             self.speech = tts.Speech(process, _PlayerOut(self), log=self.log)
+
+    def _voices(self):
+        """The Mac's voice, and Standby's own process: opened ahead (open_voice) or with the first
+        engine, kept through every engine after it (a mic switched, an output changed), ended by close()."""
+        avf = self.avf
+        self.synth = avf.AVSpeechSynthesizer.alloc().init()
+        voices = list(avf.AVSpeechSynthesisVoice.speechVoices() or [])
+        self.voice = pick_voice(voices, self.wanted)
+        self.open_voice()
 
     def use_voice(self, system, neural, why=""):
         """Settings' voice changed during the call: from the next sentence. Another of Standby's
