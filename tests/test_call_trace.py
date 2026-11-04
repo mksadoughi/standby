@@ -46,12 +46,16 @@ def wait(pred, secs=10.0):
 
 class Engine(object):
     """The voice's engine (duplex.AVFBackend's interface). Its voice loads for COLD s from the
-    start: a sentence given meanwhile waits for it (playing, and loading), then plays SAY s."""
+    start: a sentence given meanwhile waits for it (playing, and loading), then plays SAY s, and
+    until the voice session has seen it being said (seen): a real sentence lasts seconds, but on a
+    busy runner a 0.2 s one went by between two of the session's looks, and the call's record said
+    its last sentence was never heard."""
     COLD, SAY = 0.3, 0.2
 
     def __init__(self):
         self.ready_at = time.time() + self.COLD
         self.heard, self._until, self.lock = [], 0.0, threading.Lock()
+        self.seen = lambda text: True
 
     def start_output(self):
         pass
@@ -78,7 +82,10 @@ class Engine(object):
 
     @property
     def playing(self):
-        return time.time() < self._until
+        with self.lock:
+            text = self.heard[-1][1] if self.heard and self._until else None
+        now = time.time()
+        return now < self._until or (text is not None and now < self._until + 5 and not self.seen(text))
 
 
 sdir = root / "sessions" / "talk-1"
@@ -119,6 +126,7 @@ vs = voice.VoiceSession("talk-1", sdir, ask=ask, cancel=lambda *a, **k: None, sp
                         log=logged.append)
 vs.GUARD = 0.05
 vs.ledger = True                                  # a call: its turns kept in its record, as the app sets it
+eng.seen = lambda text: vs.status()["claude"] == text
 vs.start()
 vio.start(vs.seq, [])
 threading.Thread(target=recorder, daemon=True).start()

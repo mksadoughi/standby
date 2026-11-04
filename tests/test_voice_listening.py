@@ -34,6 +34,14 @@ def wait(pred, secs=5.0):
     return bool(pred())
 
 
+def live(sdir):
+    """The fake recorder's live.json, or {} before its first write (a new session's folder)."""
+    try:
+        return json.loads((sdir / "live.json").read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 # ---------------------------------------------------------------- the words
 I = interrupt
 for text, want in [("Mm-hmm.", I.BACKCHANNEL), ("Mhm.", I.BACKCHANNEL), ("Uh-huh.", I.BACKCHANNEL),
@@ -564,17 +572,22 @@ wait(lambda: vs.status()["state"] == "listening", 4)
 check("  no question asked", agent.asked == ["What is Orion?"] and agent.cancelled == [], agent.asked)
 done(vs, rec)
 
-vs, rec, agent, spk, logged = session(secs=0.6)
-agent.pieces, agent.gap = ANSWER, 0.4
+# The tap lands in the first sentence while Claude is still writing the rest: the sentence lasts 2 s and the next
+# piece comes a second after it starts, so a busy runner's late tap still does (at 0.6 s and 0.4 s, it came as the
+# second sentence played, Claude done: nothing to cancel, CI 41594743917)
+vs, rec, agent, spk, logged = session(secs=2.0)
+agent.pieces, agent.gap = ANSWER, 1.0
 rec.row(vs, turn=0, end_turn=True, text="What is Orion?")
 speaking(vs, spk, S1, into=0.5)
 vs.interrupt()
 check("a tap on the orb: it stops at once", wait(lambda: agent.cancelled == ["q1"], 2) and spk.played == [S1],
       (agent.cancelled, spk.played))
+spk.secs, agent.gap = 0.15, 0.05                     # the next answer at the usual pace
 rec.row(vs, turn=1, t=5, end=6, text="What does it cost?")
 rec.row(vs, turn=1, end_turn=True, text="What does it cost?")
-check("  the next question says what was heard", wait(lambda: len(agent.asked) == 2, 3)
-      and agent.heards[1] == "Orion...", agent.heards)
+cut = lambda h: bool(h) and h.endswith("...") and h[:-3].strip() and S1.startswith(h[:-3])   # noqa: E731
+check("  the next question says what was heard (the start of that sentence, cut)",
+      wait(lambda: len(agent.asked) == 2, 3) and cut(agent.heards[1]), agent.heards)
 wait(lambda: vs.status()["state"] == "listening", 4)
 check("the log lines are ASCII (launchd has no locale)", all(all(ord(c) < 128 for c in m) for m in logged), logged)
 done(vs, rec)
@@ -697,24 +710,25 @@ done(vs, rec)
 # ------------------------------------------- an early question and real work together
 # Voice mode asks on likely-final words and holds the answer, then says a line at the
 # handoff. Both go through the same Question, so check they do not trip over each other.
+# Both come as the recorder's rows, to the session's own loop: the turn was once also driven from here
+# (_converse beside the loop, which took the same row): asked twice whenever the loop got there first.
 vs, rec, deep, spk, logged = deep_session()
-early = vs._start_ask("Is the budget final?", hold=True)
-wait(lambda: deep.asked, 2)
-time.sleep(0.3)                      # the handoff happens while the question is still held
+wait(lambda: vs.state == "listening")
+rec.row(vs, turn=0, likely_turn=True, text="Is the budget final?")
+wait(lambda: vs._early is not None and vs._early.deep and vs._early.held, 3)   # handed off while still held
+early = vs._early
 check("asked early, then handed to the meeting agent: its line waits with it, unsaid",
-      spk.said == [] and early.held and early.held[0] in voice.HANDOFF_LINES and early.deep,
-      (spk.said, early.held, early.deep))
+      early is not None and spk.said == [] and early.held and early.held[0] in voice.HANDOFF_LINES and early.deep,
+      (spk.said, early and early.held, early and early.deep))
 rec.row(vs, turn=0, end_turn=True, text="Is the budget final?")
-vs._converse("Is the budget final?", ask=early)
 check("  the turn takes it: the line first, then the answer, and nothing asked twice",
-      spk.said[:1] and spk.said[0] in voice.HANDOFF_LINES and spk.said[1:] == [B1, B2]
+      wait(lambda: len(spk.said) >= 3, 6) and spk.said[0] in voice.HANDOFF_LINES and spk.said[1:] == [B1, B2]
       and deep.asked == ["Is the budget final?"], (spk.said, deep.asked))
 done(vs, rec)
 
 vs, rec, deep, spk, logged = deep_session()
 early = vs._start_ask("Is the budget final?", hold=True)
-wait(lambda: deep.asked, 2)
-time.sleep(0.3)
+wait(lambda: early.deep and early.held, 3)
 vs._cancel_ask(early)
 check("  an early question dropped after its handoff: cancelled, and its line never said",
       wait(lambda: deep.cancelled == ["q1"], 2) and spk.said == [], (deep.cancelled, spk.said))
@@ -825,7 +839,7 @@ rec.on = False
 vs, rec, agent, spk, logged = session()
 wait(lambda: vs.state == "listening")
 rec.you = True                                   # the user is talking: news waits
-wait(lambda: json.loads((vs.sdir / "live.json").read_text()).get("speaking"))
+wait(lambda: live(vs.sdir).get("speaking"))
 vs.announce("  Claude Code is done.   The tests pass. ")
 time.sleep(0.4)
 check("announce: nothing said over the user", "Claude Code is done. The tests pass." not in spk.said, spk.said)
@@ -854,7 +868,7 @@ done(vs, rec)
 vs, rec, agent, spk, logged = session()
 wait(lambda: vs.state == "listening")
 rec.you = True                                   # they're already talking
-wait(lambda: json.loads((vs.sdir / "live.json").read_text()).get("voice", {}).get("you_speaking"))
+wait(lambda: live(vs.sdir).get("voice", {}).get("you_speaking"))
 vs.open_with("[CALL START]")
 time.sleep(0.3)
 check("  someone may be talking: the hello waits, and says so in the log", agent.asked == []
@@ -871,7 +885,7 @@ vs, rec, agent, spk, logged = session()
 agent.pieces = ["Hi, what can I do for you?"]
 wait(lambda: vs.state == "listening")
 rec.loud = True                                  # loud, but not speech by the speech model
-wait(lambda: json.loads((vs.sdir / "live.json").read_text()).get("speaking"))
+wait(lambda: live(vs.sdir).get("speaking"))
 vs.open_with("[CALL START]")
 check("  a loud sound that isn't speech: the hello isn't held for it",
       wait(lambda: agent.asked == ["[CALL START]"], 2), agent.asked)
@@ -881,7 +895,7 @@ vs, rec, agent, spk, logged = session()
 agent.pieces = ["Hi, what can I do for you?"]
 wait(lambda: vs.state == "listening")
 rec.you = True                                   # a sound the speech model took for speech...
-wait(lambda: json.loads((vs.sdir / "live.json").read_text()).get("voice", {}).get("you_speaking"))
+wait(lambda: live(vs.sdir).get("voice", {}).get("you_speaking"))
 vs.open_with("[CALL START]")
 time.sleep(0.3)
 rec.you = False                                  # ...then dropped as noise: no row comes
@@ -918,7 +932,7 @@ done(vs, rec)
 vs, rec, agent, spk, logged = session()
 wait(lambda: vs.state == "listening")
 rec.you = True                                   # they're talking as they click
-wait(lambda: json.loads((vs.sdir / "live.json").read_text()).get("voice", {}).get("you_speaking"))
+wait(lambda: live(vs.sdir).get("voice", {}).get("you_speaking"))
 vs.choose(CHOSE)
 time.sleep(0.4)
 check("  clicked while they talk: not asked over them, kept for their turn", agent.asked == [] and vs.take_chosen() == [CHOSE],

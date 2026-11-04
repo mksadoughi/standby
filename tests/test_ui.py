@@ -174,6 +174,19 @@ def wait(pred, secs=20):
 fails = []
 
 
+def why_untitled():
+    """What the app and its agent said meanwhile, for a title that never came: the CI runner keeps no files."""
+    def tail(path, keep=None, n=15):
+        try:
+            lines = Path(path).read_text(errors="replace").splitlines()
+        except OSError as exc:
+            return ["(%s: %s)" % (Path(path).name, exc.__class__.__name__)]
+        return [x for x in lines if keep is None or any(k in x for k in keep)][-n:]
+    return "\n".join(["ui.err:"] + tail(root / "ui.err", ("title", "agent", "start")) + ["agent/serve.log:"]
+                     + tail(root / "agent" / "serve.log") + ["spool: %s" % sorted(
+                         p.name for p in (root / "agent" / "spool").glob("*.r*"))])
+
+
 def stop():
     """The live session ends: the fake recorder stopped as `standby stop` would."""
     subprocess.run([str(cli), "stop"], env=env, capture_output=True)
@@ -184,7 +197,7 @@ def check(label, ok, d=""):
     print("  %-56s %s" % (label, "OK" if ok else "FAIL"))
     if not ok:
         fails.append(label)
-        print("     " + str(d)[:400])
+        print("     " + str(d)[:2500])
 
 
 try:
@@ -212,7 +225,7 @@ try:
     check("default title is dated", s["info"]["title"].startswith("Meeting · "), s["info"]["title"])
     title = wait(lambda: (lambda x: x["title"] if x["title_source"] == "ai" else None)(
         call("/api/session/" + sid)[1]["info"]), 40)
-    check("AI suggests a title after enough transcript", title == "Pricing Review Sync", title)
+    check("AI suggests a title after enough transcript", title == "Pricing Review Sync", title or why_untitled())
     call("/api/rename", {"id": sid, "title": "Q3 pricing review"})
     _, s, _ = call("/api/session/" + sid)
     check("user rename wins over the AI title", s["info"]["title"] == "Q3 pricing review"
