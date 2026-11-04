@@ -56,20 +56,24 @@ while True:
             emit({"type": "result", "is_error": False,     # the held hand-off, updated with what they said since
                   "result": "Got it. [DEEP] Create a sample text file named notes.txt in the project folder."}); continue
         if kind == "voice" and "make the snake faster" in text.split("They said:")[-1]:   # dropped while it writes
-            # Its words, then they go on: dropped (agentctl.cancel's .x and .c) while the rest is being
-            # written, and the rest straight after, with no gap that would stop it (as a real voice streams)
+            # Its words and its hand-off, then they go on: dropped (agentctl.cancel's .x and .c) before its end.
+            # The agent sees the drop and interrupts it (as it mostly does: it looks every 50 ms); its end comes
+            # only then, so the stop always lands (the gap was left to the runner's timing, and lost on CI)
             delta = lambda t: json.dumps({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0,
                                           "delta": {"type": "text_delta", "text": t}}}) + "\\n"
-            sys.stdout.write(delta("Sure, I'll make the snake faster. ")); sys.stdout.flush()
+            words = "Sure, I'll make the snake faster. [DEEP] Make the snake move faster in the game."
+            sys.stdout.write(delta(words)); sys.stdout.flush()
             spool, mine, end = os.path.join(os.environ["STANDBY_ROOT"], "agent", "spool"), [], time.time() + 20
             while not mine and time.time() < end:          # its question's progress, from those words
                 mine = [n[:-2] for n in os.listdir(spool) if n.endswith(".p")]
                 time.sleep(0.01)
             for ext in (".x", ".c"):
                 open(os.path.join(spool, mine[0] + ext), "w").close()
-            rest = "[DEEP] Make the snake move faster in the game."
-            sys.stdout.write(delta(rest) + json.dumps({"type": "result", "is_error": False,
-                             "result": "Sure, I'll make the snake faster. " + rest}) + "\\n"); sys.stdout.flush()
+            while time.time() < end and b'"interrupt"' not in buf:     # the agent's interrupt, on stdin
+                select.select([sys.stdin], [], [], 1)
+                buf += os.read(sys.stdin.fileno(), 65536)
+            buf = b"\\n".join(l for l in buf.split(b"\\n") if b'"interrupt"' not in l)
+            emit({"type": "result", "is_error": False, "result": words})
             continue
         if kind == "voice" and "check the free disk space" in text.split("They said:")[-1]:   # a hand-off and nothing said
             emit({"type": "result", "is_error": False, "result": "[DEEP] Check how much disk space is left."}); continue
@@ -739,10 +743,11 @@ try:
     check("    and after it, nothing is held", "Held, not sent" not in texts("voice", TALK)[-1])
     # They went on while its answer was being written, a hand-off in it: dropped before its end (.c, .x), it never
     # goes, but its conversation has it, so it said "I've asked" for work that never went (talk-20261031-233531).
+    # Interrupted, its answer is only "(stopped)": the task is taken from what it streamed.
     got = ask("[VOICE] can you make the snake faster?")      # the stand-in drops it as it writes (no timing here)
     ask("[VOICE] what do you think?")
     check("a hand-off in an answer dropped while it was written: held for the turn, never a note it's working on it",
-          not got.startswith("[HANDOFF]") and got != "(stopped)" and held("Make the snake move faster in the game.")
+          got == "(stopped)" and held("Make the snake move faster in the game.")
           and "You took this deeper" not in texts("voice", TALK)[-1], (got, texts("voice", TALK)[-1][-400:]))
     # They went on from an early question: only what they said since goes to the voice's conversation, which has
     # the rest (the whole turn each time filled it within an hour, compacted mid-call).

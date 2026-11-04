@@ -4497,11 +4497,17 @@ class Voice(object):
             _LIVE_SESSION[(session, "voice")] = turn         # what runs() and the trace read
             sbtrace.event(session, "voice_turn", q=ident, blocks=len(msg), **how)
         sent_at = time.time()
+        streamed = []                        # its words as they came (interrupted, its answer is only a placeholder)
+
+        def streaming(kind, text):
+            if kind == "delta":
+                streamed.append(text)
+            progress(kind, text)
         if turn is not None:
-            text, rc = self._ask_turn(turn, session, msg, interrupt, progress)
+            text, rc = self._ask_turn(turn, session, msg, interrupt, streaming)
         else:
             text, rc = engine_claude(msg, session, self.model, self.args.timeout, kind="voice",
-                                     should_interrupt=interrupt, on_event=progress, label="voice")
+                                     should_interrupt=interrupt, on_event=streaming, label="voice")
         replied, replied_at = text, time.time()
         show = SHOW_TAG in (text or "")          # kept aside: never said, nor in a task; back on the answer's end
         if show:
@@ -4574,8 +4580,10 @@ class Voice(object):
             # A call's early answer they went on from while it was being written (agentctl.cancel's .x before
             # its end): its hand-off never goes, yet its conversation has it, [DEEP] and all. Noted as the
             # handed one's is, so the next ask holds it (HELD): it told them "I've asked" for work that never
-            # went, and went on saying so (talk-20261031-233531, "make the snake faster").
-            task = deep_task(text) if call and rc in (0, ClaudeSession.INTERRUPTED) else ""
+            # went, and went on saying so (talk-20261031-233531, "make the snake faster"). Interrupted, as it mostly
+            # is (the drop is seen within 50 ms), its task is in what it streamed before the stop.
+            wrote = text if rc == 0 else "".join(streamed)
+            task = deep_task(wrote) if call and rc in (0, ClaudeSession.INTERRUPTED) else ""
             if task and os.path.exists(os.path.join(SPOOL, ident + ".x")):
                 self.remember(session, "You took this deeper, and are working on it now: %s" % task, ident=ident,
                               task=task)
