@@ -83,7 +83,10 @@ TITLE_AFTER_LINES = 12
 _lock = threading.Lock()
 PENDING = {}                     # sid -> {"question", "started", "progress": [...]}
 STARTING = {"state": None}       # {"state": "starting"|"error", "error", "since", "resume"}
-TITLED = set()                   # sessions we already asked the agent to title
+TITLED = set()                   # sessions titled: a title saved, by the agent or by them
+TITLE_TRIES = {}                 # sid -> {"busy", "failed", "next"}: its title being asked, or asked again later
+TITLE_RETRY = (30, 120, 600)     # s before asking again after each failed try (a dead agent): then no more
+_title_lock = threading.Lock()
 
 
 def log(msg):
@@ -2845,24 +2848,60 @@ def voice_file(sid, where, voice):
 def title_talk(sid):
     """A talk is titled from its chat, after its first answer: it has no
     transcript. The text goes with the call, so it works over SSH too."""
-    if sid in TITLED or session_info(sid)["title_source"] != "default":
+    if not title_due(sid) or session_info(sid)["title_source"] != "default":
         return
     chat = read_jsonl(SESSIONS / sid / "chat.jsonl")
     if not any(m.get("role") == "ai" for m in chat):
         return
-    TITLED.add(sid)
     text = "\n".join("%s: %s" % ("You" if m.get("role") == "me" else "Claude", (m.get("text") or "")[:600])
                      for m in [m for m in chat if said_row(m)][:8])
+    ask_title(sid, ["title", "--stdin"], input=text)
+
+
+def title_due(sid):
+    """sid may be asked for a title now: none saved, none being asked, and its wait after a failed try over."""
+    with _title_lock:
+        t = TITLE_TRIES.get(sid)
+        return sid not in TITLED and not (t and (t["busy"] or time.time() < t["next"]
+                                                 or t["failed"] > len(TITLE_RETRY)))
+
+
+def ask_title(sid, args, input=None, before=None):
+    """The agent's title for sid, asked on a thread (by the agent: never Standby's). Titled once one is saved
+    (or they named it meanwhile); a failed try (the agent not running, an error, nothing to go by yet) is
+    asked again after TITLE_RETRY, then no more: before, one failed try left the session untitled for good."""
+    with _title_lock:
+        if sid in TITLED or (TITLE_TRIES.get(sid) or {}).get("busy"):
+            return
+        TITLE_TRIES.setdefault(sid, {"failed": 0, "next": 0.0})["busy"] = True
 
     def run():
+        saved, why = False, ""
         try:
-            r = transport.for_config().agent_run(["title", "--stdin"], input=text, timeout=120)   # by the agent: never Standby's
+            if before:
+                before()
+            r = transport.for_config().agent_run(args, input=input, timeout=120)
             title = (r.stdout or "").strip().splitlines()
-            if title and title[0] and not (SESSIONS / sid / "title.txt").exists():
+            saved = (SESSIONS / sid / "title.txt").exists()
+            if title and title[0] and not saved:
                 (SESSIONS / sid / "title.auto.txt").write_text(title[0][:80] + "\n")
                 log("titled %s" % sid)
+                saved = True
+            why = "" if saved else "no title (rc %s)" % r.returncode    # never its words, nor the agent's
         except Exception as exc:
-            log("title failed: %r" % exc)
+            why = exc.__class__.__name__
+        with _title_lock:
+            t = TITLE_TRIES.get(sid) or {"failed": 0}
+            t.update(busy=False)
+            if saved:
+                TITLED.add(sid)
+                TITLE_TRIES.pop(sid, None)
+                return
+            t["failed"] += 1
+            last = t["failed"] > len(TITLE_RETRY)
+            t["next"] = time.time() + (0 if last else TITLE_RETRY[t["failed"] - 1])
+        log("title failed for %s: %s; %s" % (sid, why, "no more tries" if last
+                                            else "asked again in %d s" % TITLE_RETRY[t["failed"] - 1]))
     threading.Thread(target=run, daemon=True).start()
 
 
@@ -5695,28 +5734,17 @@ def maybe_title(sid, listener=False):
     for one (a single cheap call). A title the user typed always wins.
     listener: a meeting another Claude Code session listens to (Standby inside Claude Code),
     whose own Claude is off: titled the same way, from its transcript as it is here."""
-    if sid in TITLED:
+    if not title_due(sid):
         return
     info = session_info(sid)
     if (info["title_source"] != "default" or info["lines"] < TITLE_AFTER_LINES or not (info["claude"] or listener)
             or info["kind"] == "talk"):           # titled from its chat instead
         return
-    TITLED.add(sid)
 
-    def run():
-        try:
-            t = transport.for_config()
-            if listener:                       # nothing pushed it to the agent's side: the titler reads it there
-                local = SESSIONS / sid / "transcript.jsonl"
-                t.write("live/%s.jsonl" % sid, local.read_bytes() if local.exists() else b"")
-            r = t.agent_run(["title", "--session", sid], timeout=120)
-            title = (r.stdout or "").strip().splitlines()
-            if title and title[0] and not (SESSIONS / sid / "title.txt").exists():
-                (SESSIONS / sid / "title.auto.txt").write_text(title[0][:80] + "\n")
-                log("titled %s" % sid)
-        except Exception as exc:
-            log("title failed: %r" % exc)
-    threading.Thread(target=run, daemon=True).start()
+    def push():                                # nothing pushed it to the agent's side: the titler reads it there
+        local = SESSIONS / sid / "transcript.jsonl"
+        transport.for_config().write("live/%s.jsonl" % sid, local.read_bytes() if local.exists() else b"")
+    ask_title(sid, ["title", "--session", sid], before=push if listener else None)
 
 
 # ---------------------------------------------------------------- what the meeting's Claude taught dictation

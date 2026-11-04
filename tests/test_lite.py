@@ -497,6 +497,62 @@ for f in ("meta.json", "claude.off", "transcript.jsonl"):
 ui.maybe_title(U, listener=True)
 time.sleep(0.2)
 check("  a name the person gave always wins", not (ud / "title.auto.txt").exists() and ui.session_info(U)["title"] == "Weekly sync")
+
+
+# A failed try is asked again later, a few times, spaced out: one failed try left a meeting untitled for good
+class DownT(FakeT):
+    """The agent not running for the first `down` asks (as transport.agent_run says it), then up."""
+    asks, down = [], 1
+
+    def agent_run(self, args, input=None, timeout=150, wait=30.0):
+        DownT.asks.append(time.time())
+        if len(DownT.asks) <= DownT.down:
+            import subprocess as sp
+            return sp.CompletedProcess(args, 1, "", "the agent isn't running")
+        return FakeT.agent_run(self, args, input, timeout, wait)
+
+
+def asked(n, secs=3.0):
+    end = time.time() + secs
+    while len(DownT.asks) < n and time.time() < end:
+        time.sleep(0.02)
+    time.sleep(0.05)                            # its end noted
+    return len(DownT.asks)
+
+
+ui.transport.for_config = lambda cfg=None: DownT()
+was_retry, ui.TITLE_RETRY = getattr(ui, "TITLE_RETRY", None), (0.4, 0.4, 0.4)
+V = "meeting-20261019-203432"
+vd = ui.SESSIONS / V
+vd.mkdir(parents=True, exist_ok=True)
+for f in ("meta.json", "transcript.jsonl"):
+    (vd / f).write_bytes((td / f).read_bytes())
+ui.maybe_title(V)
+asked(1)
+ui.maybe_title(V)
+check("a title asked while the agent isn't running: not titled, and not asked again at once",
+      not (vd / "title.auto.txt").exists() and V not in ui.TITLED and len(DownT.asks) == 1, DownT.asks)
+time.sleep(0.45)
+ui.maybe_title(V)
+asked(2)
+check("  asked again after its wait: titled, and then never asked again",
+      (vd / "title.auto.txt").exists() and (vd / "title.auto.txt").read_text().strip() == "Routing cache review"
+      and V in ui.TITLED
+      and (ui.maybe_title(V), asked(3, 0.3))[1] == 2, DownT.asks)
+W = "meeting-20261019-203433"
+wd = ui.SESSIONS / W
+wd.mkdir(parents=True, exist_ok=True)
+for f in ("meta.json", "transcript.jsonl"):
+    (wd / f).write_bytes((td / f).read_bytes())
+DownT.asks, DownT.down = [], 99
+end = time.time() + 4
+while time.time() < end:                         # asked as often as the app's polls would
+    ui.maybe_title(W)
+    time.sleep(0.05)
+gaps = [b - a for a, b in zip(DownT.asks, DownT.asks[1:])]
+check("  an agent that stays down: asked %d times in all, each after its wait, then no more" % (1 + len(ui.TITLE_RETRY)),
+      len(DownT.asks) == 1 + len(ui.TITLE_RETRY) and all(g >= 0.4 for g in gaps) and W not in ui.TITLED, gaps)
+ui.TITLE_RETRY = was_retry
 ui.transport.for_config = real_for
 
 if fails:
