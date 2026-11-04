@@ -83,7 +83,8 @@ In Claude Code, just ask: **"call me"** or **"listen to this meeting"**. Or type
 | `/standby settings` | Change a setting, or just ask Claude |
 
 A call opens in a mini window in the corner of your screen. Point at it for Hide, Full window, Settings and End; click it
-to pause. Hide it and the call goes on; Settings can open the full window instead, or nothing.
+to pause. Hide it and the call goes on; Settings can open the full window instead, or nothing. A call with nothing said
+for 2 minutes pauses on its own, and a call paused for an hour ends.
 
 Dictation is off until you turn it on in Standby's Settings.
 

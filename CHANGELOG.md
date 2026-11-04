@@ -6,6 +6,12 @@ All notable changes to Standby are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- **A call with nothing said for 2 minutes pauses** instead of ending, as Pause does: Resume picks the conversation up
+  where it was. A call paused for an hour, by you or by the quiet, ends with its summary, so a forgotten pause never
+  keeps a call open overnight.
+
 ## [0.2.0] - 2026-11-03
 
 Calls work smoothly, your permissions survive a reinstall, and setup is easier, with steadier meetings and dictation

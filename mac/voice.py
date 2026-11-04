@@ -593,10 +593,11 @@ class VoiceSession(object):
     answer streams and on_queued(id) once the agent has it. cancel(id) stops a
     question. Both come from the app, so this is tested without one.
 
-    For a talk, the app also gives: idle_end, the seconds of nothing said
-    (muted included) after which the conversation ends; busy(), true while a
-    typed answer is being written, which pauses that clock; and on_end(why),
-    called when the user ends it or it ends idle, not when the recording
+    For a talk, the app also gives: idle_end, the seconds of nothing said after
+    which the conversation pauses, as Pause does (on_idle() is told), and a pause
+    of its own or the user's ends it after PAUSED_END; busy(), true while work
+    handed on is still running, which holds both clocks; and on_end(why),
+    called when the user ends it or it ends paused, not when the recording
     stopped under it or the app stopped it. dictating(), true while Standby Dictation listens: the
     words are for another app, so voice mode holds ("paused") until it is done.
 
@@ -625,13 +626,13 @@ class VoiceSession(object):
     # in talk-20261024-061950); another voice told apart in a call doesn't hold it at all.
     FLOOR_WAIT = 20.0
     HOLD_ON = 120.0     # "hold on": the answer waits this long for them
-    MUTED_IDLE = 1800.0  # a talk muted by the user ends after this long with nothing said (unmuted: idle_end)
+    PAUSED_END = 3600.0  # a talk paused this long ends (the user's pause or a quiet one): never open overnight
     REOPEN = 1.0        # Claude quiet this long mid-answer (the meeting agent at work): the mic is the user's
     CUT_WAIT = 0.4      # the voice went quiet with sentences left: this long for the barge_in row behind it
     AFTER_THIS = "Got it, after this."   # words for the next question, said while the meeting agent works
 
     def __init__(self, sid, sdir, ask, cancel, speaker, log=lambda m: None,
-                 idle_end=None, busy=lambda: False, on_end=None, dictating=lambda: False):
+                 idle_end=None, busy=lambda: False, on_end=None, dictating=lambda: False, on_idle=None):
         self.sid, self.sdir = sid, sdir
         self.turn = None         # the turn being answered (the recorder's number; "open" for the greeting), for the trace
         self.ledger = False      # a call: each turn kept in its record (sbledger), which the voice's next turns read
@@ -639,7 +640,8 @@ class VoiceSession(object):
         self._state = None
         self.ask, self.cancel, self.speaker, self.log = ask, cancel, speaker, log
         self.idle_end, self.busy, self.on_end, self.dictating = idle_end, busy, on_end, dictating
-        self._quiet_since = time.time()
+        self.on_idle = on_idle
+        self._quiet_since = self._paused_since = time.time()
         self.ctl = sdir / "dictate"
         self.rows = sdir / "dictation.jsonl"
         self.live = sdir / "live.json"
@@ -778,7 +780,8 @@ class VoiceSession(object):
 
     def mute(self, on):
         if bool(on) != self.muted:
-            self._quiet_since = time.time()      # a pause's time is never "nothing said" (a call ended on Resume)
+            # a pause's time is never "nothing said" (a call ended on Resume); a pause's own clock starts
+            self._quiet_since = self._paused_since = time.time()
         self.muted = bool(on)
         self._epoch += 1
         if self.muted:
@@ -1037,9 +1040,12 @@ class VoiceSession(object):
                 if self._stop.is_set():
                     return
             # Speech counts only when it is for Claude: talking while muted is not.
-            if self._idle_over(self.state == "listening" and (bool(heard) or bool(st.get("speaking")))):
-                self.stop("nothing said for %d minutes" % round(self.idle_end / 60.0))
+            idle = self._idle(self.state == "listening" and (bool(heard) or bool(st.get("speaking"))))
+            if idle == "end":
+                self.stop("paused for %d minutes" % round(self.PAUSED_END / 60.0))
                 return
+            if idle == "pause":
+                self._pause_idle()
             time.sleep(0.05)
 
     def _opening_waits(self):
@@ -1152,16 +1158,37 @@ class VoiceSession(object):
             self._write("hold" if self.muted else "voice")
             self.state = "muted" if self.muted else "listening"
 
-    def _idle_over(self, speech):
-        """A talk ends after idle_end seconds with nothing said (MUTED_IDLE while muted).
-        Speech, dictating elsewhere, or a typed answer being written start the
-        clock again."""
+    def _idle(self, speech):
+        """What a talk's quiet asks for now: "pause" after idle_end seconds with nothing said, only
+        while listening (never in the middle of the voice's sentence); "end" once paused for
+        PAUSED_END, whoever paused it; else None. Speech, dictating elsewhere, or work handed on
+        still running start the clocks again."""
         now = time.time()
-        if speech or self.state == "paused" or self.busy():
+        held = self.state == "paused" or self.busy()
+        if speech or held:
             self._quiet_since = now
-        # muted is a pause the user chose (typing to Claude Code meanwhile): a longer while
-        limit = max(self.idle_end, self.MUTED_IDLE) if self.idle_end is not None and self.muted else self.idle_end
-        return limit is not None and now - self._quiet_since >= limit
+        if held:
+            self._paused_since = now
+        if self.idle_end is None:
+            return None
+        if self.muted:
+            return "end" if now - self._paused_since >= self.PAUSED_END else None
+        if self.state == "listening" and not (self.speaker.speaking or self.speaker.busy) \
+                and now - self._quiet_since >= self.idle_end:
+            return "pause"
+        return None
+
+    def _pause_idle(self):
+        """Nothing said for idle_end: paused as Pause does (the mic held, Resume brings it back as it was),
+        said apart from the user's own pause."""
+        self.mute(True)
+        self.log("voice %d: paused, nothing said for %d minutes" % (self.seq, round(self.idle_end / 60.0)))
+        self._trace("pause", by="idle")
+        if self.on_idle is not None:
+            try:
+                self.on_idle()
+            except Exception as exc:
+                self.log("voice: pausing: %r" % exc)
 
     def _timing(self, seen, spoke_until, got, early=None, started=None):
         """Where the wait went, one line per turn: the numbers to tune against.

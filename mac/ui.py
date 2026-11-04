@@ -1875,7 +1875,7 @@ def silence_stop(now=None):
     """A meeting left recording with nothing said for auto_stop_min minutes (one ran 639 minutes
     overnight) stops as Stop does, its summary made, and says so in its own record. "Said" is a
     transcribed line, the recorder's own word that it heard speech, so a quiet room or a fan
-    never keeps it going. Calls end on their own sooner (TALK_IDLE); paused meetings have the sweep."""
+    never keeps it going. Calls pause on their own sooner (TALK_IDLE); paused meetings have the sweep."""
     minutes = get_settings().get("auto_stop_min") or 0
     live = live_session()
     if not minutes or not live or is_talk(live):
@@ -2739,9 +2739,12 @@ def start_voice(sid):
                             speaker=voice.RecorderSpeaker(SESSIONS / sid, log=log),
                             log=log,
                             dictating=lambda: dictating(sid),
-                            # A talk is its conversation: it ends with it, or after a quiet while.
+                            # A talk is its conversation: it ends with it. A quiet while pauses it, as
+                            # Pause does; an hour paused ends it.
                             idle_end=TALK_IDLE if talk else None, busy=lambda: sid in PENDING or lite_busy(sid),
-                            on_end=(lambda why: end_talk(sid, why)) if talk else None)
+                            on_end=(lambda why: end_talk(sid, why)) if talk else None,
+                            on_idle=(lambda: log("lite: %s: paused (nothing said for %d minutes)"
+                                                 % (sid, round(TALK_IDLE / 60.0)))) if talk else None)
     vs.ledger = bool(talk)                       # a call: its turns kept in its record (sbledger)
     vs.on_heard = lambda qid, heard, cut, unsaid: _voice_heard(sid, qid, heard, cut, unsaid)
     VOICE[sid] = vs
@@ -2784,7 +2787,7 @@ def voice_action(sid, action, src=None):
     return {"ok": True, "state": vs.status()}
 
 
-TALK_IDLE = float(os.environ.get("STANDBY_TALK_IDLE", 120))   # seconds with nothing said
+TALK_IDLE = float(os.environ.get("STANDBY_TALK_IDLE", 120))   # seconds with nothing said: the call pauses
 
 
 def end_talk(sid, why):

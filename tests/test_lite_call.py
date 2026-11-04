@@ -1318,5 +1318,38 @@ check("the call ends: the session is told, then the band", [e.get("call") for _c
       and out[0][1]["text"] == ui.LITE_CALL_NOTE_END, out)
 check("a message for no call: said so", "error" in ui.LITE_POST["/api/lite/progress"]({"session": "talk-20200101-0000", "kind": "tell", "text": "hi"}))
 
+# A call's quiet while pauses it (the voice session does, as Pause does), and the app's log tells that
+# pause from the user's own; an hour paused ends it through the same end as End (on_end).
+import voice as _voice  # noqa: E402
+made = []
+
+
+class Grab(object):
+    state = "starting"
+    def __init__(self, *a, **k): made.append(k)
+    def start(self): pass
+    def status(self): return {"state": "starting"}
+
+
+saved = (_voice.VoiceSession, _voice.RecorderSpeaker, ui.is_talk, ui.session_info, ui.mic_muted, ui._warm_voice, live[0])
+_voice.VoiceSession, _voice.RecorderSpeaker = Grab, (lambda *a, **k: None)
+ui.is_talk, ui.session_info = (lambda s: True), (lambda s: {"mic": True})
+ui.mic_muted, ui._warm_voice = (lambda s: False), (lambda s: None)
+gsid = "talk-20261103-120000"
+live[0] = gsid
+r = ui.start_voice(gsid)
+k = made[-1] if made else {}
+check("a call's voice pauses after its quiet while, and an hour paused ends it",
+      r.get("ok") and k.get("idle_end") == ui.TALK_IDLE == 120 and callable(k.get("on_idle")) and callable(k.get("on_end")),
+      (r, sorted(k)))
+idle_log, real_log = [], ui.log
+ui.log = idle_log.append
+k["on_idle"]()
+ui.log = real_log
+check("  the pause is logged apart from the user's own", idle_log == ["lite: %s: paused (nothing said for 2 minutes)" % gsid],
+      idle_log)
+ui.VOICE.pop(gsid, None)
+(_voice.VoiceSession, _voice.RecorderSpeaker, ui.is_talk, ui.session_info, ui.mic_muted, ui._warm_voice, live[0]) = saved
+
 print("\n%s" % ("ALL PASS" if not fails else "FAILURES: %s" % fails))
 sys.exit(1 if fails else 0)
