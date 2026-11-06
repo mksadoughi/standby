@@ -19,8 +19,10 @@ p{margin:0 0 8px}p:last-child{margin-bottom:0}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 ul,ol{margin:0 0 8px;padding-left:18px}li{margin:3px 0}
 .steps{display:grid;gap:6px;margin:0;padding:0;list-style:none;counter-reset:s}
-.steps li{counter-increment:s;display:flex;gap:8px;align-items:flex-start;padding:6px 8px;margin:0;border-radius:8px;cursor:pointer;color:var(--muted)}
-.steps li:before{content:counter(s);flex:none;width:18px;height:18px;border-radius:50%;background:var(--soft);color:var(--accent);
+/* an item is one block of text whatever it holds (words, <b>, <code>, <br>): its number sits in the padding, so
+   nothing in it becomes a column of its own (a flex item each, they broke into narrow columns, 2026-11-02) */
+.steps li{counter-increment:s;position:relative;display:block;padding:6px 8px 6px 34px;margin:0;border-radius:8px;cursor:pointer;color:var(--muted)}
+.steps li:before{content:counter(s);position:absolute;left:8px;top:6px;width:18px;height:18px;border-radius:50%;background:var(--soft);color:var(--accent);
   font-size:11px;font-weight:650;display:flex;align-items:center;justify-content:center}
 .steps li.on{background:var(--soft);color:var(--text)}.steps li.on:before{background:var(--accent);color:var(--bg)}
 .big{font:26px/1.2 "Iowan Old Style",Georgia,serif;text-align:center;margin:6px 0}

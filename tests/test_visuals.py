@@ -207,6 +207,17 @@ check("the main window's frames: their own document only, never an address",
       and not framewall.frame_may_load("http://127.0.0.1:1/api/state") and not framewall.frame_may_load("file:///etc/hosts")
       and not framewall.frame_may_load(""))
 
+# The kit's steps: an item is one block of text whatever it holds, its number in the padding. As a flex row, each
+# word run, <b> and <code> was a column of its own, a letter or two wide (talk-20261102-224503, visuals/1.json)
+import re  # noqa: E402
+kit = (Path(visuals.KIT) / "kit.css").read_text()
+rule = lambda sel: (re.search(r"(?:^|\}|\*/)\s*" + re.escape(sel) + r"\{([^}]*)\}", kit, re.M) or [None, ""])[1]
+item, number = rule(".steps li"), rule(".steps li:before")
+check("the kit's steps: each item one block, never a flex row (its words, <b> and <code> never columns)",
+      "display:block" in item and "flex" not in item and "position:relative" in item, item)
+check("  its number in the item's padding, placed, not a column beside the text",
+      "position:absolute" in number and "flex:none" not in number and re.search(r"padding:[^;]*34px", item), number)
+
 if fails:
     print("FAILURES: %s" % fails)
     sys.exit(1)
