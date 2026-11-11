@@ -62,13 +62,18 @@ def voice(said):
         return
     p = tts.VoiceProcess(log=lambda m: None)
     p.open()
-    end, told = time.time() + VOICE_WAIT, False
+    end, told, tty = time.time() + VOICE_WAIT, False, sys.stdout.isatty()
     while p.state not in ("ready", "failed") and time.time() < end:
         if p.state == "downloading" and not told:
             print("   downloading Standby's voice (%s, about %d MB, first time only)..."
                   % (tts.ENGINE_NAME, tts.DOWNLOAD_BYTES // 1000000), flush=True)
             told = True
+        if told and tty and p.total:             # one line that counts up, in a terminal
+            sys.stdout.write("\r     %d of %d MB " % (p.done // 1000000, p.total // 1000000))
+            sys.stdout.flush()
         time.sleep(0.2)
+    if told and tty:
+        sys.stdout.write("\n")
     said["voice"] = p.state if p.state in ("ready", "failed") else "slow"
     said["error"] = p.error
     if p.ready:

@@ -416,5 +416,99 @@ check "  from a git worktree: refused, naming it and the checkout to install fro
   "! grep -q PAST-THE-CHECK $G/out && grep -q \"is a git worktree (branch feature)\" $G/out && grep -q 'cd .*/repo && ./install.sh' $G/out" || cat "$G/out"
 gi "$G/teammate/install.sh" --from-here
 check "  --from-here: let through, for testing a branch" "grep -q PAST-THE-CHECK $G/out" || cat "$G/out"
+# A download (the one-line install's, no .git) never runs git: without Apple's Command Line Tools, macOS's own git
+# asks to install them
+mkdir -p "$G/download" "$G/gitbin"; cp "$G/repo/install.sh" "$G/download/install.sh"
+printf '#!/bin/bash\necho "$*" >> "%s/git.calls"\nexit 1\n' "$G" > "$G/gitbin/git"; chmod +x "$G/gitbin/git"
+HOME="$G/home" PATH="$G/gitbin:/usr/bin:/bin" bash "$G/download/install.sh" > "$G/out" 2>&1
+check "  a download (no .git): installs, and never runs git" "grep -q PAST-THE-CHECK $G/out && [[ ! -e $G/git.calls ]]" || cat "$G/out"
+
+# The one-line install (docs/install.sh): this Mac checked before anything is fetched, then Standby's code from
+# GitHub into ~/.standby/source and its install.sh run; again, updated; a clone of the user's own updated in its
+# place. A stand-in curl serves a small archive whose install.sh only says it ran: no network, no real install.
+O="$T/oneline"; OB="$O/bin"; mkdir -p "$OB" "$O/archive/standby-main"
+printf '#!/bin/bash\necho "ran $0 in $PWD" >> "%s/ran"\necho "Next: open Claude Code"\n' "$O" > "$O/archive/standby-main/install.sh"
+echo v1 > "$O/archive/standby-main/VERSION"
+tar -czf "$O/main.tar.gz" -C "$O/archive" standby-main
+cat > "$OB/uname" <<'EOF2'
+#!/bin/bash
+case "$1" in -s) echo Darwin ;; -m) echo "${ARCH:-arm64}" ;; *) echo Darwin ;; esac
+EOF2
+cat > "$OB/sw_vers" <<'EOF2'
+#!/bin/bash
+echo "${SW_VERS:-15.1}"
+EOF2
+cat > "$OB/df" <<'EOF2'
+#!/bin/bash
+echo "Filesystem 1024-blocks Used Available Capacity Mounted on"
+echo "/dev/disk3s5 488245288 100000000 ${DF_KB:-104857600} 50% /System/Volumes/Data"
+EOF2
+cat > "$OB/claude" <<'EOF2'
+#!/bin/bash
+[[ "$1" == "--version" ]] && { echo "${CC_VERSION:-2.1.310} (Claude Code)"; exit 0; }
+[[ "$1 $2" == "auth status" ]] && { echo "{\"loggedIn\": ${CC_SIGNED_IN:-true}}"; exit 0; }
+exit 0
+EOF2
+cat > "$OB/curl" <<EOF2
+#!/bin/bash
+echo "\$*" >> "$O/curl.args"
+[[ -e "$O/curl-fails" ]] && exit 22
+while [[ \$# -gt 0 ]]; do [[ "\$1" == "-o" ]] && { cp "$O/main.tar.gz" "\$2"; exit 0; }; shift; done
+exit 22
+EOF2
+chmod +x "$OB"/*
+one() {     # one(home, out, [VAR=value ...]): the one-liner, as curl ... | bash runs it
+  local h="$1" out="$2"; shift 2; mkdir -p "$h"
+  env -i HOME="$h" PATH="$OB:/usr/bin:/bin" TERM=dumb "$@" bash < "$REPO/docs/install.sh" > "$out" 2>&1
+}
+fetched() { [[ -e "$O/curl.args" ]]; }
+for c in "ARCH=x86_64|Apple Silicon" "SW_VERS=14.3|macOS 14.4 or later; this Mac has 14.3" "CC_VERSION=2.1.200|Claude Code 2.1.200 is too old: Standby needs 2.1.299 or later. Run: claude update" \
+         "CC_SIGNED_IN=false|signed in. Run: claude, sign in (/login)" "DF_KB=2097152|needs about 6 GB free; this Mac has 2.0 GB"; do
+  rm -f "$O/curl.args"
+  one "$O/h-pre" "$O/out" "${c%%|*}"; rc=$?
+  check "one-liner, ${c%%=*}: stops with one line on what to do, before any download" \
+    "[[ $rc -ne 0 ]] && grep -qF '${c#*|}' $O/out && ! fetched && [[ ! -e $O/h-pre/.standby/source ]]" || cat "$O/out"
+done
+mv "$OB/claude" "$OB/claude.off"; rm -f "$O/curl.args"
+one "$O/h-pre" "$O/out"; rc=$?
+check "  no Claude Code: says to install it and sign in, nothing fetched" "[[ $rc -ne 0 ]] && grep -q \"Claude Code isn't installed\" $O/out && ! fetched" || cat "$O/out"
+mv "$OB/claude.off" "$OB/claude"
+
+H1="$O/h1"; rm -f "$O/curl.args" "$O/ran"
+one "$H1" "$O/out"; rc=$?
+check "one-liner: fetches main from github.com over HTTPS only, into ~/.standby/source, and runs its install.sh there" \
+  "[[ $rc -eq 0 ]] && grep -q 'https://github.com/mksadoughi/standby/archive/main.tar.gz' $O/curl.args && grep -q -- \"--proto =https\" $O/curl.args \
+   && [[ -f $H1/.standby/source/VERSION ]] && grep -q \"ran $H1/.standby/source/install.sh in\" $O/ran" || cat "$O/out"
+check "  says the download size first, and ends with what to do next" \
+  "grep -q 'about 12 MB; then about 4.5 GB' $O/out && [[ \"\$(tail -1 $O/out)\" == 'Next: open Claude Code' ]]" || cat "$O/out"
+touch "$H1/.standby/source/from-before"; echo v2 > "$O/archive/standby-main/VERSION"; tar -czf "$O/main.tar.gz" -C "$O/archive" standby-main
+one "$H1" "$O/out"; rc=$?
+check "  run again: a fresh copy swapped in whole, installed again, nothing left over" \
+  "[[ $rc -eq 0 && \$(cat $H1/.standby/source/VERSION) == v2 && ! -e $H1/.standby/source/from-before && \$(grep -c ran $O/ran) -eq 2 ]] \
+   && ! ls -d $H1/.standby/.source-new.* >/dev/null 2>&1" || cat "$O/out"
+touch "$O/curl-fails"
+one "$H1" "$O/out"; rc=$?
+check "  a download that fails: says so, and the copy there stays as it was" \
+  "[[ $rc -ne 0 && \$(cat $H1/.standby/source/VERSION) == v2 && \$(grep -c ran $O/ran) -eq 2 ]] && grep -q \"Couldn't download Standby\" $O/out" || cat "$O/out"
+rm -f "$O/curl-fails"
+
+# Installed before from a clone of the user's own (the code copy's .source names it): that clone is pulled and
+# installed, and no second copy is made; one on another branch or with changes of its own is left to them
+H2="$O/h2"; mkdir -p "$H2/.standby/code"
+git init -q -b main --bare "$O/origin.git"
+git clone -q "$O/origin.git" "$O/clone" 2>/dev/null
+cp "$O/archive/standby-main/install.sh" "$O/clone/install.sh"
+gc() { git -C "$1" -c user.email=t@example.com -c user.name=t "${@:2}"; }
+gc "$O/clone" add install.sh && gc "$O/clone" commit -qm one && gc "$O/clone" push -q origin main
+git clone -q "$O/origin.git" "$O/elsewhere" && echo two > "$O/elsewhere/NEWS" && gc "$O/elsewhere" add NEWS \
+  && gc "$O/elsewhere" commit -qm two && gc "$O/elsewhere" push -q origin main
+echo "$O/clone" > "$H2/.standby/code/.source"; rm -f "$O/curl.args" "$O/ran"
+one "$H2" "$O/out"; rc=$?
+check "  installed from a clone: that clone pulled and installed, nothing fetched, no second copy" \
+  "[[ $rc -eq 0 && -f $O/clone/NEWS ]] && grep -q \"ran $O/clone/install.sh\" $O/ran && ! fetched && [[ ! -e $H2/.standby/source ]]" || cat "$O/out"
+echo mine >> "$O/clone/install.sh"; rm -f "$O/ran"
+one "$H2" "$O/out"; rc=$?
+check "  a clone with changes of its own: left alone, saying where to update it" \
+  "[[ $rc -ne 0 && ! -e $O/ran ]] && grep -q 'with changes of your own). Update it there: cd' $O/out && ! fetched" || cat "$O/out"
 rm -rf "$T"
 echo; [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "FAILURES: $fails"; exit 1; }

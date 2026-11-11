@@ -36,10 +36,11 @@ die()  { printf '\n\033[31mxx %s\033[0m\n' "$*" >&2; exit 1; }
 # Only Standby's own checkout, on main, installs. The apps run straight from the
 # folder they were installed from, so an install from a git worktree or a
 # work-in-progress branch would make the user's Standby run that branch (it did,
-# 2026-10-08). Checked before anything is changed. A download without git skips it.
+# 2026-10-08). Checked before anything is changed. A download without git (the one-line install's) skips it,
+# and never runs git: on a Mac without Apple's Command Line Tools that asks to install them.
 FROM_HERE=no
 for a in "$@"; do [[ "$a" == "--from-here" ]] && FROM_HERE=yes; done
-if [[ "$FROM_HERE" == no ]] && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+if [[ "$FROM_HERE" == no && -e "$REPO/.git" ]] && git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
   GIT_DIR_HERE="$(cd "$REPO" && cd "$(git rev-parse --git-dir)" && pwd -P)"
   GIT_COMMON="$(cd "$REPO" && cd "$(git rev-parse --git-common-dir)" && pwd -P)"
   BRANCH="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
@@ -100,9 +101,14 @@ UV_SUM="${STANDBY_UV_SUM:-0c4346de7abdb49495b393b9ec809fe387aa43e586be20fecb9722
 HOMEBREW="${STANDBY_HOMEBREW:-/opt/homebrew}"       # its place on Apple Silicon (tests point elsewhere)
 [[ -x "$HOMEBREW/bin/brew" && ":$PATH:" != *":$HOMEBREW/bin:"* ]] && PATH="$PATH:$HOMEBREW/bin"     # last: a Python on PATH still wins
 PY=""
+# macOS's own /usr/bin/python3 is a stand-in until Apple's Command Line Tools are installed: run, it asks to
+# install them (a fresh Mac, the one-line install), so it's tried only once they're there.
+CLT=no; xcode-select -p >/dev/null 2>&1 && CLT=yes
 [[ "${STANDBY_PREBUILT_PYTHON:-}" == 1 ]] || for c in python3.12 python3.13 python3; do
-  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(sys.version_info[:2] not in ((3, 12), (3, 13)))'; then
-    PY="$(command -v "$c")"; break
+  p="$(command -v "$c" 2>/dev/null || true)"
+  [[ -z "$p" || ( "$p" == /usr/bin/* && "$CLT" == no ) ]] && continue
+  if "$p" -c 'import sys; sys.exit(sys.version_info[:2] not in ((3, 12), (3, 13)))'; then
+    PY="$p"; break
   fi
 done
 if [[ -z "$PY" ]]; then
@@ -282,7 +288,7 @@ fi
 # The speech model Settings > Speech would choose here (Small on an 8 GB Mac,
 # Standard otherwise, the English one on an English Mac), pinned, unless it is here. Public models: the
 # download library's advice to sign in for higher rate limits is not for the user.
-HF_HUB_VERBOSITY=error "$VENV/bin/python" - "$REPO/mac" "$ROOT/config.json" <<'PYCODE'
+HF_HUB_VERBOSITY=error HF_HUB_DISABLE_PROGRESS_BARS=1 "$VENV/bin/python" - "$REPO/mac" "$ROOT/config.json" <<'PYCODE'
 import json, sys
 sys.path.insert(0, sys.argv[1])
 import speechmodel
@@ -294,8 +300,15 @@ speechmodel.migrate(cfg)                 # a stored size no longer offered: for 
                                          # the app writes it back at its next start
 m = speechmodel.MODELS[speechmodel.chosen(cfg)]
 if speechmodel.local(speechmodel.chosen(cfg)) is None:
-    print("   fetching the speech model, %s (about %.1f GB, first time only)..." % (m.words, m.bytes / 1e9))
-    speechmodel.fetch(speechmodel.chosen(cfg))
+    print("   fetching the speech model, %s (about %.1f GB, first time only)..." % (m.words, m.bytes / 1e9), flush=True)
+    tty = sys.stdout.isatty()
+    def tell(st):                        # one line that counts up, in a terminal
+        if tty and st.get("total"):
+            sys.stdout.write("\r     %.2f of %.1f GB " % (st["done"] / 1e9, st["total"] / 1e9))
+            sys.stdout.flush()
+    speechmodel.fetch(speechmodel.chosen(cfg), tell)
+    if tty:
+        sys.stdout.write("\n")
 print("   \033[32m✓\033[0m speech model: %s (%s; Settings > Meetings to change it)" % (m.words, m.repo.split("/")[1]))
 PYCODE
 
@@ -620,7 +633,6 @@ if [[ ${#ASK_AGAIN[@]} -gt 0 ]]; then
 fi
 cat <<EOF
    Open Standby:   $OPEN
-   First run:      start a meeting or a call from Claude Code, in the folder you work in
    Dictation:      standby dictation on     (speak into any app, instead of macOS Dictation)
    Terminal:       standby help$NEWTERM
 
@@ -631,4 +643,6 @@ cat <<EOF
      Microphone, Input Monitoring and       when you turn dictation on (Standby Dictation: to hear you,
      Accessibility                          notice the F5 key, and paste the text)
    Changed your mind: System Settings > Privacy & Security.
+
+$(printf '\033[1m')Next: open Claude Code in the folder you work in and type /standby call$(printf '\033[0m')
 EOF

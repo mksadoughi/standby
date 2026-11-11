@@ -16,10 +16,20 @@ Speech-to-text, speaker labels and the voice run on your Mac. Your Claude Code g
 
 ## Install
 
-The easy way: give your Claude Code the link to [AGENT-GUIDE.md](AGENT-GUIDE.md) and ask it to install Standby. The guide
+In Terminal:
+
+```bash
+curl -fsSL https://mksadoughi.github.io/standby/install.sh | bash
+```
+
+It checks your Mac first (below), then fetches Standby from this repository's `main` branch into `~/.standby/source`
+and runs its installer. [Read it first](docs/install.sh): it's short, needs no admin password and sends nothing
+anywhere. Run it again any time to update.
+
+Or give your Claude Code the link to [AGENT-GUIDE.md](AGENT-GUIDE.md) and ask it to install Standby. The guide
 tells an agent how to set it up, use every part of it, fix problems and remove it.
 
-Or by hand:
+Or from a clone of your own:
 
 1. Get the code:
 
@@ -93,7 +103,7 @@ Dictation is off until you turn it on in Standby's Settings.
 <details>
 <summary><b>Update or uninstall</b></summary>
 
-Update:
+Update: run the install command again. From a clone of your own:
 
 ```bash
 cd standby
@@ -119,7 +129,8 @@ rm -rf ~/.standby ~/Applications/Standby.app "$HOME/Applications/Standby Dictati
 rm -f ~/.local/bin/standby ~/.local/bin/standby-ctx
 ```
 
-This deletes your meetings and calls too; copy `~/.standby/sessions` first to keep them. The models are in
+This deletes your meetings and calls too, and the code the install command fetched (`~/.standby/source`); copy
+`~/.standby/sessions` first to keep them. The models are in
 `~/.cache/huggingface/hub` (the `parakeet`, `whisper` and `pocket-tts` folders). The installer's PATH line in `~/.zshrc`
 stays, and macOS keeps Standby's permissions until `tccutil reset All dev.standby.app` and
 `tccutil reset All dev.standby.dictation`.
@@ -160,7 +171,7 @@ stays, and macOS keeps Standby's permissions until `tccutil reset All dev.standb
 
 | Problem | Fix |
 |---|---|
-| `/standby` isn't there | Start a new Claude Code session, or run `/reload-plugins`. Check `claude --version` is 2.1.299 or later (`claude update`). Still missing: run `./install.sh` again |
+| `/standby` isn't there | Start a new Claude Code session, or run `/reload-plugins`. Check `claude --version` is 2.1.299 or later (`claude update`). Still missing: run the install command again |
 | The transcript stays empty | Allow Standby in System Settings > Privacy & Security > Microphone |
 | The other side of a call is missing | Allow Standby in System Settings > Privacy & Security > Screen & System Audio Recording, under System Audio Recording Only |
 | "Claude can't sign in" | Run `claude`, then `/login` |

@@ -40,14 +40,18 @@ Ask the user before installing anything. Then check each requirement and tell th
 
 ## 2. Install
 
-Clone into a folder the user will keep: Standby's apps run from this folder, so it must not be deleted or moved
-later. Install from the `main` branch of a normal clone, not from a git worktree or another branch (the installer
-refuses those).
+One command. It checks the Mac first (section 1), stopping with one line on what to do if something is missing,
+then fetches Standby's `main` branch from GitHub into `~/.standby/source` and runs its installer, `install.sh`. Show
+the user the script first if they want to read it: https://github.com/mksadoughi/standby/blob/main/docs/install.sh
 
 ```bash
-git clone https://github.com/mksadoughi/standby.git ~/standby
-cd ~/standby && ./install.sh
+curl -fsSL https://mksadoughi.github.io/standby/install.sh | bash
 ```
+
+If the user installed before from a clone of their own, the command updates that clone (`git pull`) instead of
+making a second copy; a clone on another branch or with changes of its own is left to them, and the command says
+so. To install from a clone instead: clone it into a folder the user will keep, on `main` (not a git worktree or
+another branch: the installer refuses those), and run `./install.sh` there.
 
 The installer takes a few minutes. It is safe to run again. It:
 
@@ -57,9 +61,9 @@ The installer takes a few minutes. It is safe to run again. It:
   starts);
 - adds the `standby` command in `~/.local/bin` (and adds that folder to `PATH` in `~/.zshrc` if needed);
 - builds `~/Applications/Standby.app` and `~/Applications/Standby Dictation.app`;
-- adds the Claude Code plugin for every folder:
-  `claude plugin marketplace add <this folder>` then `claude plugin install standby@standby --scope user`.
-  If that step fails, the installer prints those two commands to run by hand.
+- adds the Claude Code plugin for every folder, from Standby's own copy of its code (`~/.standby/code`). If Standby's
+  plugin is already installed from Claude's plugin directory, it keeps that one and adds no second copy. If the step
+  fails, the installer prints the commands to run by hand.
 
 It ends with a "Done" block. Then verify:
 
@@ -212,7 +216,7 @@ Settings > Usage in Standby's window shows what Standby's own models used, by mo
 
 | Problem | Fix |
 |---|---|
-| `/standby` isn't there | Start a new Claude Code session or run `/reload-plugins`. Still missing: run `./install.sh` again, or `claude plugin marketplace add ~/standby && claude plugin install standby@standby --scope user` |
+| `/standby` isn't there | Start a new Claude Code session or run `/reload-plugins`. Still missing: run the install command again (section 2) |
 | "Standby can't listen here: this Claude Code doesn't save its conversation" | This Claude Code was started from another one. Start it with `env -u CLAUDE_CODE_CHILD_SESSION claude` |
 | "Standby isn't running" | `open ~/Applications/Standby.app` (or `standby app`) |
 | "This Standby doesn't have that yet: update it" | Update (section 5) |
@@ -227,8 +231,10 @@ Settings > Usage in Standby's window shows what Standby's own models used, by mo
 ## 5. Update
 
 ```bash
-cd ~/standby && git pull && ./install.sh
+curl -fsSL https://mksadoughi.github.io/standby/install.sh | bash
 ```
+
+(Installed from a clone of their own: `cd` to it, then `git pull && ./install.sh`.)
 
 Then quit and reopen Standby, and start a new Claude Code session (or `/reload-plugins`). Meetings, calls and
 settings are kept.
