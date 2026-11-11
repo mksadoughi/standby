@@ -105,7 +105,7 @@ h1{font-size:clamp(40px,4.5vw,60px);line-height:1.08;margin-top:0}
 .howto .tabs button[aria-selected=true]{background:#fff;color:var(--accent);box-shadow:0 1px 3px rgba(20,20,50,.12)}
 .howto .tab.manual,.howto.manual .tab.agent{display:none}.howto.manual .tab.manual{display:block}
 .howto .cmd{display:flex;align-items:center;gap:12px;margin:0 0 10px 32px;padding:8px 8px 8px 12px;border:1px solid var(--line);border-radius:9px;background:#fbfbfd}
-.howto .cmd pre{margin:0;font-size:12.5px;line-height:1.6;flex:1;min-width:0;overflow-x:auto}
+.howto .cmd pre{margin:0;font-size:12.5px;line-height:1.6;flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}   /* the whole command shows, wrapped at its slashes, never cut */
 .howto .steps p{margin:0 0 8px;font-size:15px;color:var(--ink);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .howto .tab.agent p:first-child{flex-wrap:nowrap}
 #repo-link{display:block;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -412,7 +412,7 @@ footer .links{margin-left:auto;display:flex;gap:18px}footer a{text-decoration:no
         </div>
         <div class="tab manual">
           <p><span class="n">1</span>In Terminal:</p>
-          <div class="cmd"><pre id="cmd">curl -fsSL https://mksadoughi.github.io/standby/install.sh | bash</pre><button type="button" class="cp" data-copy="cmd">Copy</button></div>
+          <div class="cmd"><pre id="cmd">curl -fsSL https://mksadoughi.github.io/<wbr>standby/<wbr>install.sh | bash</pre><button type="button" class="cp" data-copy="cmd">Copy</button></div>
           <p class="use"><span class="n">2</span><span>Ask your Claude Code to call you or join your meeting. Or run <code>/standby call</code> or <code>/standby listen</code> yourself.</span></p>
         </div>
         <p class="req-line">An Apple Silicon Mac with macOS 14.4 or later, Claude Code signed in, and a one-time download of about 4.5 GB.</p>
