@@ -29,6 +29,7 @@ main() {
   [[ "$REF" =~ ^[A-Za-z0-9._/-]+$ ]] || die "STANDBY_REF isn't a branch or tag name: $REF"
 
   say "Checking this Mac"
+  export STANDBY_ONE_LINE_CHECKS_SHOWN=1         # install.sh, run below, checks again: this heading, macOS and Claude Code it doesn't show twice
   [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]] || die "Standby needs a Mac with Apple Silicon (M1 or later)."
   local macos; macos="$(sw_vers -productVersion 2>/dev/null || true)"
   [[ -n "$macos" ]] && ! older "$macos" 14.4 \
@@ -72,11 +73,16 @@ main() {
   fi
 
   # A fresh copy of the code, swapped in only once all of it is here: a download cut short changes nothing.
-  say "Downloading Standby ($REF, about 12 MB; then about 4.5 GB of packages and models, once, less on an 8 GB Mac)"
+  if [[ -x "$ROOT/venv/bin/python" ]]; then      # an update: the packages and models are here already
+    say "Downloading Standby ($REF, about 12 MB)"
+  else
+    say "Downloading Standby ($REF, about 12 MB; then about 4.5 GB of packages and models, once, less on an 8 GB Mac)"
+  fi
   mkdir -p "$ROOT"; chmod 700 "$ROOT"
   TMP="$(mktemp -d "$ROOT/.source-new.XXXXXX")"
   trap 'rm -rf "$TMP"' EXIT
-  curl -fL --proto '=https' --tlsv1.2 $([[ -t 2 ]] && echo --progress-bar || echo -sS) \
+  # Quiet (an error is still shown): GitHub's archive doesn't say its size, so a progress bar has nothing to draw.
+  curl -fsSL --proto '=https' --tlsv1.2 \
     -o "$TMP/standby.tar.gz" "$REPO_URL/archive/$REF.tar.gz" \
     || die "Couldn't download Standby from GitHub: check the internet connection, then run this again."
   mkdir "$TMP/code"

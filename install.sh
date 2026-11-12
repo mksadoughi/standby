@@ -57,7 +57,10 @@ if [[ "$FROM_HERE" == no && -e "$REPO/.git" ]] && git -C "$REPO" rev-parse --git
   fi
 fi
 
-say "Checking this Mac"
+# The one-line install (docs/install.sh) has checked this Mac and shown it by now, under this same heading: the
+# heading, macOS and Claude Code aren't shown a second time here. Every check is still made, and says what's wrong.
+shown() { [[ "${STANDBY_ONE_LINE_CHECKS_SHOWN:-}" == 1 ]]; }
+shown || say "Checking this Mac"
 [[ "$(uname -s)" == "Darwin" ]] || die "Standby runs on macOS."
 [[ "$(uname -m)" == "arm64" ]] || die "Standby needs an Apple Silicon Mac (on-device speech uses MLX)."
 # macOS 14.4 or later: the meeting's sound comes through Core Audio process taps, which a user can
@@ -68,7 +71,7 @@ MAJOR="${MACOS%%.*}"; MINOR="$(echo "$MACOS" | cut -d. -f2)"
 [[ "$MAJOR" =~ ^[0-9]+$ && "$MINOR" =~ ^[0-9]+$ ]] && { [[ "$MAJOR" -gt 14 ]] || [[ "$MAJOR" -eq 14 && "$MINOR" -ge 4 ]]; } \
   || die "Standby needs macOS 14.4 or later. This Mac has macOS ${MACOS:-of an unknown version}:
    update it in System Settings > General > Software Update, then run this again."
-ok "macOS $MACOS on Apple Silicon"
+shown || ok "macOS $MACOS on Apple Silicon"
 
 # Room for what it puts on this Mac: the Python packages (about 1.5 GB), the speech model (up
 # to 2.5 GB), Standby's voice (about 240 MB) and the smaller models, with some to spare. An
@@ -115,7 +118,11 @@ if [[ -z "$PY" ]]; then
   say "Python 3.12 for Standby (prebuilt, in ${ROOT/#$HOME/~}/python)"
   export UV_CACHE_DIR="$ROOT/cache/uv" UV_PYTHON_INSTALL_DIR="$ROOT/python" UV_NO_CONFIG=1
   mkdir -p "$ROOT/bin" "$UV_PYTHON_INSTALL_DIR"
-  if ! "$ROOT/bin/uv" --version 2>/dev/null | grep -q "^uv $UV_VERSION "; then
+  # uv runs with /usr/bin off its PATH, every time and on every Mac: there its "python install" runs python3, macOS's
+  # stand-in, which asks to install the Command Line Tools (uv 0.12.24 on a Mac without them, on a first install and
+  # an update). Nothing else of uv's was seen to ask; it has no use for /usr/bin, so none of it gets the chance.
+  uv() { env PATH=/bin:/usr/sbin:/sbin "$ROOT/bin/uv" "$@"; }
+  if ! uv --version 2>/dev/null | grep -q "^uv $UV_VERSION "; then
     UVTMP="$(mktemp -d)"
     curl -fsSL -o "$UVTMP/uv.tar.gz" "$UV_URL" \
       || { rm -rf "$UVTMP"; die "couldn't download uv, which brings Python 3.12: check the internet connection, then run this again"; }
@@ -124,9 +131,9 @@ if [[ -z "$PY" ]]; then
     tar xzf "$UVTMP/uv.tar.gz" -C "$UVTMP" && mv "$UVTMP/uv-aarch64-apple-darwin/uv" "$ROOT/bin/uv"
     rm -rf "$UVTMP"
   fi
-  "$ROOT/bin/uv" python install 3.12 --no-bin --no-registry >/dev/null 2>&1 \
+  uv python install 3.12 --no-bin --no-registry >/dev/null 2>&1 \
     || die "couldn't install Python 3.12 (with uv): check the internet connection, then run this again"
-  PY="$("$ROOT/bin/uv" python find 3.12 --managed-python --no-project 2>/dev/null || true)"
+  PY="$(uv python find 3.12 --managed-python --no-project 2>/dev/null || true)"
   [[ -x "$PY" ]] || die "Python 3.12 didn't install in ${ROOT/#$HOME/~}/python: run this again"
 fi
 ok "Python: $("$PY" -V)"
@@ -146,7 +153,7 @@ if [[ -n "$CLAUDE" ]]; then
      claude update
    then start a new Claude Code session. Everything else installs now; /standby works once it's updated."
   else
-    ok "Claude Code: $("$CLAUDE" --version 2>/dev/null | head -1)"
+    shown || ok "Claude Code: $("$CLAUDE" --version 2>/dev/null | head -1)"
   fi
 else
   warn "Claude Code isn't on this Mac yet: Standby needs it (install it, then run this again)."
@@ -156,15 +163,17 @@ say "Python environment ($VENV)"
 mkdir -p "$ROOT" "$ROOT/sessions" "$ROOT/models"
 chmod 700 "$ROOT" "$ROOT/sessions"
 [[ -d "$VENV" ]] || "$PY" -m venv "$VENV"
+export PIP_DISABLE_PIP_VERSION_CHECK=1      # pip stays at its pinned version: its notice that a newer one is out is not for the user
 "$VENV/bin/pip" install --quiet -c "$REPO/constraints.txt" pip wheel      # pip and wheel too at their pinned versions
 echo "   installing packages (a few minutes the first time)..."
 # The versions in constraints.txt, the set that works, and no --upgrade: a fresh install
 # gets exactly those, and running this again keeps what is there and adds what is missing.
 PINS=(-c "$REPO/constraints.txt")
+# Of pip's own lines only an error is shown: its list of everything it installed is one very long line.
 # pyobjc-framework-CoreAudio: a call's own sound, through a Core Audio process tap (macOS 14.4+).
 # pyobjc-framework-CoreML: who's speaking, on the Neural Engine (macOS 14+).
 "$VENV/bin/pip" install --progress-bar off "${PINS[@]}" numpy sounddevice parakeet-mlx mlx-whisper sherpa-onnx pywebview onnxruntime \
-  pyobjc-framework-AVFoundation pyobjc-framework-CoreAudio pyobjc-framework-CoreML | grep -E "^(Successfully|ERROR)" || true
+  pyobjc-framework-AVFoundation pyobjc-framework-CoreAudio pyobjc-framework-CoreML | grep "^ERROR" || true
 if ! "$VENV/bin/python" -c "import numpy, sounddevice, parakeet_mlx, sherpa_onnx, webview" 2>/dev/null; then
   if "$VENV/bin/python" -c 'import sys; sys.exit(sys.version_info[:2] != (3, 13))' 2>/dev/null; then
     die "The packages Standby uses don't install on Python 3.13 on this Mac. Use a Python 3.12 of Standby's own:
@@ -180,7 +189,7 @@ ok "speech (parakeet-mlx), speakers (sherpa-onnx), app window (pywebview)"
 # Voice mode's own voice: Pocket TTS by Kyutai (CC BY 4.0) on the GPU, about 145 MB of packages.
 # mlx-audio pinned (constraints.txt): mac/tts.py uses its Pocket TTS directly. The model (about
 # 240 MB) comes from Hugging Face at the end (mac/prepare.py), so a first call doesn't wait for it.
-"$VENV/bin/pip" install --progress-bar off "${PINS[@]}" mlx-audio sentencepiece | grep -E "^(Successfully|ERROR)" || true
+"$VENV/bin/pip" install --progress-bar off "${PINS[@]}" mlx-audio sentencepiece | grep "^ERROR" || true
 if "$VENV/bin/python" -c "import mlx_audio, sentencepiece" 2>/dev/null; then
   ok "voice mode's voice (Pocket TTS; its model comes at the end)"
 else
@@ -237,6 +246,7 @@ if [[ -s "$DIAR/Nemotron3Diarizer_fast.mlmodelc/weights/weight.bin" && -s "$DIAR
 elif [[ "$(sw_vers -productVersion 2>/dev/null | cut -d. -f1)" -lt 14 ]]; then
   warn "speaker diarization needs macOS 14: speakers are matched by voice prints alone"
 else
+  echo "   fetching the speaker diarization model (about 190 MB, first time only)..."
   rm -rf "$DIAR.part"
   got=yes
   while IFS= read -r f; do

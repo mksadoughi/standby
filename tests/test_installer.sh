@@ -116,9 +116,19 @@ def setup(app, name, options):
     open(os.path.join(c, "build.txt"), "w").write("%s|%s|%s" % (os.path.abspath(app[0]), o.get("alias"), o.get("iconfile")))
 EOF
 
-# A venv that already exists: pip is a no-op, python is the real one + stubs.
+# A venv that already exists: pip is a no-op that says what the real one says (what it installed, unless --quiet;
+# on stderr, unless told not to look, that a newer pip is out), python is the real one + stubs.
 V="$H/.standby/venv/bin"; mkdir -p "$V"
-printf '#!/bin/bash\necho "$*" >> "%s/pip.args"\nexit 0\n' "$T" > "$V/pip"
+cat > "$V/pip" <<EOF
+#!/bin/bash
+echo "\$*" >> "$T/pip.args"
+if [[ " \$* " != *" --quiet "* ]]; then
+  echo "Successfully installed stand-in-1.0 another-stand-in-2.0"
+  [[ -e "$T/pip-error" ]] && echo "ERROR: stand-in has no version that fits"
+fi
+[[ -n "\${PIP_DISABLE_PIP_VERSION_CHECK:-}" ]] || echo "[notice] A new release of pip is available: 25.0 -> 26.0" >&2
+exit 0
+EOF
 cat > "$V/python" <<EOF
 #!/bin/bash
 if [[ "\$1" == "setup.py" && "\$2" == "py2app" ]]; then
@@ -158,6 +168,8 @@ check "  from Hugging Face, pinned to the revision measured" \
 check "voice mode's end-of-turn model is kept, not fetched again" "grep -q 'end-of-turn model already present' $T/out.1"
 check "every package line pinned to constraints.txt, pip and wheel too, none upgrading what is there" \
   "[[ \$(grep -c -- '-c $REPO/constraints.txt' $T/pip.args) -eq 4 ]] && grep -qx 'install --quiet -c $REPO/constraints.txt pip wheel' $T/pip.args && ! grep -q -- '--upgrade' $T/pip.args"
+check "  pip's own lines stay out of it: nothing of what it installed, no notice of a newer pip" \
+  "! grep -q 'Successfully installed' $T/out.1 && ! grep -qF '[notice]' $T/out.1"
 check "  constraints.txt pins every package install.sh names, mlx-audio among them" \
   "$REALPY - $REPO/constraints.txt <<'PYC'
 import re, sys
@@ -301,7 +313,7 @@ check "  and dictation still works without its app" \
 U="$T/uvpkg/uv-aarch64-apple-darwin"; mkdir -p "$U"
 cat > "$U/uv" <<EOF
 #!/bin/bash
-echo "\$*" >> "$T/uv.args"
+echo "\$*" >> "$T/uv.args"; echo "\$*: \$PATH" >> "$T/uv.path"
 case "\$1 \$2" in
   "--version "*) echo "uv 0.12.24 (stand-in)" ;;
   "python install") mkdir -p "\$UV_PYTHON_INSTALL_DIR/cpython-3.12.15/bin" && cp "$B/python3.12" "\$UV_PYTHON_INSTALL_DIR/cpython-3.12.15/bin/python3.12" ;;
@@ -328,6 +340,11 @@ check "  uv pinned and checked, kept in ~/.standby; its Python there too, nothin
 check "  never Homebrew, never an admin password" "[[ ! -s $T/brew.args ]] && ! grep -qi 'homebrew\\|sudo' $T/out.py1"
 : > "$T/uv.args"; uvrun py2 "$P"
 check "  run again: uv already there, not fetched again" "grep -q 'python install 3.12' $T/uv.args && grep -q 'Python: Python 3.12' $T/out.py2"
+# macOS's own /usr/bin/python3 is a stand-in without Apple's Command Line Tools, and uv's "python install" runs the
+# python3 on its PATH: run, it asks to install them (a fresh Mac, on the first install and on the next one too). So
+# no call of uv, whatever it is asked, has /usr/bin on its PATH
+check "  uv never runs with /usr/bin on its PATH, asked its version, to install Python (both times) or to find it" \
+  "[[ \$(grep -c '^python install ' $T/uv.path) -eq 2 && \$(grep -c '^python find ' $T/uv.path) -eq 2 ]] && grep -q '^--version: ' $T/uv.path && ! grep -q '/usr/bin' $T/uv.path" || cat "$T/uv.path"
 rm -f "$H/.standby/bin/uv"; SUM=0000 uvrun py6 "$P"; rc=$?
 check "  a uv download that doesn't match its checksum: refused, and not kept" \
   "[[ $rc -ne 0 ]] && grep -q \"uv's download didn't match its checksum\" $T/out.py6 && [[ ! -e $H/.standby/bin/uv ]]"
@@ -372,6 +389,16 @@ MEMSIZE=8589934592 run r1; rc=$?
 check "an 8 GB Mac: installed, with a word that Small is used, and that 16 GB is better for calls" \
   "[[ $rc -eq 0 ]] && grep -q 'This Mac has 8 GB of memory: Standby uses its Small speech model (English only). 16 GB is better for calls.' $T/out.r1"
 check "  not on a 16 GB Mac" "! grep -q 'Small speech model' $T/out.1"
+# The speaker diarization model comes in five quiet downloads, about 190 MB: said before they start (a stand-in
+# curl that fails, so nothing is fetched). In the same run pip has an error: that line of its own is still shown.
+mv "$H/.standby/models/nemotron-3-diarization" "$T/diarization.kept"
+printf '#!/bin/bash\nexit 22\n' > "$B/curl"; chmod +x "$B/curl"; touch "$T/pip-error"
+run dz; rc=$?
+rm -f "$B/curl" "$T/pip-error"; mv "$T/diarization.kept" "$H/.standby/models/nemotron-3-diarization"
+check "speaker diarization model: said before its quiet downloads start, with its size" \
+  "[[ $rc -eq 0 ]] && grep -q 'fetching the speaker diarization model (about 190 MB, first time only)' $T/out.dz && grep -q 'could not download the speaker diarization model' $T/out.dz"
+check "pip's errors are still shown, both package installs', and still nothing of what it installed" \
+  "[[ \$(grep -c '^ERROR: stand-in has no version that fits' $T/out.dz) -eq 2 ]] && ! grep -q 'Successfully installed' $T/out.dz"
 Q="$T/py314"; mkdir -p "$Q"; cp "$B/uname" "$B/sw_vers" "$B/df" "$B/sysctl" "$Q/"
 printf '#!/bin/bash\n[[ "$1" == "-V" ]] && { echo "Python 3.14.0"; exit 0; }\n[[ "$1" == "-c" ]] && exit 1\nexit 0\n' > "$Q/python3"
 cp "$Q/python3" "$Q/python3.14"; chmod +x "$Q"/*
@@ -399,7 +426,7 @@ check "Linux is refused with a clear message" \
 # with install.sh cut off right after its checks, so nothing past them can run.
 G="$T/which"; mkdir -p "$G/home"
 git init -q -b main "$G/repo"
-sed '/^say "Checking this Mac"/,$d' "$REPO/install.sh" > "$G/repo/install.sh"
+sed '/say "Checking this Mac"/,$d' "$REPO/install.sh" > "$G/repo/install.sh"
 echo 'echo PAST-THE-CHECK' >> "$G/repo/install.sh"
 git -C "$G/repo" add install.sh && git -C "$G/repo" -c user.email=t@example.com -c user.name=t commit -qm init
 gi() { HOME="$G/home" bash "$@" > "$G/out" 2>&1; }
@@ -427,7 +454,7 @@ check "  a download (no .git): installs, and never runs git" "grep -q PAST-THE-C
 # GitHub into ~/.standby/source and its install.sh run; again, updated; a clone of the user's own updated in its
 # place. A stand-in curl serves a small archive whose install.sh only says it ran: no network, no real install.
 O="$T/oneline"; OB="$O/bin"; mkdir -p "$OB" "$O/archive/standby-main"
-printf '#!/bin/bash\necho "ran $0 in $PWD" >> "%s/ran"\necho "Next: open Claude Code"\n' "$O" > "$O/archive/standby-main/install.sh"
+printf '#!/bin/bash\necho "ran $0 in $PWD, checks shown: ${STANDBY_ONE_LINE_CHECKS_SHOWN:-no}" >> "%s/ran"\necho "Next: open Claude Code"\n' "$O" > "$O/archive/standby-main/install.sh"
 echo v1 > "$O/archive/standby-main/VERSION"
 tar -czf "$O/main.tar.gz" -C "$O/archive" standby-main
 cat > "$OB/uname" <<'EOF2'
@@ -480,12 +507,15 @@ check "one-liner: fetches main from github.com over HTTPS only, into ~/.standby/
   "[[ $rc -eq 0 ]] && grep -q 'https://github.com/mksadoughi/standby/archive/main.tar.gz' $O/curl.args && grep -q -- \"--proto =https\" $O/curl.args \
    && [[ -f $H1/.standby/source/VERSION ]] && grep -q \"ran $H1/.standby/source/install.sh in\" $O/ran" || cat "$O/out"
 check "  says the download size first, and ends with what to do next" \
-  "grep -q 'about 12 MB; then about 4.5 GB' $O/out && [[ \"\$(tail -1 $O/out)\" == 'Next: open Claude Code' ]]" || cat "$O/out"
+  "grep -qF 'Downloading Standby (main, about 12 MB; then about 4.5 GB of packages and models, once, less on an 8 GB Mac)' $O/out && [[ \"\$(tail -1 $O/out)\" == 'Next: open Claude Code' ]]" || cat "$O/out"
+mkdir -p "$H1/.standby/venv/bin"; printf '#!/bin/bash\n' > "$H1/.standby/venv/bin/python"; chmod +x "$H1/.standby/venv/bin/python"      # installed: its venv is there
 touch "$H1/.standby/source/from-before"; echo v2 > "$O/archive/standby-main/VERSION"; tar -czf "$O/main.tar.gz" -C "$O/archive" standby-main
 one "$H1" "$O/out"; rc=$?
 check "  run again: a fresh copy swapped in whole, installed again, nothing left over" \
   "[[ $rc -eq 0 && \$(cat $H1/.standby/source/VERSION) == v2 && ! -e $H1/.standby/source/from-before && \$(grep -c ran $O/ran) -eq 2 ]] \
    && ! ls -d $H1/.standby/.source-new.* >/dev/null 2>&1" || cat "$O/out"
+check "  and says only the code's size then, not the packages and models that are here already" \
+  "grep -qF 'Downloading Standby (main, about 12 MB)' $O/out && ! grep -q '4.5 GB' $O/out" || cat "$O/out"
 touch "$O/curl-fails"
 one "$H1" "$O/out"; rc=$?
 check "  a download that fails: says so, and the copy there stays as it was" \
@@ -506,9 +536,26 @@ echo "$O/clone" > "$H2/.standby/code/.source"; rm -f "$O/curl.args" "$O/ran"
 one "$H2" "$O/out"; rc=$?
 check "  installed from a clone: that clone pulled and installed, nothing fetched, no second copy" \
   "[[ $rc -eq 0 && -f $O/clone/NEWS ]] && grep -q \"ran $O/clone/install.sh\" $O/ran && ! fetched && [[ ! -e $H2/.standby/source ]]" || cat "$O/out"
+check "  the clone's install.sh is told what is already checked and shown, like the download's" \
+  "grep -q \"ran $O/clone/install.sh .*checks shown: 1\" $O/ran" || cat "$O/ran"
 echo mine >> "$O/clone/install.sh"; rm -f "$O/ran"
 one "$H2" "$O/out"; rc=$?
 check "  a clone with changes of its own: left alone, saying where to update it" \
   "[[ $rc -ne 0 && ! -e $O/ran ]] && grep -q 'with changes of your own). Update it there: cd' $O/out && ! fetched" || cat "$O/out"
+# What the one-liner checked and showed is shown once: "Checking this Mac", macOS and Claude Code. install.sh (here
+# its real start, cut off right after its own checks, on an 8 GB Mac with a Python 3.12, so none is fetched) is told
+# so and shows none of the three again, its own lines still; run by itself, install.sh shows all three
+sed '/^say "Python environment/,$d' "$REPO/install.sh" > "$O/archive/standby-main/install.sh"
+echo 'echo PAST-THE-CHECKS' >> "$O/archive/standby-main/install.sh"
+tar -czf "$O/main.tar.gz" -C "$O/archive" standby-main
+printf '#!/bin/bash\n[[ "$1" == "-V" ]] && echo "Python 3.12.4"\nexit 0\n' > "$OB/python3.12"
+printf '#!/bin/bash\necho 8589934592\n' > "$OB/sysctl"; chmod +x "$OB/python3.12" "$OB/sysctl"
+one "$O/h3" "$O/out" STANDBY_HOMEBREW="$T/no-homebrew"; rc=$?
+check "one-liner: 'Checking this Mac' heads the checks once, not a second time from install.sh" \
+  "[[ $rc -eq 0 && \$(grep -c 'Checking this Mac' $O/out) -eq 1 ]] && grep -q PAST-THE-CHECKS $O/out" || cat "$O/out"
+check "  macOS and Claude Code are each said once too; install.sh's memory warning and Python line are still there" \
+  "[[ \$(grep -c 'on Apple Silicon' $O/out) -eq 1 && \$(grep -c 'Claude Code' $O/out) -eq 1 ]] && grep -q 'This Mac has 8 GB of memory' $O/out && grep -q 'Python: Python 3.12' $O/out" || cat "$O/out"
+check "  install.sh run by itself shows all three" \
+  "[[ \$(grep -c 'Checking this Mac' $T/out.1) -eq 1 && \$(grep -c 'on Apple Silicon' $T/out.1) -eq 1 && \$(grep -c 'Claude Code: [0-9]' $T/out.1) -eq 1 ]]"
 rm -rf "$T"
 echo; [[ $fails -eq 0 ]] && echo "ALL PASS" || { echo "FAILURES: $fails"; exit 1; }
