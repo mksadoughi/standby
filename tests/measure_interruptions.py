@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import numpy as np  # noqa: E402
 import interrupt  # noqa: E402
 import speechvad  # noqa: E402
+import saytext  # noqa: E402  (the installed voices, one parser for every test)
 import standby as sb  # noqa: E402
 
 I = interrupt
@@ -52,8 +53,7 @@ RATE = sb.SAMPLE_RATE
 
 
 def installed():
-    out = subprocess.run(["say", "-v", "?"], capture_output=True, text=True).stdout
-    names = {m.group(1).strip() for m in (re.match(r"^(.+?)\s+[a-z]{2,3}_[A-Z]{2}\s+#", l) for l in out.splitlines()) if m}
+    names = set(saytext.installed())
     return [v for v in VOICES if v in names]
 
 

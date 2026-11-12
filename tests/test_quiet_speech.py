@@ -3,7 +3,7 @@
 (UtteranceTranscriber) cuts it into utterances and, with the speech model here, its words
 come out; a fan that starts mid-meeting is still not speech. Speech made with `say`."""
 import agentpath  # noqa: E402,F401  (first: never the real ~/.standby, see agentpath.guard)
-import os, shutil, subprocess, sys, tempfile, wave
+import os, shutil, sys, tempfile
 from pathlib import Path
 
 import numpy as np
@@ -28,17 +28,16 @@ if not (shutil.which("say") and shutil.which("afconvert")):
     print("\nALL PASS")
     raise SystemExit(0)
 
+import saytext  # noqa: E402  (speech by `say`, another voice where the default is silent)
 root = Path(tempfile.mkdtemp(prefix="sbquiet-"))
 SENTENCES = ["Let's move the launch to Friday, after the tests pass.",
              "Robin will write the release notes this afternoon.",
              "Sam asked whether the website needs a new picture."]
-clips = []
-for i, text in enumerate(SENTENCES):
-    aiff, wav = str(root / ("%d.aiff" % i)), str(root / ("%d.wav" % i))
-    subprocess.run(["say", "-o", aiff, text], check=True)
-    subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@16000", "-c", "1", aiff, wav], check=True)
-    w = wave.open(wav)
-    clips.append(np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype("float32") / 32768.0)
+clips = [saytext.speech(text, str(root)) for text in SENTENCES]
+if any(c is None for c in clips):
+    print("  (%s)" % saytext.SILENT)
+    print("\nALL PASS")
+    raise SystemExit(0)
 
 rng = np.random.default_rng(7)
 room = lambda secs, level=0.0001: rng.normal(0, level, int(secs * SR)).astype("float32")

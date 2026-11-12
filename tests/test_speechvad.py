@@ -11,6 +11,7 @@ import agentpath  # noqa: E402,F401  (first: never the real ~/.standby, see agen
 import json, os, shutil, subprocess, sys, tempfile, threading, time, types, wave
 from pathlib import Path
 import numpy as np
+import saytext  # noqa: E402  (speech by `say`, another voice where the default is silent)
 
 root = Path(tempfile.mkdtemp(prefix="sbspeechvad-"))
 os.environ["STANDBY_ROOT"] = str(root)
@@ -49,11 +50,7 @@ def tone(s=0.4):
 
 
 def speech(text):
-    aiff, wav = str(root / "s.aiff"), str(root / "s.wav")
-    subprocess.run(["say", "-o", aiff, text], check=True)                 # a file: nothing is played
-    subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@16000", "-c", "1", aiff, wav], check=True)
-    w = wave.open(wav)
-    return np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype("float32") / 32768.0
+    return saytext.speech(text, str(root))           # a file: nothing is played
 
 
 def spoken(a, s=0.4):
@@ -80,6 +77,8 @@ vad = speechvad.load(src) if os.path.exists(src) else None
 have = vad is not None and bool(shutil.which("say") and shutil.which("afconvert"))
 if not have:
     print("  (the model's checks skipped: needs the Silero model (SB_SILERO or installed), onnxruntime, say and afconvert)")
+elif speech("Testing.") is None:
+    print("  (%s)" % saytext.SILENT)
 else:
     import hashlib
     check("the model is the pinned file (sha256)",

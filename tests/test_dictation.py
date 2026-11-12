@@ -1925,16 +1925,14 @@ else:
     # Real speech, if the model is already here (never downloaded by a test).
     hub = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface")) / "hub"
     cached = (hub / "models--mlx-community--parakeet-tdt-0.6b-v3").is_dir()
-    if not (cached and shutil.which("say") and shutil.which("afconvert")):
+    import saytext  # noqa: E402  (speech by `say`, another voice where the default is silent)
+    audio = saytext.speech("Please ask Claude Code to open the git repository, then run the tests on Opus five "
+                           "point five.", str(root)) if cached and saytext.usable() else None
+    if not (cached and saytext.usable()):
         print("  (real-speech part skipped: needs the cached speech model, say and afconvert)")
+    elif audio is None:
+        print("  (%s)" % saytext.SILENT)
     else:
-        import wave
-        aiff, wav = str(root / "s.aiff"), str(root / "s.wav")
-        subprocess.run(["say", "-o", aiff, "Please ask Claude Code to open the git repository, "
-                        "then run the tests on Opus five point five."], check=True)
-        subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@16000", "-c", "1", aiff, wav], check=True)
-        w = wave.open(wav)
-        audio = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype("float32") / 32768.0
         os.environ["HF_HUB_OFFLINE"] = "1"
         import speechmodel
         model = d.load_model(speechmodel.DEFAULT_MODEL)

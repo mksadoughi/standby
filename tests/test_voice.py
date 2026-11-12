@@ -166,16 +166,14 @@ except ImportError:
     print("  (Whisper comparison skipped: no mlx_whisper)")
 
 st = turn.load()
-if st is None or not (shutil.which("say") and shutil.which("afconvert")):
+import saytext  # noqa: E402  (speech by `say`, another voice where the default is silent)
+if st is None or not saytext.usable():
     print("  (real-speech Smart Turn part skipped: needs the model, onnxruntime, say and afconvert)")
+elif saytext.speech("Testing.", str(root)) is None:
+    print("  (%s)" % saytext.SILENT)
 else:
     def speech(text, name):
-        aiff, wav = str(root / (name + ".aiff")), str(root / (name + ".wav"))
-        subprocess.run(["say", "-o", aiff, text], check=True)
-        subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@16000", "-c", "1", aiff, wav], check=True)
-        import wave
-        w = wave.open(wav)
-        a = np.frombuffer(w.readframes(w.getnframes()), dtype="<i2").astype("float32") / 32768.0
+        a = saytext.speech(text, str(root))
         return np.concatenate([a, np.zeros(9600, "float32")])     # the recorder's 0.6 s of quiet
     for i, text in enumerate(("What time is the design review tomorrow?", "Thanks, that's all I needed.")):
         audio = speech(text, "s%d" % i)
@@ -616,7 +614,7 @@ vs.ANNOUNCE_STALE = voice.VoiceSession.ANNOUNCE_STALE
 
 row(done=True)
 check("the recording stopped: voice mode ends and says why",
-      wait(lambda: vs.status()["state"] == "off", 2) and vs.status().get("error") == "recording stopped", vs.status())
+      wait(lambda: vs.status()["state"] == "off" and vs.status().get("error") == "recording stopped", 2), vs.status())
 
 vs2 = voice.VoiceSession("m1", sdir, ask=fake_ask, cancel=cancelled.append, speaker=spk)
 vs2.STALE = 0.6
@@ -647,40 +645,46 @@ def talk(idle=0.8, paused_end=None):
 
 
 check("talk: a paused call ends after an hour, whoever paused it", voice.VoiceSession.PAUSED_END == 3600.0)
+# A wait holds everything its check then reads that the session sets later in the same step, never only the first
+# sign of it: a pause sets the muted flag, writes the control file, then its state, and tells the app after that;
+# an end sets its state, then why, then tells the app. On CI (macOS 26, 2026-11-11) the pause came on time, at
+# 0.87 s, but the check read the state between the flag and the rest. Only the timing bounds stay outside a wait.
+EVENT = 15.0
 t0, n, i = time.time(), len(ended), len(idled)
 t = talk()
 check("  nothing said for a while: it pauses as Pause does, the mic held, nothing ended",
-      wait(lambda: t.status()["muted"], 3) and 0.7 < time.time() - t0 < 2.0 and t.status()["state"] == "muted"
-      and (sdir / "dictate").read_text().split() == ["hold", str(t.seq)] and len(ended) == n,
+      wait(lambda: t.status()["state"] == "muted" and (sdir / "dictate").read_text().split() == ["hold", str(t.seq)], EVENT)
+      and 0.7 < time.time() - t0 < 2.0 and len(ended) == n,
       (time.time() - t0, t.status(), ended[n:]))
 check("  the app is told, once, and the log says it was the quiet, not the user",
-      len(idled) == i + 1 and any("paused, nothing said for" in m for m in logged), (idled[i:], logged[-3:]))
+      wait(lambda: len(idled) > i and any("paused, nothing said for" in m for m in logged), EVENT)
+      and len(idled) == i + 1, (idled[i:], logged[-3:]))
 time.sleep(1.0)
 check("  paused, it neither pauses again nor ends on the quiet while",
       len(idled) == i + 1 and t.status()["state"] == "muted" and len(ended) == n, (t.status(), ended[n:]))
 t.mute(False)
 check("  Resume brings it back as it was, listening", wait(lambda: t.status()["state"] == "listening", 2)
       and (sdir / "dictate").read_text().split() == ["voice", str(t.seq)], t.status())
-check("    and the quiet while counts from the Resume: later it pauses again", wait(lambda: len(idled) == i + 2, 3)
+check("    and the quiet while counts from the Resume: later it pauses again", wait(lambda: len(idled) == i + 2, EVENT)
       and time.time() - idled[-1] < 1.0, idled[i:])
 t.stop()
 n = len(ended)
 t = talk(paused_end=1.2)
-wait(lambda: t.status()["muted"], 3)
+wait(lambda: t.status()["muted"], EVENT)
 t1 = time.time()
 check("  paused by the quiet, it ends after PAUSED_END paused, and the app is told to end the call",
-      wait(lambda: t.status()["state"] == "off", 3) and 1.0 < time.time() - t1 < 2.4
-      and "paused for" in t.status().get("error", "") and len(ended) == n + 1 and "paused for" in (ended[-1] or ""),
+      wait(lambda: t.status()["state"] == "off" and "paused for" in t.status().get("error", "") and len(ended) == n + 1, EVENT)
+      and 1.0 < time.time() - t1 < 2.4 and "paused for" in (ended[-1] or ""),
       (time.time() - t1, t.status(), ended[n:]))
 n = len(ended)
 t = talk(idle=60, paused_end=1.0)
 t.mute(True)                                  # the user's own pause
-check("  the user's own pause ends the same way", wait(lambda: t.status()["state"] == "off", 3)
-      and len(ended) == n + 1 and "paused for" in (ended[-1] or ""), (t.status(), ended[n:]))
+check("  the user's own pause ends the same way", wait(lambda: t.status()["state"] == "off" and len(ended) == n + 1, EVENT)
+      and "paused for" in (ended[-1] or ""), (t.status(), ended[n:]))
 recorder["speaking"] = True
 t = talk(idle=60, paused_end=1.0)
 t.mute(True)
-check("  talking while paused is not for Claude: it still ends", wait(lambda: t.status()["state"] == "off", 3), t.status())
+check("  talking while paused is not for Claude: it still ends", wait(lambda: t.status()["state"] == "off", EVENT), t.status())
 recorder["speaking"] = False
 t = talk(idle=60, paused_end=0.9)
 t.mute(True)
@@ -695,7 +699,7 @@ t = talk()
 time.sleep(1.5)
 check("  speaking keeps it from pausing", t.status()["state"] == "listening" and len(idled) == i, t.status())
 recorder["speaking"] = False
-check("  until it goes quiet: then it pauses", wait(lambda: t.status()["state"] == "muted", 3), t.status())
+check("  until it goes quiet: then it pauses", wait(lambda: t.status()["state"] == "muted", EVENT), t.status())
 t.stop()
 i = len(idled)
 t = talk(idle=0.5)
@@ -704,7 +708,7 @@ for _ in range(12):
 time.sleep(1.2)
 check("  never in the middle of the voice's sentence", t.status()["state"] == "listening" and len(idled) == i
       and spk.busy, (t.status(), spk.busy))
-check("  once it's done, the quiet while from then: it pauses", wait(lambda: t.status()["state"] == "muted", 4), t.status())
+check("  once it's done, the quiet while from then: it pauses", wait(lambda: t.status()["state"] == "muted", EVENT), t.status())
 t.stop()
 spk.stop()
 spk.said = []
@@ -715,7 +719,7 @@ time.sleep(1.2)
 check("  work handed on still running keeps it from pausing", t.status()["state"] == "listening" and len(idled) == i,
       t.status())
 flags["busy"] = False
-check("  and it pauses once that is done", wait(lambda: t.status()["state"] == "muted", 3), t.status())
+check("  and it pauses once that is done", wait(lambda: t.status()["state"] == "muted", EVENT), t.status())
 n = len(ended)
 flags["busy"] = True
 t.PAUSED_END = 0.8
@@ -724,7 +728,7 @@ check("  work still running keeps a paused call from ending too", t.status()["st
       t.status())
 flags["busy"] = False
 check("  and it ends once that is done and the pause has run its while",
-      wait(lambda: t.status()["state"] == "off", 3) and len(ended) == n + 1, t.status())
+      wait(lambda: t.status()["state"] == "off" and len(ended) == n + 1, EVENT), t.status())
 n = len(ended)
 t = talk(idle=None)
 t.stop()
@@ -733,7 +737,7 @@ t = talk(idle=None)
 row_seq = t.seq
 with open(rows_path, "a") as fh:
     fh.write(json.dumps({"seq": row_seq, "done": True}) + "\n")
-wait(lambda: t.status()["state"] == "off", 3)
+wait(lambda: t.status()["state"] == "off", EVENT)
 check("  but not when the recording stopped under it (the app did that)", len(ended) == n + 1, ended[n:])
 t = talk(idle=None)
 t.stop(by_app=True)

@@ -237,12 +237,15 @@ import shutil  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools"))
 os.environ.pop("HF_HUB_CACHE", None)              # the user's own cache: read, never written
 real = [k for k in sm.MODELS if sm.local(k) is not None]
-if not (real and shutil.which("say") and shutil.which("afconvert")):
+import saytext  # noqa: E402  (speech by `say`, another voice where the default is silent)
+import punctuation_check as pc  # noqa: E402
+audio = saytext.speech(pc.SENTENCE) if real and saytext.usable() else None
+if not (real and saytext.usable()):
     print("  (the real-decode part skipped: needs say, afconvert and a model already cached)")
+elif audio is None:
+    print("  (%s)" % saytext.SILENT)
 else:
-    import punctuation_check as pc
     os.environ["HF_HUB_OFFLINE"] = "1"
-    audio = pc.speech()
     for key in real:
         text = pc.decode(sm.local(key), audio)
         print("     %s heard: %r" % (key, text))
