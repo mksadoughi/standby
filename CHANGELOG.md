@@ -6,11 +6,66 @@ All notable changes to Standby are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-12
+
+Standby is easier to install, calls are steadier and quicker to answer, meetings keep less by default, and the
+plugin is tighter about what it may do.
+
+### Added
+
+- **One command installs Standby:** `curl -fsSL https://mksadoughi.github.io/standby/install.sh | bash`. It checks
+  your Mac before it downloads anything (Apple Silicon, macOS 14.4 or later, Claude Code 2.1.299 or later and signed
+  in, 6 GB free) and says in one line what to do if a check fails. It then fetches Standby into `~/.standby/source`,
+  counts up the speech model's and the voice's downloads, and ends with what to do next. Run it again to update. It
+  needs no admin password, and the script is short enough to read first. Installing from a clone of your own still
+  works, and the one command updates that clone instead of adding a second copy.
+- **Keep a meeting's audio.** A new switch in Settings > Meetings, off by default (see Changed).
+- **A reminder on your first meeting,** once: let people know you're transcribing.
+- **A Privacy section on the terms page** that says what is kept, where, and how to delete it.
+- **The plugin's own listing:** an MIT license and an icon in its folder, and a README that says each program it
+  starts, the one host it talks to and what it sends there, and what each hook does and when.
+
 ### Changed
 
 - **A call with nothing said for 2 minutes pauses** instead of ending, as Pause does: Resume picks the conversation up
   where it was. A call paused for an hour, by you or by the quiet, ends with its summary, so a forgotten pause never
   keeps a call open overnight.
+- **A call's first answer is heard up to 2 seconds sooner:** Standby's voice loads alongside the echo-cancelling
+  engine instead of after it.
+- **When the voice has several things to tell you,** it says what there is first, then takes them one at a time.
+- **The voice says numbers and versions** the way you'd say them aloud.
+- **A meeting keeps only its transcript** unless you turn on Settings > Meetings > Keep a meeting's audio. Meetings
+  you already saved keep their audio.
+- **Every part of a meeting's transcript** is marked as what people said, never as instructions.
+- **Only you can turn off the question** before a call or listening starts. Claude can't switch it off itself.
+- **On the app's word, the plugin starts only Standby's own agent server,** run by Standby's own Python. Any other
+  program the app might name is refused.
+- **The plugin follows live events over its own HTTP call,** with its token on every request, and no longer starts
+  curl.
+- **No second copy of the plugin:** if Standby's plugin is also added from Claude's plugin directory, the installer
+  adds none of its own, so the plugin never loads twice.
+- **The installer checks more:** every file of the diarization model is checked by its checksum,
+  model downloads send no telemetry, and pip and wheel install at pinned versions like every other package.
+- **`config.json` is readable only by you.**
+- **Notices:** FluidAudio's copyright is in the third-party notices, and the code ported from it says it was
+  modified.
+- **The apps show the release's version.**
+- **The mini window's Hide button** is a plain bar, like macOS's minimise.
+- **The README opens with the website's first screen,** which links to the site and its demo film, and the website
+  shows the install command whole, also on a phone.
+
+### Fixed
+
+- **On AirPods, the voice is heard from its first answer.**
+- **Pausing just as a turn begins** keeps the whole reply unsaid.
+- **Work you hand on is kept** even if the voice's answer is cut off mid-sentence.
+- **A call card's numbered steps** read as normal lines of text, no longer as narrow columns.
+- **Calls and meetings get their titles reliably:** a failed try is retried.
+
+### Removed
+
+- **The messenger's leftover delivery code,** with `standby-agent`'s `deliver`, `deliver-run` and `delete-agent`.
+  Nothing used them.
 
 ## [0.2.0] - 2026-11-03
 
@@ -129,6 +184,7 @@ The first public release: the Claude Code you already use, with ears and a voice
 - **The installer** (`./install.sh`): a private Python environment, the models, the apps in `~/Applications`, the
   `standby` command, and the Claude Code plugin for every folder.
 
-[Unreleased]: https://github.com/mksadoughi/standby/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mksadoughi/standby/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mksadoughi/standby/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mksadoughi/standby/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mksadoughi/standby/releases/tag/v0.1.0
