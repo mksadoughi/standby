@@ -4163,9 +4163,17 @@ def run_session(label, no_ship=False, keep_audio=True, mode=None, small=False,
             ctl = dict_ctl.read_text().split()
         except OSError:
             ctl = []
-        if ctl != dictation["ctl"]:
+        mode = {"on": "dictate", "voice": "voice", "hold": "hold", "floor": "hold"}.get(ctl[0] if ctl else None)
+        # Another number while one is open: a dictation stopped and started again within its stop
+        # delay, or one whose "off" never came. Never lost: one stopping keeps its last words and
+        # writes its "done" first, the command waiting unread for the poll after; one never stopped
+        # ends now, and the new one starts in this same poll.
+        other = (ctl != dictation["ctl"] and len(ctl) == 2 and bool(mode) and dictation["seq"] is not None
+                 and ctl[1].isdigit() and int(ctl[1]) != dictation["seq"])
+        if other and not dictation["stop_at"]:
+            end_dictation()
+        if ctl != dictation["ctl"] and not (other and dictation["stop_at"]):
             dictation["ctl"] = ctl
-            mode = {"on": "dictate", "voice": "voice", "hold": "hold", "floor": "hold"}.get(ctl[0] if ctl else None)
             dictation["floor"] = bool(ctl) and ctl[0] == "floor"
             if len(ctl) == 2 and mode:
                 if dictation["seq"] is None:

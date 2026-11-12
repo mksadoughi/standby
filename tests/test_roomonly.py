@@ -518,11 +518,14 @@ System.leaks = True
 time.sleep(2.1)
 (sdir / "dictate").write_text("voice 7\n")
 check("voice mode on speakers: the same", wait(lambda: len(made) == 2), len(made))
-(sdir / "dictate").write_text("on 8\n")
-time.sleep(0.6)
-check("  starting again for the next dictation keeps its one reference", len(made) == 2, len(made))
-(sdir / "dictate").write_text("off 7\n")
-check("  stopped with it", wait(lambda: len(made) > 1 and made[1][1].stops == 1))
+(sdir / "dictate").write_text("on 8\n")             # the next dictation, voice mode's "off" never seen
+check("  the next dictation starting: the one before ends first, its reference stopped, then the next its own",
+      wait(lambda: any("dictation 8: on" in m for m in logged) and len(made) == 3
+           and made[1][1].stops == 1 and made[2][1].stops == 0),
+      (len(made), [m[1].stops for m in made], [m for m in logged if m.startswith(("dictation", "voice"))][-3:]))
+check("    never two at once: one reference live", sum(m[1].stops == 0 for m in made) == 1, [m[1].stops for m in made])
+(sdir / "dictate").write_text("off 8\n")
+check("  stopped with it", wait(lambda: made[2][1].stops == 1), [m[1].stops for m in made])
 
 sb._stop.set()
 th.join(timeout=PATIENCE)

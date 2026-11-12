@@ -235,7 +235,7 @@ check("double-talk on speakers (both voices in the mic): kept, the doubled words
 # Dictation during the call, on speakers: their words never in it; the user's are,
 # even when dictation is over before the held line is let through.
 (sdir / "dictate").write_text("on 5\n")
-wait(lambda: any("dictation 5: on" in m for m in logged))
+check("dictation on during the call", wait(lambda: any("dictation 5: on" in m for m in logged)), logged[-3:])
 time.sleep(2.2)        # real time, as above: a two-second line needs two seconds of audio
 Script.say["meeting"].append("Can someone own the migration doc for the cache")
 Script.say["mic"].append("can someone own the migration doc for the cache")
@@ -251,7 +251,11 @@ check("  and not in the transcript", "Remind me" not in json.dumps(rows()))
 
 # Voice mode during the call, on speakers: the same, for the turns Claude answers.
 (sdir / "dictate").write_text("voice 6\n")
-wait(lambda: any("voice 6: listening" in m for m in logged))
+check("voice mode right after the dictation's off, inside its stop delay or after it: it starts, never lost",
+      wait(lambda: any("voice 6: listening" in m for m in logged)), [m for m in logged if "dictation" in m or "voice 6" in m][-4:])
+check("  the dictation before it ended first, its done row before voice mode's",
+      [m for m in logged if m.startswith(("dictation 5: off", "voice 6: listening"))][:2] == ["dictation 5: off", "voice 6: listening"]
+      and {"done": True, "seq": 5} in drows(), ([m for m in logged if "dictation" in m][-3:], drows()[-3:]))
 time.sleep(2.2)        # real time, as above
 Script.say["meeting"].append("I think the budget review moved to Thursday afternoon")
 Script.say["mic"].append("i think the budget review moved to thursday afternoon")
@@ -263,14 +267,67 @@ check("  the user's question is, in this voice turn",
       wait(lambda: [r.get("text") for r in drows() if r.get("seq") == 6 and r.get("text")]
            == ["What did they decide about the budget"]), drows()[-3:])
 (sdir / "dictate").write_text("off 6\n")
-wait(lambda: any("dictation 6: off" in m for m in logged))
+check("  voice mode off", wait(lambda: any("dictation 6: off" in m for m in logged)), logged[-3:])
+
+# Another dictation started while one is still stopping (released and pressed again within its 0.7 s
+# stop), or one whose "off" never came: the next is never lost, and one that was stopped ends, with
+# its done row, before the next starts. Written back to back, and 0.3 s apart (past the recorder's
+# poll, inside the stop): whichever the poll sees, the same result, so no timing decides it.
+def ordered(first, then):
+    """The log has `first` and then `then` (each once), and nothing between that starts or ends one."""
+    i = [k for k, m in enumerate(logged) if m.startswith(first)]
+    j = [k for k, m in enumerate(logged) if m.startswith(then)]
+    return len(i) == 1 and len(j) == 1 and i[0] < j[0]
+
+
+seq = 20
+for cmd, listening in (("on", "dictation %d: on"), ("voice", "voice %d: listening")):
+    for gap in (None, 0.0, 0.3):              # None: no "off" at all
+        a, b = seq, seq + 1
+        seq += 2
+        (sdir / "dictate").write_text("on %d\n" % a)
+        check("dictation %d on (then %s %d, %s)" % (a, cmd, b, "no off" if gap is None else "off and %.1fs" % gap),
+              wait(lambda: any(m == "dictation %d: on" % a for m in logged)), logged[-3:])
+        if gap is not None:
+            (sdir / "dictate").write_text("off %d\n" % a)
+            time.sleep(gap)
+        (sdir / "dictate").write_text("%s %d\n" % (cmd, b))
+        check("  %s %d starts, never lost" % (cmd, b), wait(lambda: any(m == listening % b for m in logged)),
+              [m for m in logged if m.startswith(("dictation", "voice"))][-4:])
+        check("  dictation %d ended first, its done row written" % a,
+              ordered("dictation %d: off" % a, listening % b) and {"done": True, "seq": a} in drows(),
+              ([m for m in logged if m.startswith(("dictation", "voice"))][-4:], drows()[-3:]))
+        (sdir / "dictate").write_text("off %d\n" % b)
+        check("  and %d ends" % b, wait(lambda: any(m == "dictation %d: off" % b for m in logged)), logged[-3:])
+
+# A quick tap inside the stop: "on a", then "off a", "on b", "off b", "on c" back to back. Whichever of
+# them the recorder's poll happens to read, a ends with its done row, b either never starts or starts
+# and ends with its own, and c starts and ends: nothing left open, nothing waiting.
+a, b, c = seq, seq + 1, seq + 2
+seq += 3
+(sdir / "dictate").write_text("on %d\n" % a)
+check("a quick tap inside the stop: dictation %d on" % a, wait(lambda: any(m == "dictation %d: on" % a for m in logged)), logged[-3:])
+for line in ("off %d" % a, "on %d" % b, "off %d" % b, "on %d" % c):
+    (sdir / "dictate").write_text(line + "\n")
+check("  the one after the tap starts (%d)" % c, wait(lambda: any(m == "dictation %d: on" % c for m in logged)),
+      [m for m in logged if m.startswith(("dictation", "voice"))][-5:])
+check("  the one before it ended first, with its done row", ordered("dictation %d: off" % a, "dictation %d: on" % c)
+      and {"done": True, "seq": a} in drows(), ([m for m in logged if m.startswith("dictation")][-5:], drows()[-4:]))
+b_on = any(m == "dictation %d: on" % b for m in logged)
+check("  the tap: never started, or started and ended with its done row, before the next",
+      not b_on or (ordered("dictation %d: off" % b, "dictation %d: on" % c) and {"done": True, "seq": b} in drows()),
+      [m for m in logged if m.startswith("dictation")][-5:])
+(sdir / "dictate").write_text("off %d\n" % c)
+check("  and %d ends: nothing left open" % c, wait(lambda: any(m == "dictation %d: off" % c for m in logged))
+      and [m for m in logged if m.startswith("dictation ")][-1] == "dictation %d: off" % c,
+      [m for m in logged if m.startswith("dictation")][-5:])
 
 # The call's audio pauses (it goes quiet: a stall) while a mic line is held: there is
 # nothing to compare it with for that stretch, so it is kept, even on speakers.
 sb.STALL = 1.0         # this check only: the pause must come before the held line's own 3 s are up
 time.sleep(2.2)        # real time, as above
 Script.say["meeting"].append("The launch date stays the fourteenth of November")
-wait(lambda: any("fourteenth of November" in r["text"] for r in rows()))
+check("the call's line, before its audio pauses", wait(lambda: any("fourteenth of November" in r["text"] for r in rows())), rows()[-2:])
 made[-1].quiet = True
 Script.say["mic"].append("the launch date stays the fourteenth of november")   # the call's words, tempting
 check("the call's audio pausing while a mic line is held: kept, not judged against half a picture",
@@ -284,7 +341,7 @@ check("  while it stays paused, the mic's lines are not even held",
       and len([m for m in logged if m.startswith("echo:")]) == n, [m for m in logged if m.startswith("echo:")][n:])
 made[-1].quiet = False
 sb.STALL = 2.0
-wait(lambda: any("audio back after" in m for m in logged))
+check("  the call's audio back", wait(lambda: any("audio back after" in m for m in logged)), logged[-3:])
 
 # Switched off for the meeting, still playing on open speakers: heard in memory only, its words never kept or
 # logged, so the mic's copy of it is still dropped (a meeting, 2026-11-01: once off, the mic's copies came through).
@@ -313,9 +370,10 @@ check("  on again: no longer heard on the side, recorded as before",
 time.sleep(2.2)
 
 # Headphones: the laptop's sound cannot reach the mic, so nothing is checked or held.
+# The echo gate looks at the devices only when it has a mic line to judge (at most every 2 s), so
+# nothing is waited for here: the line below is what it looks for, and the check after it says it saw.
 looks = System.looks
 System.leaks = False
-wait(lambda: System.looks > looks + 1)
 n = sum("echo:" in m and "DROPPED" in m for m in logged)
 time.sleep(2.2)        # real time, as above
 Script.say["meeting"].append("Let us move on to the hiring plan for next quarter")
@@ -323,8 +381,8 @@ Script.say["mic"].append("let us move on to the hiring plan for next quarter")
 check("on headphones: nothing is dropped, even words just like the call's (it cannot be the laptop)",
       wait(lambda: "let us move on to the hiring plan for next quarter" in [r["text"] for r in rows()])
       and sum("DROPPED" in m for m in logged) == n, [m for m in logged if "echo" in m][-3:])
-check("  and it says when the sound stopped being able to reach the mic",
-      any("cannot reach the mic now (headphones)" in m for m in logged))
+check("  and it says when the sound stopped being able to reach the mic, having looked again",
+      any("cannot reach the mic now (headphones)" in m for m in logged) and System.looks > looks, (looks, System.looks))
 end_session(th)
 check("the session ends cleanly", not th.is_alive())
 
