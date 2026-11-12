@@ -61,6 +61,8 @@ plugin is tighter about what it may do.
 - **Work you hand on is kept** even if the voice's answer is cut off mid-sentence.
 - **A call card's numbered steps** read as normal lines of text, no longer as narrow columns.
 - **Calls and meetings get their titles reliably:** a failed try is retried.
+- **On a Mac without Apple's Command Line Tools,** installing or updating Standby never asks to install them.
+- **A dictation started right after another ends,** or a call's voice starting just then, is heard, never lost.
 
 ### Removed
 
