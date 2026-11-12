@@ -2,8 +2,9 @@
 
 Some machines' `say` writes only silence (a CI runner's macOS 26 image, 2026-11-11: test_quiet_speech divided by
 its peak of 0). Then the natural voices in FALLBACK that are installed are tried, in order, never any other (the
-singing and effect voices make sound, not speech), and the first that speaks is kept for the run; with none that
-speaks, speech() is None, and the test skips its speech part saying SILENT, never crashing.
+singing and effect voices make sound, not speech), and the first that speaks is kept for the run, said once in
+the test's output; with none that speaks, speech() is None, and the test skips its speech part saying SILENT,
+never crashing.
 
     import saytext
     audio = saytext.speech("Robin will write the release notes.")
@@ -20,8 +21,10 @@ import wave
 import numpy as np
 
 SILENT = "macOS say produced silence on this machine: skipped"
-# Plain speaking voices, tried in this order after the default (the first six that tuned measure_interruptions)
-FALLBACK = ["Samantha", "Daniel", "Karen", "Moira", "Flo (English (UK))", "Fred"]
+# Plain speaking voices, tried in this order when the default wrote silence. Each one passed test_quiet_speech as
+# the forced voice (the default made silent), the one suite that judges a voice's sound with no model; a voice is
+# added here only after the same proof.
+FALLBACK = ["Karen", "Flo (English (UK))", "Fred"]
 TIMEOUT = 60               # seconds for one say or afconvert: a voice that hangs never holds up the suite
 _voice = []                # [] not looked for yet; [None] the default speaks; [name] that voice; [False] none speaks
 _LINE = re.compile(r"^(.+?)\s+[a-z]{2,3}_[A-Z]{2}\s+#")    # `say -v ?`: "Name (maybe (with) spaces)  en_US  # ..."
@@ -60,15 +63,27 @@ def speech(text, folder=None):
     if not usable() or _voice == [False]:
         return None
     folder = folder or tempfile.mkdtemp(prefix="saytext-")
-    have = set(installed()) if not _voice else set()
-    for voice in (_voice[:1] if _voice else [None] + [v for v in FALLBACK if v in have]):
-        try:
-            a = _make(text, voice, folder)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if _speaks(a):
+    if _voice:
+        return _try(text, _voice[0], folder)
+    a = _try(text, None, folder)
+    if a is not None:
+        _voice[:] = [None]
+        return a
+    have = set(installed())                        # asked only now: the default wrote silence
+    for voice in (v for v in FALLBACK if v in have):
+        a = _try(text, voice, folder)
+        if a is not None:
             _voice[:] = [voice]
+            print("  (speech by the voice %s: the default voice wrote silence)" % voice, flush=True)
             return a
-    if not _voice:
-        _voice[:] = [False]
+    _voice[:] = [False]
     return None
+
+
+def _try(text, voice, folder):
+    """`text` by `voice` (None: the default), or None when it couldn't be made or is silent."""
+    try:
+        a = _make(text, voice, folder)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return a if _speaks(a) else None

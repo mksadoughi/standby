@@ -699,7 +699,8 @@ t = talk()
 time.sleep(1.5)
 check("  speaking keeps it from pausing", t.status()["state"] == "listening" and len(idled) == i, t.status())
 recorder["speaking"] = False
-check("  until it goes quiet: then it pauses", wait(lambda: t.status()["state"] == "muted", EVENT), t.status())
+check("  until it goes quiet: then it pauses, and the app is told",
+      wait(lambda: t.status()["state"] == "muted" and len(idled) == i + 1, EVENT), (t.status(), idled[i:]))
 t.stop()
 i = len(idled)
 t = talk(idle=0.5)
@@ -708,7 +709,8 @@ for _ in range(12):
 time.sleep(1.2)
 check("  never in the middle of the voice's sentence", t.status()["state"] == "listening" and len(idled) == i
       and spk.busy, (t.status(), spk.busy))
-check("  once it's done, the quiet while from then: it pauses", wait(lambda: t.status()["state"] == "muted", EVENT), t.status())
+check("  once it's done, the quiet while from then: it pauses, and the app is told",
+      wait(lambda: t.status()["state"] == "muted" and len(idled) == i + 1, EVENT), (t.status(), idled[i:]))
 t.stop()
 spk.stop()
 spk.said = []
@@ -719,7 +721,8 @@ time.sleep(1.2)
 check("  work handed on still running keeps it from pausing", t.status()["state"] == "listening" and len(idled) == i,
       t.status())
 flags["busy"] = False
-check("  and it pauses once that is done", wait(lambda: t.status()["state"] == "muted", EVENT), t.status())
+check("  and it pauses once that is done, and the app is told",
+      wait(lambda: t.status()["state"] == "muted" and len(idled) == i + 1, EVENT), (t.status(), idled[i:]))
 n = len(ended)
 flags["busy"] = True
 t.PAUSED_END = 0.8
