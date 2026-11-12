@@ -9,7 +9,6 @@ import json
 import os
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -49,14 +48,21 @@ def js(expr):
 def click(x, y):
     for kind in ("mousePressed", "mouseReleased"):
         chrome.call("Input.dispatchMouseEvent", session=True, type=kind, x=x, y=y, button="left", clickCount=1)
-    time.sleep(0.05)
+    js(SETTLED)                  # what the input did is drawn: a frame, not a fixed sleep
 
 
 def escape():
     for kind in ("keyDown", "keyUp"):
         chrome.call("Input.dispatchKeyEvent", session=True, type=kind, key="Escape", code="Escape", windowsVirtualKeyCode=27)
-    time.sleep(0.05)
+    js(SETTLED)                  # what the input did is drawn: a frame, not a fixed sleep
 
+
+# Any scroll closes an open help (the design), and a scroll is delivered with the next frame: after a
+# scrollIntoView, a click must wait for that frame, or a late scroll event closes the help it opened.
+# SETTLED: two frames, so the scroll's event has been delivered; the page counts scroll events (SCROLLS)
+# so a failing check can say whether one came after its click.
+SETTLED = "new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))"
+SCROLLS = "window.__scrolls"
 
 POP = """(() => { const p = document.querySelector(".mx-helpop"); if (!p) return null; const r = p.getBoundingClientRect();
   const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
@@ -65,26 +71,31 @@ POP = """(() => { const p = document.querySelector(".mx-helpop"); if (!p) return
 try:
     # the dictation scene: its setup still missing a permission, so its (?) shows too
     chrome.shoot("%s?s=dictation#dictation" % html.as_uri(), out / "x.png", False, size=(500, 720), settle=3)
+    js('window.__scrolls = 0; addEventListener("scroll", () => window.__scrolls++, true)')
     sections = js('[...document.querySelectorAll(".setnav button[data-p]")].map(b => b.dataset.p)')
     check("Settings is open, its sections listed", js("settings.open") and sections == ["general", "voice", "sound", "meetings", "dictation", "permissions", "usage"], sections)
     clicked = []
     for sec in sections:
-        helps = js("""(() => { setPane(%s); return [...document.querySelectorAll('.pane[data-p=%s] .mx-help')]
+        helps = js("""(async () => { setPane(%s); const out = [...document.querySelectorAll('.pane[data-p=%s] .mx-help')]
           .filter(h => !h.hidden && h.offsetParent).map(h => { h.scrollIntoView({block: "center"}); const r = h.getBoundingClientRect();
             return {x: r.left + r.width / 2, y: r.top + r.height / 2, text: h.getAttribute("title") || h.dataset.mxtip || "",
-              where: (h.closest("label") || h.parentNode).textContent.trim().slice(0, 40)} }) })()""" % (json.dumps(sec), json.dumps(sec)))
+              where: (h.closest("label") || h.parentNode).textContent.trim().slice(0, 40)} }); await %s; return out })()"""
+                   % (json.dumps(sec), json.dumps(sec), SETTLED))
         for h in helps:
             # each one scrolled into view again just before its click (the last one's may have moved the pane)
-            pos = js("""(() => { const h = [...document.querySelectorAll('.pane[data-p=%s] .mx-help')].filter(h => !h.hidden && h.offsetParent)[%d];
-              h.scrollIntoView({block: "center"}); const r = h.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })()"""
-                     % (json.dumps(sec), helps.index(h)))
-            time.sleep(0.05)
+            # its scroll delivered (two frames) before it is measured and clicked, never a fixed sleep
+            pos = js("""(async () => { const h = [...document.querySelectorAll('.pane[data-p=%s] .mx-help')].filter(h => !h.hidden && h.offsetParent)[%d];
+              h.scrollIntoView({block: "center"}); await %s; const r = h.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2] })()"""
+                     % (json.dumps(sec), helps.index(h), SETTLED))
+            n0 = js(SCROLLS)
             click(*pos)
             p = js(POP)
             ok = bool(p) and h["text"] and p["text"] == h["text"] and p["onTop"] and p["left"] >= 8 and p["right"] <= 500 - 8 and p["top"] >= 0 and p["bottom"] <= 720
-            check("%s > %s (?): its help, on top, inside the window" % (sec, h["where"]), ok, {"want": h["text"], "got": p})
+            check("%s > %s (?): its help, on top, inside the window" % (sec, h["where"]), ok,
+                  {"want": h["text"], "got": p, "scrolls since the click": js(SCROLLS) - n0})
+            n0 = js(SCROLLS)
             click(*pos)
-            check("  a second click closes it", js(POP) is None)
+            check("  a second click closes it", js(POP) is None, {"scrolls since the click": js(SCROLLS) - n0})
             clicked.append(h["where"])
     check("every section's (?) was tried, Hold to talk among them",
           len(clicked) >= 9 and any(w.startswith("Hold to talk") for w in clicked), clicked)
